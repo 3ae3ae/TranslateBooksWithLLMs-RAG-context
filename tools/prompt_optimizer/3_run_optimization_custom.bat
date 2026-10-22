@@ -37,7 +37,7 @@ echo.
 echo Demarrage de l'optimisation...
 echo.
 
-python -m tools.prompt_optimizer.optimize ^
+uv run python -m tools.prompt_optimizer.optimize ^
     --config tools/prompt_optimizer/prompt_optimizer_config.yaml ^
     --iterations %ITERATIONS% ^
     --population %POPULATION% ^

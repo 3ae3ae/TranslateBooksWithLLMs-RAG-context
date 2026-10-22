@@ -25,7 +25,7 @@
   "update_status_restart": "서버 재시작 중...",
   "update_status_complete_manual": "업데이트가 완료되었습니다. 적용하려면 앱을 수동으로 재시작하세요.",
   "update_status_restarted": "서버가 v{{version}}으로 재시작되었습니다. 다시 로드하는 중...",
-  "update_status_no_restart": "서버가 자동으로 복귀하지 않았습니다. start.bat / start.sh로 앱을 실행한 경우 자동으로 재시작되어야 하며, 그렇지 않으면 수동으로 다시 실행하세요.",
+  "update_status_no_restart": "서버가 자동으로 복귀하지 않았습니다. `uv run translation_api.py`로 다시 실행하세요.",
   "update_download": "업데이트 다운로드",
   "update_download_title": "새 빌드를 다운로드할 수 있는 GitHub 릴리스 페이지를 엽니다.",
   "update_status_failed": "업데이트에 실패했습니다.",

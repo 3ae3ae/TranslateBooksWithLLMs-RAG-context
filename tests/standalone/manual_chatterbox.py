@@ -142,7 +142,7 @@ def test_audio_generation(tts, device):
             print(f"  Taille du fichier: {os.path.getsize(output_file) / 1024:.1f} KB")
         except Exception as e:
             print(f"\n⚠ Impossible de sauvegarder l'audio: {e}")
-            print("  Installez soundfile: pip install soundfile")
+            print("  Installez soundfile: uv pip install soundfile")
 
         return True
 
@@ -262,7 +262,7 @@ def main():
 
     print("\n🎉 Chatterbox TTS est prêt à être utilisé!")
     print("\nPour l'utiliser dans l'application:")
-    print("  1. Lancez: start.bat")
+    print("  1. Lancez: uv run translation_api.py")
     print("  2. Dans l'interface web, sélectionnez 'Chatterbox TTS'")
     print("  3. Uploadez optionnellement un échantillon vocal pour le clonage")
 

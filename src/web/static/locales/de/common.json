@@ -25,7 +25,7 @@
   "update_status_restart": "Server wird neu gestartet...",
   "update_status_complete_manual": "Update abgeschlossen. Starten Sie die App manuell neu, um es anzuwenden.",
   "update_status_restarted": "Server auf v{{version}} neu gestartet. Wird neu geladen...",
-  "update_status_no_restart": "Der Server ist nicht automatisch zurückgekehrt. Wenn Sie die App mit start.bat / start.sh gestartet haben, sollte sie sich von selbst neu starten; andernfalls starten Sie sie manuell neu.",
+  "update_status_no_restart": "Der Server ist nicht automatisch zurückgekehrt. Starten Sie ihn erneut mit `uv run translation_api.py`.",
   "update_download": "Update herunterladen",
   "update_download_title": "Öffnet die GitHub-Release-Seite, damit Sie den neuen Build herunterladen können.",
   "update_status_failed": "Update fehlgeschlagen.",

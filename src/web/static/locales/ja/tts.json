@@ -84,7 +84,7 @@
   "tts_error": "TTS の開始エラー: {{error}}",
   "tts_provider_changed_log": "TTS プロバイダーを変更しました: {{provider}}",
   "tts_providers_load_failed": "TTS プロバイダーの読み込みに失敗しました: {{error}}",
-  "chatterbox_not_available": "Chatterbox TTS は利用できません。次のコマンドでインストールしてください: pip install chatterbox-tts torch torchaudio",
+  "chatterbox_not_available": "Chatterbox TTS は利用できません。次のコマンドでインストールしてください: uv pip install chatterbox-tts torch torchaudio",
   "voice_prompt_uploaded_log": "ボイスプロンプトをアップロードしました: {{filename}}",
   "voice_prompt_uploaded": "ボイスプロンプトを正常にアップロードしました",
   "voice_prompt_upload_failed": "ボイスプロンプトのアップロードに失敗しました: {{error}}",

@@ -10,7 +10,7 @@ API keys are read from each provider's native environment variable
 (OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, ...) unless an explicit
 key is passed. This is why the factory does not plumb a single LiteLLM key.
 
-Optional dependency: pip install "litellm>=1.65,<1.85"
+Optional dependency: uv pip install "litellm>=1.65,<1.85"
 
 Example:
     >>> provider = LiteLLMProvider(model="anthropic/claude-sonnet-4-6")
@@ -114,7 +114,7 @@ class LiteLLMProvider(LLMProvider):
         except ImportError as e:
             raise ImportError(
                 "LiteLLM provider requires the 'litellm' package. "
-                'Install it with: pip install "litellm>=1.65,<1.85"'
+                'Install it with: uv pip install "litellm>=1.65,<1.85"'
             ) from e
 
         messages = []

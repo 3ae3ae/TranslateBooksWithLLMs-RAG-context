@@ -2,13 +2,7 @@
   <h1>TBL - Translate Books with LLMs</h1>
 </div>
 
-<div align="center">
-
-[![Download Windows](https://img.shields.io/badge/Download-Windows-blue?style=for-the-badge&logo=windows)](https://github.com/windfox1243/TranslateBooksWithLLMs---RAG-context/releases/latest/download/TranslateBooksWithLLMs.exe) [![Download macOS Intel](https://img.shields.io/badge/Download-macOS%20Intel-black?style=for-the-badge&logo=apple)](https://github.com/hydropix/TranslateBooksWithLLMs/releases/latest/download/TranslateBook-macOS-Intel.zip) [![Download macOS Apple Silicon](https://img.shields.io/badge/Download-macOS%20M1%2FM2%2FM3%2FM4-black?style=for-the-badge&logo=apple)](https://github.com/hydropix/TranslateBooksWithLLMs/releases/latest/download/TranslateBook-macOS-AppleSilicon.zip)
-
-</div>
-
-A desktop app that translates **books**, **subtitles**, and **documents** with AI - local or cloud. Drop a file, pick a language, get the result.
+A local web app that translates **books**, **subtitles**, and **documents** with AI - local or cloud. Drop a file, pick a language, get the result.
 
 **Formats:** EPUB, SRT, DOCX, TXT
 
@@ -24,19 +18,20 @@ A desktop app that translates **books**, **subtitles**, and **documents** with A
 
 ## Quick Start
 
-1. **Download** the release for your platform (buttons above), or grab it from the [releases page](https://github.com/windfox1243/TranslateBooksWithLLMs---RAG-context/releases/latest).
-2. **Extract** the archive.
-3. **Run** `TranslateBook.exe` (Windows) or `./TranslateBook` (macOS).
-4. **Open** http://localhost:5000 in your browser.
+**Prerequisites:** [uv](https://docs.astral.sh/uv/getting-started/installation/) and [Git](https://git-scm.com/). You don't need to install Python yourself: uv downloads a matching version if none is found.
 
-That's it. On first launch, you choose a translation provider:
+```bash
+git clone https://github.com/3ae3ae/TranslateBooksWithLLMs-RAG-context.git
+cd TranslateBooksWithLLMs-RAG-context
+uv run translation_api.py
+```
+
+The first run creates `.venv/` and installs the dependencies pinned in `uv.lock`. Later runs re-sync automatically when `uv.lock` changes. The web interface opens at **http://localhost:5000**.
+
+On first launch, you choose a translation provider:
 
 - **Free & local** - Install [Ollama](https://ollama.com/) and pull a model (e.g. `ollama pull qwen3:14b`). Nothing leaves your machine.
 - **Cloud (often free tier available)** - Paste an API key from one of the providers below.
-
-> **Note:** First run creates a `TranslateBook_Data` folder with your settings.
->
-> **macOS:** On first launch, go to **System Settings > Privacy & Security** and click **Open Anyway**.
 
 ---
 
@@ -83,63 +78,42 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for more solutions.
 ## Advanced
 
 <details>
-<summary><b>Install from source</b></summary>
-
-**Prerequisites:** [Python 3.8+](https://www.python.org/downloads/), [Ollama](https://ollama.com/), [Git](https://git-scm.com/)
-
-```bash
-git clone https://github.com/windfox1243/TranslateBooksWithLLMs---RAG-context.git
-cd TranslateBookWithLLM
-ollama pull qwen3:14b    # Download a model
-
-# Windows
-start.bat
-
-# Mac/Linux
-chmod +x start.sh && ./start.sh
-```
-
-The web interface opens at **http://localhost:5000**.
-
-</details>
-
-<details>
 <summary><b>Command line</b></summary>
 
 ```bash
 # Basic (auto-generates "book (Chinese).epub")
-python translate.py -i book.epub -sl English -tl Chinese
+uv run translate.py -i book.epub -sl English -tl Chinese
 
 # With OpenRouter
-python translate.py -i book.txt --provider openrouter \
+uv run translate.py -i book.txt --provider openrouter \
     --openrouter_api_key YOUR_KEY -m anthropic/claude-sonnet-4 -tl French
 
 # With OpenAI
-python translate.py -i book.txt --provider openai \
+uv run translate.py -i book.txt --provider openai \
     --openai_api_key YOUR_KEY -m gpt-4o -tl French
 
 # With Gemini
-python translate.py -i book.txt --provider gemini \
+uv run translate.py -i book.txt --provider gemini \
     --gemini_api_key YOUR_KEY -m gemini-2.0-flash -tl French
 
 # With Mistral
-python translate.py -i book.txt --provider mistral \
+uv run translate.py -i book.txt --provider mistral \
     --mistral_api_key YOUR_KEY -m mistral-large-latest -tl French
 
 # With DeepSeek
-python translate.py -i book.txt --provider deepseek \
+uv run translate.py -i book.txt --provider deepseek \
     --deepseek_api_key YOUR_KEY -m deepseek-v4-pro -tl French
 
 # With Poe
-python translate.py -i book.txt --provider poe \
+uv run translate.py -i book.txt --provider poe \
     --poe_api_key YOUR_KEY -m Claude-Sonnet-4 -tl French
 
 # With NVIDIA NIM
-python translate.py -i book.txt --provider nim \
+uv run translate.py -i book.txt --provider nim \
     --nim_api_key YOUR_KEY -m meta/llama-3.1-8b-instruct -tl French
 
 # With local OpenAI-compatible server (llama.cpp, LM Studio, vLLM, etc.)
-python translate.py -i book.txt --provider openai \
+uv run translate.py -i book.txt --provider openai \
     --api_endpoint http://localhost:8080/v1/chat/completions -m your-model -tl French
 ```
 
@@ -169,7 +143,7 @@ Generate a compact `.env`, then edit it. Use `.env.example` only when you want
 the full option reference:
 
 ```bash
-python -m src.utils.env_helper create
+uv run python -m src.utils.env_helper create
 ```
 
 The generated file is intentionally short:
@@ -198,18 +172,6 @@ OPENROUTER_API_KEY=
 
 </details>
 
-<details>
-<summary><b>Docker</b></summary>
-
-```bash
-docker build -t translatebook .
-docker run -p 5000:5000 -v $(pwd)/translated_files:/app/translated_files translatebook
-```
-
-See [docs/DOCKER.md](docs/DOCKER.md) for more options.
-
-</details>
-
 ---
 
 ## Documentation
@@ -222,7 +184,6 @@ See [docs/DOCKER.md](docs/DOCKER.md) for more options.
 | [docs/GLOSSARY.md](docs/GLOSSARY.md) | Force consistent term translations across a book (Web UI + CLI, auto-extract via NER) |
 | [docs/CLI.md](docs/CLI.md) | Complete CLI reference |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Problem solutions |
-| [docs/DOCKER.md](docs/DOCKER.md) | Docker deployment guide |
 
 ---
 

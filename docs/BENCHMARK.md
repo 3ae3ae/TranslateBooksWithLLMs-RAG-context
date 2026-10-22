@@ -15,16 +15,16 @@ The benchmark system allows you to:
 
 ```bash
 # Run quick benchmark (19 representative languages)
-python -m benchmark.cli run --openrouter-key YOUR_OPENROUTER_KEY
+uv run python -m benchmark.cli run --openrouter-key YOUR_OPENROUTER_KEY
 
 # Run quick benchmark against an OpenAI-compatible backend
-python -m benchmark.cli run --provider openai --openai-endpoint http://localhost:8080/v1 -m your-model
+uv run python -m benchmark.cli run --provider openai --openai-endpoint http://localhost:8080/v1 -m your-model
 
 # Run full benchmark (all 40+ languages)
-python -m benchmark.cli run --full --openrouter-key YOUR_OPENROUTER_KEY
+uv run python -m benchmark.cli run --full --openrouter-key YOUR_OPENROUTER_KEY
 
 # Generate and publish wiki pages
-python -m benchmark.cli wiki-publish
+uv run python -m benchmark.cli wiki-publish
 ```
 
 ## Prerequisites
@@ -39,7 +39,7 @@ python -m benchmark.cli wiki-publish
 Runs translation tests and evaluates quality.
 
 ```bash
-python -m benchmark.cli run [OPTIONS]
+uv run python -m benchmark.cli run [OPTIONS]
 ```
 
 **Options:**
@@ -61,19 +61,19 @@ python -m benchmark.cli run [OPTIONS]
 
 ```bash
 # Test specific models on specific languages
-python -m benchmark.cli run -m llama3:8b qwen2.5:14b mistral:7b -l fr de ja zh
+uv run python -m benchmark.cli run -m llama3:8b qwen2.5:14b mistral:7b -l fr de ja zh
 
 # Test an OpenAI-compatible server
-python -m benchmark.cli run -p openai --openai-endpoint http://localhost:8080/v1 -m qwen2.5-14b-instruct -l fr de ja zh
+uv run python -m benchmark.cli run -p openai --openai-endpoint http://localhost:8080/v1 -m qwen2.5-14b-instruct -l fr de ja zh
 
 # Use a different evaluator model
-python -m benchmark.cli run --evaluator anthropic/claude-3.5-sonnet --openrouter-key KEY
+uv run python -m benchmark.cli run --evaluator anthropic/claude-3.5-sonnet --openrouter-key KEY
 
 # Resume an interrupted run
-python -m benchmark.cli run --resume abc12345 --openrouter-key KEY
+uv run python -m benchmark.cli run --resume abc12345 --openrouter-key KEY
 
 # Custom Ollama endpoint
-python -m benchmark.cli run --ollama-endpoint http://192.168.1.100:11434/api/generate
+uv run python -m benchmark.cli run --ollama-endpoint http://192.168.1.100:11434/api/generate
 ```
 
 ### `wiki` - Generate Wiki Pages
@@ -81,7 +81,7 @@ python -m benchmark.cli run --ollama-endpoint http://192.168.1.100:11434/api/gen
 Generates markdown pages from benchmark results (local only).
 
 ```bash
-python -m benchmark.cli wiki [RUN_ID]
+uv run python -m benchmark.cli wiki [RUN_ID]
 ```
 
 - If `RUN_ID` is omitted, uses the latest completed run
@@ -92,7 +92,7 @@ python -m benchmark.cli wiki [RUN_ID]
 Generates wiki pages AND publishes them to the GitHub wiki repository.
 
 ```bash
-python -m benchmark.cli wiki-publish [RUN_ID]
+uv run python -m benchmark.cli wiki-publish [RUN_ID]
 ```
 
 **Process:**
@@ -111,7 +111,7 @@ python -m benchmark.cli wiki-publish [RUN_ID]
 Shows all available benchmark runs.
 
 ```bash
-python -m benchmark.cli list
+uv run python -m benchmark.cli list
 ```
 
 **Output:**
@@ -127,7 +127,7 @@ def67890             running      2025-01-15 14:22:00  mistral:7b               
 Displays details of a specific benchmark run.
 
 ```bash
-python -m benchmark.cli show RUN_ID [-d|--detailed]
+uv run python -m benchmark.cli show RUN_ID [-d|--detailed]
 ```
 
 **Options:**
@@ -138,12 +138,12 @@ python -m benchmark.cli show RUN_ID [-d|--detailed]
 Exports benchmark results to a CSV file.
 
 ```bash
-python -m benchmark.cli export RUN_ID [-o OUTPUT_PATH]
+uv run python -m benchmark.cli export RUN_ID [-o OUTPUT_PATH]
 ```
 
 **Example:**
 ```bash
-python -m benchmark.cli export abc12345 -o results/benchmark_jan15.csv
+uv run python -m benchmark.cli export abc12345 -o results/benchmark_jan15.csv
 ```
 
 ### `merge` - Merge Multiple Runs
@@ -151,7 +151,7 @@ python -m benchmark.cli export abc12345 -o results/benchmark_jan15.csv
 Combines results from multiple benchmark runs into one.
 
 ```bash
-python -m benchmark.cli merge RUN_ID1 RUN_ID2 [RUN_ID...] [-o OUTPUT_ID] [--publish]
+uv run python -m benchmark.cli merge RUN_ID1 RUN_ID2 [RUN_ID...] [-o OUTPUT_ID] [--publish]
 ```
 
 **Options:**
@@ -162,7 +162,7 @@ python -m benchmark.cli merge RUN_ID1 RUN_ID2 [RUN_ID...] [-o OUTPUT_ID] [--publ
 
 ```bash
 # Merge three separate runs
-python -m benchmark.cli merge run1 run2 run3 -o combined_benchmark --publish
+uv run python -m benchmark.cli merge run1 run2 run3 -o combined_benchmark --publish
 ```
 
 ### `delete` - Delete a Run
@@ -170,7 +170,7 @@ python -m benchmark.cli merge run1 run2 run3 -o combined_benchmark --publish
 Removes a benchmark run from storage.
 
 ```bash
-python -m benchmark.cli delete RUN_ID [-f|--force]
+uv run python -m benchmark.cli delete RUN_ID [-f|--force]
 ```
 
 ## How Testing Works
@@ -303,23 +303,23 @@ ollama pull your-new-model:tag
 
 ```bash
 # Test only the new model
-python -m benchmark.cli run -m your-new-model:tag --openrouter-key KEY
+uv run python -m benchmark.cli run -m your-new-model:tag --openrouter-key KEY
 
 # Or run alongside other models for comparison
-python -m benchmark.cli run -m llama3:8b qwen2.5:14b your-new-model:tag --openrouter-key KEY
+uv run python -m benchmark.cli run -m llama3:8b qwen2.5:14b your-new-model:tag --openrouter-key KEY
 ```
 
 ### Step 3: Review Results
 
 ```bash
 # List runs to find your run ID
-python -m benchmark.cli list
+uv run python -m benchmark.cli list
 
 # Show detailed results
-python -m benchmark.cli show RUN_ID --detailed
+uv run python -m benchmark.cli show RUN_ID --detailed
 
 # Export to CSV for analysis
-python -m benchmark.cli export RUN_ID -o new_model_results.csv
+uv run python -m benchmark.cli export RUN_ID -o new_model_results.csv
 ```
 
 ### Step 4: Merge and Publish (Optional)
@@ -328,7 +328,7 @@ If you want to add the new model to existing results:
 
 ```bash
 # Merge with previous run
-python -m benchmark.cli merge previous_run_id new_run_id -o complete_benchmark --publish
+uv run python -m benchmark.cli merge previous_run_id new_run_id -o complete_benchmark --publish
 ```
 
 ## Typical Workflow
@@ -337,10 +337,10 @@ python -m benchmark.cli merge previous_run_id new_run_id -o complete_benchmark -
 
 ```bash
 # 1. Run full benchmark on all available models
-python -m benchmark.cli run --full --openrouter-key KEY
+uv run python -m benchmark.cli run --full --openrouter-key KEY
 
 # 2. Generate and publish wiki
-python -m benchmark.cli wiki-publish
+uv run python -m benchmark.cli wiki-publish
 
 # 3. View results at your GitHub wiki
 ```
@@ -352,20 +352,20 @@ python -m benchmark.cli wiki-publish
 ollama pull new-model:latest
 
 # 2. Run quick benchmark to test
-python -m benchmark.cli run -m new-model:latest --openrouter-key KEY
+uv run python -m benchmark.cli run -m new-model:latest --openrouter-key KEY
 
 # 3. If results look good, run full benchmark
-python -m benchmark.cli run -m new-model:latest --full --openrouter-key KEY
+uv run python -m benchmark.cli run -m new-model:latest --full --openrouter-key KEY
 
 # 4. Merge with existing results
-python -m benchmark.cli merge existing_run_id new_run_id --publish
+uv run python -m benchmark.cli merge existing_run_id new_run_id --publish
 ```
 
 ### Interrupted Run Recovery
 
 ```bash
 # If a run was interrupted, resume it
-python -m benchmark.cli run --resume RUN_ID --openrouter-key KEY
+uv run python -m benchmark.cli run --resume RUN_ID --openrouter-key KEY
 ```
 
 ## Architecture

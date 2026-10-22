@@ -1,6 +1,6 @@
 /**
  * UpdateChecker - shows an update banner when a newer GitHub release exists
- * and drives the self-update flow (git pull + pip install + server restart).
+ * and drives the self-update flow (git pull + uv sync + server restart).
  *
  * Endpoints used:
  *   GET  /api/version/check

@@ -758,7 +758,7 @@ def _validate_against_schema(doc: dict, schema_name: str) -> list[str]:
     try:
         import jsonschema
     except ImportError:
-        return ["WARN: jsonschema not installed; skipping schema validation. Install with `pip install jsonschema`."]
+        return ["WARN: jsonschema not installed; skipping schema validation. Install with `uv pip install jsonschema`."]
     with schema_path.open("r", encoding="utf-8") as f:
         schema = json.load(f)
     validator = jsonschema.Draft202012Validator(schema)

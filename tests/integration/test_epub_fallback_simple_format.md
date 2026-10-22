@@ -33,7 +33,7 @@ Use a smaller model or configure the LLM to be more aggressive in its translatio
 
 ```bash
 cd "C:\Users\Bruno\Documents\GitHub\TranslateBookWithLLM"
-python translate.py -i test.epub -o test_translated.epub -sl English -tl French
+uv run translate.py -i test.epub -o test_translated.epub -sl English -tl French
 ```
 
 ### Step 4: Verify Logs

@@ -15,7 +15,7 @@ def sanitize_config_secrets(config: Dict[str, Any]) -> Dict[str, Any]:
     Return a copy of a job config with every API key removed.
 
     The jobs database must never be a secret-bearing artifact (issue #213):
-    it lives on disk unencrypted and is bind-mounted by docker-compose. Keys
+    it lives on disk unencrypted. Keys
     are therefore stripped before persistence and re-resolved at resume time
     from the environment (the LLM factory falls back to <PROVIDER>_API_KEY
     when the config value is empty) or from the resume request body.

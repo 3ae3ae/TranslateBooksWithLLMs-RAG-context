@@ -15,7 +15,7 @@ echo Demarrage de l'optimisation...
 echo (Cela peut prendre plusieurs minutes selon le nombre d'iterations)
 echo.
 
-python -m tools.prompt_optimizer.optimize --config tools/prompt_optimizer/prompt_optimizer_config.yaml --verbose
+uv run python -m tools.prompt_optimizer.optimize --config tools/prompt_optimizer/prompt_optimizer_config.yaml --verbose
 
 echo.
 if errorlevel 1 (

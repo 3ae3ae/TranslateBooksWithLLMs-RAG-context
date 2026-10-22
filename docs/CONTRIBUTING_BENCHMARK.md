@@ -18,14 +18,14 @@ is regenerated automatically.
 
 ## 1. Run the benchmark locally (translations only)
 
-Prereq: a working Python 3.11+ env with this repo installed
-(`pip install -r requirements.txt`).
+Prereq: [uv](https://docs.astral.sh/uv/getting-started/installation/) and
+this repo's environment installed (`uv sync`).
 
 Run the CLI with `--no-evaluate` — under v2, **scoring is centralized**:
 
 ```bash
 # Cloud (replayable in CI):
-python -m benchmark.cli run \
+uv run python -m benchmark.cli run \
   --provider openrouter \
   --openrouter-key $OPENROUTER_API_KEY \
   -m anthropic/claude-haiku-4-5 \
@@ -33,7 +33,7 @@ python -m benchmark.cli run \
   --pair-set quick
 
 # Local Ollama:
-python -m benchmark.cli run \
+uv run python -m benchmark.cli run \
   --provider ollama \
   -m qwen3:14b \
   --no-evaluate \
@@ -53,7 +53,7 @@ Pair sets:
 ## 2. Add translations to the split layout
 
 ```bash
-python -m benchmark.cli add-translations benchmark_results/<run_id>.json \
+uv run python -m benchmark.cli add-translations benchmark_results/<run_id>.json \
   --by github:<your-username> \
   --provider openrouter
 ```
@@ -75,7 +75,7 @@ The canonical judge is Opus 4.7 via Poe under
 [rubric v2](JUDGE_RUBRIC_V2.md). You need a `POE_API_KEY` in your `.env`.
 
 ```bash
-python scripts/rejudge_all_via_poe.py
+uv run python scripts/rejudge_all_via_poe.py
 ```
 
 The script is idempotent: it loads existing scores from
@@ -110,7 +110,7 @@ Address any issues by force-pushing a corrected commit.
 The wiki workflow runs on `main` when `benchmark/data/**` changes:
 
 1. Joins `translations/` × `judgments/<active-judge>.json` via
-   `python -m benchmark.cli aggregate`.
+   `uv run python -m benchmark.cli aggregate`.
 2. Joins by `(model_id, text_id, target_lang)` with `output_hash` integrity
    check.
 3. Regenerates wiki Markdown, pushes to the GitHub wiki repo.
@@ -210,7 +210,7 @@ Yes. It will be marked `self-reported` (no CI replay). The judge can still
 score it from the translation text alone.
 
 **My model produced bad translations — can I re-run them?**
-Yes. Re-run `python -m benchmark.cli add-translations ...` with the same
+Yes. Re-run `uv run python -m benchmark.cli add-translations ...` with the same
 model and provider. The merge keeps the most recent entries by date.
 
 **Where to report bugs?**

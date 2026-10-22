@@ -30,10 +30,10 @@ network or API key.
 
 ```bash
 # compare against goldens (CI mode)
-python -m pytest tests/characterization/
+uv run python -m pytest tests/characterization/
 
 # regenerate goldens after an INTENTIONAL behavior change, then review the diff
-UPDATE_CHARACTERIZATION=1 python -m pytest tests/characterization/
+UPDATE_CHARACTERIZATION=1 uv run python -m pytest tests/characterization/
 ```
 
 A missing golden is bootstrapped automatically (the test `skip`s with a

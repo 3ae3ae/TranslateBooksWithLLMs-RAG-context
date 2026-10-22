@@ -231,7 +231,7 @@ def create_tts_blueprint(output_dir, socketio):
                 return jsonify({
                     "error": "Chatterbox TTS is not available",
                     "details": "Missing dependencies: torch, chatterbox-tts, or torchaudio. "
-                               "Install with: pip install chatterbox-tts torch torchaudio"
+                               "Install with: uv pip install chatterbox-tts torch torchaudio"
                 }), 400
 
             tts_config = TTSConfig(

@@ -59,7 +59,7 @@ key1, key2, key3
 ### 3. Via the CLI
 
 ```bash
-python translate.py -i book.epub --provider gemini \
+uv run translate.py -i book.epub --provider gemini \
     --gemini_api_key "key1,key2,key3" \
     -m gemini-2.0-flash -tl French
 ```

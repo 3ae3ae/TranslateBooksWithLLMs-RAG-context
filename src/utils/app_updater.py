@@ -1,14 +1,12 @@
 """
 App self-updater
 
-Runs `git pull` + `pip install` in a background thread and (optionally) triggers
+Runs `git pull` + `uv sync` in a background thread and (optionally) triggers
 a process restart. The Flask request handler reads progress through the shared
 UpdateState singleton via /api/version/update/status.
 
-Restart strategy: exit with code 42. The launch scripts (start.bat / start.sh)
-loop on this exit code and relaunch the app. When the app was started directly
-with `python translation_api.py`, the user must restart it manually; in that
-case we still write the new code/deps to disk before exiting.
+Restart strategy: the process exits after the update and the user relaunches
+it with `uv run translation_api.py` (the UI tells them to).
 """
 import hashlib
 import logging
@@ -22,8 +20,6 @@ from pathlib import Path
 from typing import List, Optional
 
 logger = logging.getLogger(__name__)
-
-RESTART_EXIT_CODE = 42
 
 # Inactivity grace period before the process exits, so the HTTP response from
 # /api/version/update can reach the browser and the WebSocket can flush.
@@ -154,14 +150,14 @@ def _run(cmd: List[str], cwd: Path, env: Optional[dict] = None, timeout: int = 6
 
 
 def _do_update(repo_root: Path, install_deps: bool, restart: bool) -> None:
-    """Background worker: git pull -> pip install -> exit-for-restart."""
+    """Background worker: git pull -> uv sync -> exit-for-restart."""
     state = _state
     try:
         if not is_git_repo(repo_root):
             state.fail("Not a git repository. Auto-update needs the app installed via git clone.")
             return
 
-        req_path = repo_root / "requirements.txt"
+        req_path = repo_root / "uv.lock"
         old_hash = _hash_requirements(req_path)
 
         state.set_step("Fetching updates from GitHub")
@@ -188,19 +184,20 @@ def _do_update(repo_root: Path, install_deps: bool, restart: bool) -> None:
 
         if install_deps and deps_changed:
             state.set_step("Updating Python dependencies (this may take a minute)")
-            pip = _run(
-                [sys.executable, "-m", "pip", "install", "-r", str(req_path), "--upgrade"],
+            # --inexact keeps optional packages added with `uv pip install` (litellm, chatterbox).
+            sync = _run(
+                [os.environ.get("UV", "uv"), "sync", "--inexact"],
                 cwd=repo_root,
                 timeout=900,
             )
-            if pip.stdout:
-                tail = "\n".join(pip.stdout.strip().splitlines()[-40:])
+            if sync.stdout:
+                tail = "\n".join(sync.stdout.strip().splitlines()[-40:])
                 state.append(tail)
-            if pip.returncode != 0:
-                state.fail(f"pip install failed (exit {pip.returncode}). Code is updated but dependencies are stale.")
+            if sync.returncode != 0:
+                state.fail(f"uv sync failed (exit {sync.returncode}). Code is updated but dependencies are stale.")
                 return
         elif deps_changed:
-            state.append("requirements.txt changed but dependency install was skipped.")
+            state.append("uv.lock changed but dependency install was skipped.")
 
         state.set_step("Update applied successfully")
         state.complete(requires_restart=restart)
@@ -211,24 +208,21 @@ def _do_update(repo_root: Path, install_deps: bool, restart: bool) -> None:
     except subprocess.TimeoutExpired as e:
         state.fail(f"Step timed out: {e.cmd}")
     except FileNotFoundError as e:
-        state.fail(f"Required command not found: {e}. Is git installed and on PATH?")
+        state.fail(f"Required command not found: {e}. Are git and uv installed and on PATH?")
     except Exception as e:
         logger.exception("Updater crashed")
         state.fail(f"Unexpected error: {e}")
 
 
 def _schedule_restart() -> None:
-    """Exit the process so the wrapper script (start.bat/start.sh) relaunches it.
+    """Exit the process so the user can relaunch it with the new code.
 
     A short delay lets the HTTP response leave the wire before the process dies.
-    Exit code RESTART_EXIT_CODE is what the wrappers loop on; under direct
-    `python translation_api.py` the process simply exits and the user restarts
-    it manually.
     """
     def _exit_later():
         time.sleep(_RESTART_GRACE_SECONDS)
-        logger.info(f"Updater triggering restart (exit code {RESTART_EXIT_CODE})")
-        os._exit(RESTART_EXIT_CODE)
+        logger.info("Updater stopping the server; relaunch it to apply the update")
+        os._exit(0)
 
     threading.Thread(target=_exit_later, daemon=True, name="updater-restart").start()
 

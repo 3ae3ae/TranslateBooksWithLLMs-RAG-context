@@ -25,7 +25,7 @@
   "update_status_restart": "Reiniciando el servidor...",
   "update_status_complete_manual": "Actualización completada. Reinicia la aplicación manualmente para aplicarla.",
   "update_status_restarted": "Servidor reiniciado en v{{version}}. Recargando...",
-  "update_status_no_restart": "El servidor no se reinició automáticamente. Si iniciaste la aplicación con start.bat / start.sh debería reiniciarse por sí solo; en caso contrario, vuelve a iniciarla manualmente.",
+  "update_status_no_restart": "El servidor no se reinició automáticamente. Vuelve a iniciarlo con `uv run translation_api.py`.",
   "update_download": "Descargar actualización",
   "update_download_title": "Abre la página de versiones de GitHub para que descargues la nueva compilación.",
   "update_status_failed": "La actualización falló.",

@@ -50,7 +50,7 @@ ollama run qwen3:4b
 ### 3. Python Dependencies
 
 ```bash
-pip install pyyaml python-dotenv requests
+uv sync  # pyyaml, python-dotenv and requests are project dependencies
 ```
 
 ## Usage
@@ -59,7 +59,7 @@ pip install pyyaml python-dotenv requests
 
 ```bash
 cd c:\Users\bruno\Documents\GitHub\TranslateBookWithLLM
-python -m tools.prompt_optimizer.optimize --config tools/prompt_optimizer/prompt_optimizer_config.yaml --verbose
+uv run python -m tools.prompt_optimizer.optimize --config tools/prompt_optimizer/prompt_optimizer_config.yaml --verbose
 ```
 
 ### Available Options
@@ -100,7 +100,7 @@ The `--verbose` mode enables a detailed colored display showing in real-time:
 ### Example with Options
 
 ```bash
-python -m tools.prompt_optimizer.optimize \
+uv run python -m tools.prompt_optimizer.optimize \
   --config tools/prompt_optimizer/prompt_optimizer_config.yaml \
   --iterations 20 \
   --population 8 \

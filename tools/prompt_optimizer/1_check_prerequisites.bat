@@ -6,37 +6,37 @@ echo.
 
 REM Verifier Python
 echo [1/3] Verification de Python...
-python --version >nul 2>&1
+uv run python --version >nul 2>&1
 if errorlevel 1 (
     echo   [ERREUR] Python n'est pas installe ou pas dans le PATH
     goto :error
 ) else (
-    python --version
+    uv run python --version
     echo   [OK] Python trouve
 )
 echo.
 
 REM Verifier les dependances Python
 echo [2/3] Verification des dependances Python...
-python -c "import yaml" >nul 2>&1
+uv run python -c "import yaml" >nul 2>&1
 if errorlevel 1 (
-    echo   [MANQUANT] pyyaml - Installation: pip install pyyaml
+    echo   [MANQUANT] pyyaml - Installation: uv sync
     set MISSING_DEPS=1
 ) else (
     echo   [OK] pyyaml
 )
 
-python -c "import dotenv" >nul 2>&1
+uv run python -c "import dotenv" >nul 2>&1
 if errorlevel 1 (
-    echo   [MANQUANT] python-dotenv - Installation: pip install python-dotenv
+    echo   [MANQUANT] python-dotenv - Installation: uv sync
     set MISSING_DEPS=1
 ) else (
     echo   [OK] python-dotenv
 )
 
-python -c "import requests" >nul 2>&1
+uv run python -c "import requests" >nul 2>&1
 if errorlevel 1 (
-    echo   [MANQUANT] requests - Installation: pip install requests
+    echo   [MANQUANT] requests - Installation: uv sync
     set MISSING_DEPS=1
 ) else (
     echo   [OK] requests
@@ -60,7 +60,7 @@ echo.
 if defined MISSING_DEPS (
     echo ============================================
     echo   Des dependances sont manquantes!
-    echo   Executez: pip install pyyaml python-dotenv requests
+    echo   Executez: uv sync
     echo ============================================
 ) else (
     echo ============================================

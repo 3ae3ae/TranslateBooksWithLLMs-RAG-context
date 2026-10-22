@@ -25,7 +25,7 @@
   "update_status_restart": "正在重启服务器...",
   "update_status_complete_manual": "更新完成。请手动重启应用以生效。",
   "update_status_restarted": "服务器已在 v{{version}} 上重启。正在重新加载...",
-  "update_status_no_restart": "服务器未自动恢复。如果您是通过 start.bat / start.sh 启动应用，它应该会自行重启；否则请手动重新启动。",
+  "update_status_no_restart": "服务器未自动恢复。请使用 `uv run translation_api.py` 重新启动。",
   "update_download": "下载更新",
   "update_download_title": "打开 GitHub 发布页面以便您下载新版本。",
   "update_status_failed": "更新失败。",

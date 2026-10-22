@@ -1,61 +1,32 @@
 # AGENTS.md
 
-Instructions for Codex when working in this repo.
+Instructions for coding agents working in this repo. `CLAUDE.md` imports this file, so edit only this one.
 
-## Language policy
+## Python environment — uv only
 
-Everything that lives on GitHub must be written in English: code, identifiers, code comments, docstrings, commit messages, PR titles and descriptions, issue text, documentation files (README, AGENTS.md, etc.), and user-facing strings in committed files.
+Dependencies are declared in `pyproject.toml` and pinned in `uv.lock` (commit both). Run everything through uv: `uv run translation_api.py` (web UI), `uv run translate.py ...` (CLI), `uv run pytest`. Change dependencies with `uv add` / `uv remove` (`uv add --dev` for test-only), not pip and not a requirements file.
 
-Replies to the user in chat may follow the language the user writes in (typically French), but any artifact that ends up committed to the repo must be English-only. If the user asks for a comment, doc, or commit message in another language, push back and write it in English.
+## Code language
 
-## Security rules — API keys and secrets
+Code, identifiers, comments, and docstrings are in English, matching the existing codebase.
 
-**Absolutely forbidden** to hardcode an API key, token, password, URL containing a secret, or any other credential in a source file, a test, an ad-hoc script, a comment, a doc example, or a commit message. No exceptions, even temporary, even "just for debugging".
+## Secrets
 
-**Always** load credentials from `.env` (already gitignored) through the project's existing mechanism. If a variable is missing from `.env`, do not fabricate it or invent a value — ask the user, or fail cleanly with a clear message.
+- Never put an API key, token, password, or secret-bearing URL in a source file, test, script, comment, doc, or commit message, not even temporarily.
+- Load credentials from `.env` (gitignored) through the existing config code. If a value is missing, ask or fail with a clear message; never invent one.
+- Docs and tests use inert placeholders such as `YOUR_API_KEY_HERE` or `sk-xxxxxxxx`.
+- Before proposing a commit, check the diff for key-like literals (long base64/hex, `sk-`, `Bearer`, `ghp_`, `AKIA`, a non-empty `api_key`/`token`/`secret`) and alert the user if any appear.
 
-**For examples** in docs or tests that need to illustrate a key format, use an explicit, inert placeholder: `YOUR_API_KEY_HERE`, `sk-xxxxxxxx`, `<REDACTED>`. Never a real key, even expired or disabled — git history keeps it anyway.
+## Frontend i18n
 
-**Before each commit**, if the diff includes a literal that looks like a key (long base64/hex string, prefix `sk-`/`Bearer`/`xoxp-`/`ghp_`/`AKIA`/etc., or a variable named `api_key`/`token`/`secret` with a non-empty value), stop and alert the user before proposing the commit.
+The web UI switches language at runtime. Strings live in `src/web/static/locales/<lang>/<namespace>.json` for `en`, `fr`, `es`, `de`, `zh-CN`, `ja`, `ko`; the machinery is in `src/web/static/js/i18n/i18n.js`.
 
-**If a key is found in existing code** (old hardcoding, forgotten test file), flag it immediately to the user, recommend revoking it on the provider side, and propose moving it to `.env` plus removing the literal.
+- Static HTML: mark text with `data-i18n="ns:key"`, `data-i18n-html`, `data-i18n-attr="placeholder:ns:key;title:ns:key"`, and `data-i18n-params`. `applyToDOM` re-applies these on every language change.
+- JS-rendered text: use `t('ns:key', params)` inside a render that re-runs on the `localeChanged` window event, or emit elements carrying `data-i18n*` attributes. Never cache a `t()` result at module load.
+- No raw human-readable literals in `textContent`, `innerHTML`, `title`, `placeholder`, `aria-label`, `alt`, `alert()`/`confirm()`, toasts, or `MessageLogger`.
+- A new key goes into all 7 locale files in the same change, English first, with the same `{{placeholder}}` tokens in every locale.
+- Before calling an i18n change done, switch the UI language and confirm the text updates without a reload.
 
-## Frontend i18n rules — every user-facing string must be reactive
+## Repo layout
 
-Every user-facing string in the web frontend (`src/web/templates/`, `src/web/static/js/`) MUST be translatable AND update immediately when the user switches the UI language. The i18n machinery lives in `src/web/static/js/i18n/i18n.js`; locales live under `src/web/static/locales/<lang>/<namespace>.json` and must stay in sync across all 7 supported locales (`en`, `fr`, `es`, `de`, `zh-CN`, `ja`, `ko`).
-
-**For static HTML strings**, use one of the i18n marker attributes — never write raw human text:
-
-- `data-i18n="ns:key"` — sets `textContent`
-- `data-i18n-html="ns:key"` — sets `innerHTML` (use sparingly; the key value must be trusted)
-- `data-i18n-attr="placeholder:ns:key;title:ns:key"` — sets attributes (`placeholder`, `title`, `aria-label`, `alt`, optgroup `label`, …)
-- `data-i18n-params='{"name":"foo"}'` — interpolation params
-
-`applyToDOM(document.body)` re-runs on the `languageChanged` event and re-translates every marked element — so a `data-i18n*` attribute is enough to be reactive.
-
-**For JS-rendered strings**, always wrap the literal with `t('ns:key', { params })` AND make sure the surrounding render runs again on locale switch. The `t()` call returns the current locale's string at call time — calling it once at module load freezes the string at boot. Two correct patterns:
-
-1. The render function listens to the `localeChanged` window event:
-
-   ```js
-   window.addEventListener('localeChanged', () => render());
-   ```
-
-2. The injected DOM carries `data-i18n*` attributes (in which case `applyToDOM` handles it automatically — no explicit listener needed). Helper example: `setPlaceholderOption()` in `provider-manager.js`.
-
-**Forbidden patterns** (any of these is a bug that must be fixed in the same PR):
-
-- A raw English (or any-language) string literal written to `textContent`, `innerHTML`, `insertAdjacentHTML`, `.title`, `.placeholder`, `.setAttribute('aria-label'|'title'|'placeholder'|'alt', …)`, or passed to `alert()` / `confirm()` / a toast / `MessageLogger.showMessage` / `MessageLogger.addLog`.
-- A `t(...)` call cached into a `const`/module-scope variable at module load, then reused forever.
-- A `data-i18n` key that doesn't exist in **all 7** locale files.
-- A translation that drops a `{{placeholder}}` token present in the English source — interpolation keys must match across locales.
-
-**When adding a new locale key**: add it to all 7 `<lang>/<namespace>.json` files in the same commit. The English version goes first and is the source of truth; the other six are translations of it.
-
-**Before declaring an i18n change done**, smoke-test it by toggling the UI language selector and confirming the string updates without a page reload. If it doesn't, the surrounding render is not reactive — fix it before merging.
-
-## Script organization rules
-
-No ad-hoc test or debug scripts at the repo root. The patterns `check_*.py`, `test_*.py`, `debug_*.py`, `scratch_*.py`, `tmp_*.py` at the root are gitignored — this is intentional.
-
-The real entrypoints at the root are `translate.py`, `translation_api.py`, `launcher.py`. Real tests live under `tests/` (pytest) or `tests/standalone/` (manual scripts). If an ad-hoc script becomes useful long-term, move it into `tests/standalone/` or `scripts/` before committing it.
+Entrypoints at the root are `translate.py` and `translation_api.py` only. Tests live in `tests/` (pytest) and `tests/standalone/` (manual scripts); reusable helpers go in `scripts/`. Root-level `check_*.py`, `test_*.py`, `debug_*.py`, `scratch_*.py`, and `tmp_*.py` are gitignored scratch files and are never committed.

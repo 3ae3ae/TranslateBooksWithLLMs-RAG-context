@@ -4,7 +4,7 @@ Version check & self-update routes.
 Endpoints:
     GET  /api/version/check         - current vs latest GitHub release
     GET  /api/version/update/status - in-flight update progress
-    POST /api/version/update        - kick off git pull + pip install + restart
+    POST /api/version/update        - kick off git pull + uv sync + restart
 """
 import logging
 from pathlib import Path
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def _repo_root() -> Path:
-    """Project root. CWD is set by translation_api.py / launcher.py."""
+    """Project root: the directory the app was launched from."""
     return Path.cwd()
 
 
@@ -75,7 +75,7 @@ def create_version_blueprint(state_manager):
 
     @bp.route("/api/version/update", methods=["POST"])
     def start_update():
-        """Trigger git pull + (optional) pip install + restart.
+        """Trigger git pull + (optional) uv sync + restart.
 
         Refuses when:
             - an update is already running

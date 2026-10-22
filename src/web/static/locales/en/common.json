@@ -25,7 +25,7 @@
   "update_status_restart": "Restarting server...",
   "update_status_complete_manual": "Update complete. Restart the app manually to apply.",
   "update_status_restarted": "Server restarted on v{{version}}. Reloading...",
-  "update_status_no_restart": "Server did not come back automatically. If you launched the app with start.bat / start.sh it should restart on its own; otherwise relaunch it manually.",
+  "update_status_no_restart": "Server did not come back automatically. Start it again with `uv run translation_api.py`.",
   "update_download": "Download update",
   "update_download_title": "Opens the GitHub release page so you can download the new build.",
   "update_status_failed": "Update failed.",

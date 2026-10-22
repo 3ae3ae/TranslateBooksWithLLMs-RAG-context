@@ -25,7 +25,7 @@
   "update_status_restart": "サーバーを再起動中...",
   "update_status_complete_manual": "更新が完了しました。アプリを手動で再起動して反映してください。",
   "update_status_restarted": "サーバーが v{{version}} で再起動しました。再読み込み中...",
-  "update_status_no_restart": "サーバーが自動的に復帰しませんでした。start.bat / start.sh でアプリを起動した場合は自動的に再起動します。それ以外の場合は手動で再起動してください。",
+  "update_status_no_restart": "サーバーが自動的に復帰しませんでした。`uv run translation_api.py` で再起動してください。",
   "update_download": "更新をダウンロード",
   "update_download_title": "新しいビルドをダウンロードできる GitHub のリリースページを開きます。",
   "update_status_failed": "更新に失敗しました。",

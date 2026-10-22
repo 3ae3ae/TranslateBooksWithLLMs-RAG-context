@@ -127,7 +127,7 @@ def validate_configuration():
         logger.error("   2. Configure the required settings")
         logger.error("   3. Restart the application")
         logger.error("\n   Quick setup:")
-        logger.error("   python -m src.utils.env_helper setup")
+        logger.error("   uv run python -m src.utils.env_helper setup")
         logger.error("="*70 + "\n")
         raise ValueError("Configuration validation failed. See errors above.")
 

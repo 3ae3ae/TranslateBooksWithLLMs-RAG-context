@@ -544,8 +544,8 @@ def create_tts_provider(provider_name: str = "edge-tts", **kwargs) -> TTSProvide
         if not is_chatterbox_available():
             raise ValueError(
                 "Chatterbox TTS is not available. Install with: "
-                "pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124 && "
-                "pip install chatterbox-tts"
+                "uv pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124 && "
+                "uv pip install chatterbox-tts"
             )
         return ChatterboxProvider(
             voice_prompt_path=kwargs.get('voice_prompt_path'),

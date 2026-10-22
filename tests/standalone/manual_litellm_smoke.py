@@ -7,7 +7,7 @@ credential from .env. This is the test that proves the feature actually works
 against a live API, beyond the stubbed unit tests.
 
 Requires the optional dependency:
-    pip install "litellm>=1.65,<1.85"
+    uv pip install "litellm>=1.65,<1.85"
 
 Run from repo root:
     python tests/standalone/manual_litellm_smoke.py
@@ -63,7 +63,7 @@ async def run() -> int:
     try:
         import litellm  # noqa: F401
     except ImportError:
-        print('FAIL: litellm not installed. Run: pip install "litellm>=1.65,<1.85"')
+        print('FAIL: litellm not installed. Run: uv pip install "litellm>=1.65,<1.85"')
         return 1
 
     model = os.getenv("LITELLM_MODEL", "").strip() or DEFAULT_MODEL

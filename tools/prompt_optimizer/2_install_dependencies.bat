@@ -7,7 +7,7 @@ echo.
 echo Installation des packages Python necessaires...
 echo.
 
-pip install pyyaml python-dotenv requests
+uv sync
 
 echo.
 if errorlevel 1 (

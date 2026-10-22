@@ -10,7 +10,7 @@ cd /d "%~dp0\..\.."
 echo Verification de la configuration sans execution...
 echo.
 
-python -m tools.prompt_optimizer.optimize --config tools/prompt_optimizer/prompt_optimizer_config.yaml --dry-run
+uv run python -m tools.prompt_optimizer.optimize --config tools/prompt_optimizer/prompt_optimizer_config.yaml --dry-run
 
 echo.
 if errorlevel 1 (

@@ -184,7 +184,7 @@ Transient states like `rate_limited` (auto-resuming) do **not** trigger notifica
 After editing `.env`, test the webhook without running a full translation:
 
 ```bash
-python -c "from src.utils.notifier import notify, EVENT_SUCCESS; print(notify(EVENT_SUCCESS, {'file':'test.txt','duration_seconds':1.0}))"
+uv run python -c "from src.utils.notifier import notify, EVENT_SUCCESS; print(notify(EVENT_SUCCESS, {'file':'test.txt','duration_seconds':1.0}))"
 ```
 
 - `True` printed + notification received → working
@@ -195,7 +195,7 @@ You can also override values for one-off tests via environment variables:
 
 ```bash
 NOTIFY_WEBHOOK_URL=https://ntfy.sh/test-topic NOTIFY_ON_SUCCESS=true \
-  python -c "from src.utils.notifier import notify, EVENT_SUCCESS; notify(EVENT_SUCCESS)"
+  uv run python -c "from src.utils.notifier import notify, EVENT_SUCCESS; notify(EVENT_SUCCESS)"
 ```
 
 ---

@@ -4,19 +4,13 @@ __pycache__/
 /DoNotCommit/
 /translated_files/
 /data/
-deployment/data/
-deployment/translated_files/
-deployment/logs/
 **/jobs.db
 .claude/
 .env
 .env.*
 !.env.example
 /venv
-build_installer.bat
-build/dist/
-build/TranslateBookWithLLM/
-/dist
+/.venv
 /wiki/
 .wiki_repo/
 /prompt_optimization_results
@@ -33,16 +27,9 @@ tests/.placeholder_tests/
 /.tools/
 /scratch/
 /TranslateBook_Data/
-/build/TranslateBook/
-/build/TranslateBooksWithLLMs/
-/build/launcher/
-/build/windows/build/
-/build/windows/dist/
-/TranslateBooksWithLLMs.spec
-/launcher.spec
 
 # Ad-hoc scratch scripts at repo root — keep them out of commits.
-# Real tests live under tests/, real entrypoints are translate.py / translation_api.py / launcher.py.
+# Real tests live under tests/, real entrypoints are translate.py / translation_api.py.
 /check_*.py
 /scratch_*.py
 /debug_*.py

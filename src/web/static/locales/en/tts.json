@@ -84,7 +84,7 @@
   "tts_error": "Error starting TTS: {{error}}",
   "tts_provider_changed_log": "TTS provider changed to: {{provider}}",
   "tts_providers_load_failed": "Failed to load TTS providers: {{error}}",
-  "chatterbox_not_available": "Chatterbox TTS is not available. Please install: pip install chatterbox-tts torch torchaudio",
+  "chatterbox_not_available": "Chatterbox TTS is not available. Please install: uv pip install chatterbox-tts torch torchaudio",
   "voice_prompt_uploaded_log": "Voice prompt uploaded: {{filename}}",
   "voice_prompt_uploaded": "Voice prompt uploaded successfully",
   "voice_prompt_upload_failed": "Failed to upload voice prompt: {{error}}",

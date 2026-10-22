@@ -28,7 +28,7 @@ Browse models: [ollama.com/search](https://ollama.com/search)
 ### CLI Example
 
 ```bash
-python translate.py -i book.txt -o book_fr.txt -m qwen3:14b
+uv run translate.py -i book.txt -o book_fr.txt -m qwen3:14b
 ```
 
 ---
@@ -62,13 +62,13 @@ TBL supports any server that implements the OpenAI API format. This includes:
 
 ```bash
 # llama.cpp (llama-server)
-python translate.py -i book.txt -o book_fr.txt \
+uv run translate.py -i book.txt -o book_fr.txt \
     --provider openai \
     --api_endpoint http://localhost:8080/v1/chat/completions \
     -m your-model-name
 
 # LM Studio
-python translate.py -i book.txt -o book_fr.txt \
+uv run translate.py -i book.txt -o book_fr.txt \
     --provider openai \
     --api_endpoint http://localhost:1234/v1/chat/completions \
     -m your-model-name
@@ -89,7 +89,7 @@ Access to 200+ models from multiple providers through a single API.
 ### CLI Example
 
 ```bash
-python translate.py -i book.txt -o book_fr.txt \
+uv run translate.py -i book.txt -o book_fr.txt \
     --provider openrouter \
     --openrouter_api_key sk-or-v1-your-key \
     -m anthropic/claude-sonnet-4
@@ -121,7 +121,7 @@ Official OpenAI API (GPT models). Uses the same "OpenAI-Compatible" provider in 
 ### CLI Example
 
 ```bash
-python translate.py -i book.txt -o book_fr.txt \
+uv run translate.py -i book.txt -o book_fr.txt \
     --provider openai \
     --openai_api_key sk-your-key \
     -m gpt-4o
@@ -149,7 +149,7 @@ Google's Gemini models.
 ### CLI Example
 
 ```bash
-python translate.py -i book.txt -o book_fr.txt \
+uv run translate.py -i book.txt -o book_fr.txt \
     --provider gemini \
     --gemini_api_key your-key \
     -m gemini-2.0-flash
@@ -176,7 +176,7 @@ European cloud provider with strong multilingual quality.
 ### CLI Example
 
 ```bash
-python translate.py -i book.txt -o book_fr.txt \
+uv run translate.py -i book.txt -o book_fr.txt \
     --provider mistral \
     --mistral_api_key your-key \
     -m mistral-large-latest
@@ -205,7 +205,7 @@ Chinese LLM provider with 64K context and OpenAI-compatible API. Supports thinki
 ### CLI Example
 
 ```bash
-python translate.py -i book.txt -o book_fr.txt \
+uv run translate.py -i book.txt -o book_fr.txt \
     --provider deepseek \
     --deepseek_api_key your-key \
     -m deepseek-v4-pro
@@ -228,7 +228,7 @@ Single key, many models — Claude, GPT, Gemini, Llama, Mistral, DeepSeek and mo
 ### CLI Example
 
 ```bash
-python translate.py -i book.txt -o book_fr.txt \
+uv run translate.py -i book.txt -o book_fr.txt \
     --provider poe \
     --poe_api_key your-key \
     -m Claude-Sonnet-4
@@ -250,7 +250,7 @@ Hosted models via NVIDIA's inference platform — OpenAI-compatible API, generou
 ### CLI Example
 
 ```bash
-python translate.py -i book.txt -o book_fr.txt \
+uv run translate.py -i book.txt -o book_fr.txt \
     --provider nim \
     --nim_api_key your-key \
     -m meta/llama-3.1-8b-instruct

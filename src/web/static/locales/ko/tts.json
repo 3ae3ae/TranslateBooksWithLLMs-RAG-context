@@ -84,7 +84,7 @@
   "tts_error": "TTS 시작 오류: {{error}}",
   "tts_provider_changed_log": "TTS 제공자가 변경되었습니다: {{provider}}",
   "tts_providers_load_failed": "TTS 제공자 로드 실패: {{error}}",
-  "chatterbox_not_available": "Chatterbox TTS를 사용할 수 없습니다. 설치하세요: pip install chatterbox-tts torch torchaudio",
+  "chatterbox_not_available": "Chatterbox TTS를 사용할 수 없습니다. 설치하세요: uv pip install chatterbox-tts torch torchaudio",
   "voice_prompt_uploaded_log": "음성 프롬프트가 업로드되었습니다: {{filename}}",
   "voice_prompt_uploaded": "음성 프롬프트가 성공적으로 업로드되었습니다",
   "voice_prompt_upload_failed": "음성 프롬프트 업로드 실패: {{error}}",

@@ -59,7 +59,7 @@ Goal: build your first glossary, run a translation that uses it, all from the We
 
 1. **Start the server** and open <http://localhost:5000>.
    ```bash
-   python translation_api.py
+   uv run translation_api.py
    ```
 2. **Click the "Glossaries" tab** in the header.
 3. **Click "New"**, give it a name like `My novel` and pick the source/target languages (e.g. Chinese -> English).
@@ -114,7 +114,7 @@ Useful when the translation will take hours and you want to run it in a terminal
 ```
 
 ```bash
-python translate.py \
+uv run translate.py \
   -i wuxia_novel.epub \
   -o wuxia_novel_en.epub \
   -sl Chinese -tl English \
@@ -521,7 +521,7 @@ The CLI does not touch the database at all; it loads JSON/CSV files directly fro
 | Added 50 terms but only some show up in translations | The per-chunk filter only injects entries that actually appear in that chunk. The cap of 50 is per chunk, not total. A 100-term glossary works fine if only 10-20 match any given chunk. |
 | Auto-extract returns identical pairs (source = target) | Some sources are not translated (proper nouns kept as-is). The UI dims them; check or uncheck case-by-case based on whether you want to lock the proper noun. |
 | Glossary dropdown empty in the Translate tab         | The dropdown only lists glossaries whose `source_lang`/`target_lang` match the selected language pair. Switch the language pair in the Translate tab or relax the glossary's language fields. |
-| CLI says `Glossary file ... contained no usable entries` | JSON has wrong structure: bare list of `{source, target}` or full object with `terms` field. Verify with `python -m json.tool < glossary.json`. |
+| CLI says `Glossary file ... contained no usable entries` | JSON has wrong structure: bare list of `{source, target}` or full object with `terms` field. Verify with `uv run python -m json.tool < glossary.json`. |
 | Server log: `Migrated N glossaries (M terms)`        | First-run migration from the legacy `jobs.db`. Expected; idempotent on subsequent starts. |
 
 ---

@@ -182,7 +182,7 @@ class ChatterboxProvider(TTSProvider):
         if missing:
             raise TTSError(
                 f"Missing dependencies: {', '.join(missing)}. "
-                f"Install with: pip install {' '.join(missing)}",
+                f"Install with: uv pip install {' '.join(missing)}",
                 provider="chatterbox",
                 recoverable=False
             )

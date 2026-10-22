@@ -35,7 +35,7 @@ class EdgeTTSProvider(TTSProvider):
     def __init__(self):
         if not EDGE_TTS_AVAILABLE:
             raise TTSError(
-                "edge-tts library not installed. Install with: pip install edge-tts",
+                "edge-tts library not installed. Install with: uv sync",
                 provider=self.name,
                 recoverable=False
             )

@@ -34,20 +34,15 @@ or for editing the upstream Python project itself.
 
 ## 1. Set up the tool (once per environment)
 
-Requires Python 3.8+ and Git. Clone the repository and install dependencies:
+Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) and Git. Clone the repository and install dependencies:
 
 ```bash
-git clone https://github.com/hydropix/TranslateBooksWithLLMs.git
-cd TranslateBooksWithLLMs
-python -m venv venv
-# Linux/macOS:
-source venv/bin/activate
-# Windows:
-#   venv\Scripts\activate
-pip install -r requirements.txt
+git clone https://github.com/3ae3ae/TranslateBooksWithLLMs-RAG-context.git
+cd TranslateBooksWithLLMs-RAG-context
+uv sync
 ```
 
-All commands below are run from the repository root, inside this virtualenv.
+All commands below are run from the repository root through `uv run`.
 
 ## 2. Gather the inputs you need from the user
 
@@ -100,7 +95,7 @@ unless you pass `-o`.
 **Local with Ollama:**
 
 ```bash
-python translate.py -i "book.epub" -sl English -tl French \
+uv run translate.py -i "book.epub" -sl English -tl French \
     --provider ollama -m qwen3:14b
 ```
 
@@ -109,7 +104,7 @@ the environment / `.env`, so it is **not** on the command line:
 
 ```bash
 # OPENROUTER_API_KEY is set in the environment or .env beforehand
-python translate.py -i "book.epub" -sl English -tl French \
+uv run translate.py -i "book.epub" -sl English -tl French \
     --provider openrouter -m anthropic/claude-sonnet-4
 ```
 
