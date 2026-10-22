@@ -78,3 +78,11 @@ def sampler_epub_bytes(sampler_epub_path):
 def sampler_spine_docs():
     """Mapping of {href: xhtml_string} for the sampler's spine documents."""
     return dict(_sampler_module.SPINE_DOCS)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_user_data(tmp_path, monkeypatch):
+    """Keep tests from writing uploads and story notes into the real data folders."""
+    import src.config as config
+    monkeypatch.setattr(config, "UPLOADS_DIR", tmp_path / "_user_data" / "uploads")
+    monkeypatch.setattr(config, "NOVEL_CONTEXTS_DIR", tmp_path / "_user_data" / "Novel_Contexts")
