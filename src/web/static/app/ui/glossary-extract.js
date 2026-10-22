@@ -107,7 +107,10 @@ export function GlossaryExtractDialog({ glossary, file: initialFile, sourceLangu
   const checkedCount = rows.filter((r) => r.checked).length;
   const canRun = file && model.model && (glossary || name.trim()) && phase === 'setup';
 
-  const footer = phase === 'review' || phase === 'adding'
+  const footer = phase === 'review' && !rows.length
+    ? html`<${Button} variant="ghost" onClick=${onClose}>${t('common.close')}<//>
+        <${Button} variant="primary" icon="rotate-ccw" onClick=${() => setPhase('setup')}>${t('glossary.extract.retry')}<//>`
+    : phase === 'review' || phase === 'adding'
     ? html`<span class="grow small muted">${t('glossary.extract.found', { count: rows.length, n: formatNumber(rows.length), fresh: formatNumber((result && result.new_count) ?? rows.filter((r) => !r.dup).length) })}</span>
         <${Button} variant="ghost" onClick=${onClose}>${t('common.cancel')}<//>
         <${Button} variant="primary" loading=${phase === 'adding'} disabled=${!checkedCount} onClick=${add}>
@@ -141,8 +144,8 @@ export function GlossaryExtractDialog({ glossary, file: initialFile, sourceLangu
       ${phase === 'running' && html`<div class="row muted"><${Spinner} />${t('glossary.extract.running')}</div>`}
     </div>`}
     ${(phase === 'review' || phase === 'adding') && html`<div class="stack">
-      ${result && result.warnings && result.warnings.length > 0 && html`<${Callout} tone="warning">${result.warnings.join(' ')}<//>`}
-      <div class="table-wrap" style="max-height:52vh;overflow:auto">
+      ${!rows.length && html`<${Callout} tone="info" title=${t('glossary.extract.none_title')}>${t('glossary.extract.none_body')}<//>`}
+      ${rows.length > 0 && html`<div class="table-wrap" style="max-height:52vh;overflow:auto">
         <table class="table">
           <thead><tr>
             <th class="col-check"><${Checkbox} label=${t('common.select_all')} checked=${checkedCount === rows.length && rows.length > 0}
@@ -159,7 +162,7 @@ export function GlossaryExtractDialog({ glossary, file: initialFile, sourceLangu
             </tr>`)}
           </tbody>
         </table>
-      </div>
+      </div>`}
     </div>`}
   <//>`;
 }
