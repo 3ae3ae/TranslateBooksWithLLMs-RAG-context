@@ -14,7 +14,7 @@ ensure_utf8_stdio()
 # Reduce verbosity of httpx (avoid showing 400 errors during model detection)
 logging.getLogger('httpx').setLevel(logging.WARNING)
 
-from src.config import DEFAULT_MODEL, API_ENDPOINT, LLM_PROVIDER, GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, MISTRAL_API_KEY, DEEPSEEK_API_KEY, POE_API_KEY, NIM_API_KEY, DEFAULT_SOURCE_LANGUAGE, DEFAULT_TARGET_LANGUAGE, PARALLEL_TRANSLATIONS
+from src.config import DEFAULT_MODEL, API_ENDPOINT, OPENAI_API_ENDPOINT, LLM_PROVIDER, GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, MISTRAL_API_KEY, DEEPSEEK_API_KEY, POE_API_KEY, NIM_API_KEY, DEFAULT_SOURCE_LANGUAGE, DEFAULT_TARGET_LANGUAGE, PARALLEL_TRANSLATIONS
 from src.utils.file_utils import get_unique_output_path
 from src.utils.unified_logger import setup_cli_logger, LogType
 from src.persistence.checkpoint_manager import CheckpointManager
@@ -36,7 +36,7 @@ if __name__ == "__main__":
     parser.add_argument("-sl", "--source_lang", default=DEFAULT_SOURCE_LANGUAGE, help="Source language (required for translation unless DEFAULT_SOURCE_LANGUAGE is set).")
     parser.add_argument("-tl", "--target_lang", default=DEFAULT_TARGET_LANGUAGE, help="Target language (required, including --refine-only, unless DEFAULT_TARGET_LANGUAGE is set).")
     parser.add_argument("-m", "--model", default=DEFAULT_MODEL, help=f"LLM model (default: {DEFAULT_MODEL}).")
-    parser.add_argument("--api_endpoint", default=None, help=f"Override the provider API endpoint. Ollama and OpenAI-compatible servers default to {API_ENDPOINT}; other providers use their configured endpoints.")
+    parser.add_argument("--api_endpoint", default=None, help=f"Override the provider API endpoint, e.g. a local OpenAI-compatible server (llama.cpp, LM Studio, vLLM). Defaults: Ollama {API_ENDPOINT}, OpenAI {OPENAI_API_ENDPOINT}; other providers use their configured endpoints.")
     parser.add_argument("--provider", default=LLM_PROVIDER, choices=["ollama", "gemini", "openai", "openrouter", "mistral", "deepseek", "poe", "nim"], help=f"LLM provider (default: {LLM_PROVIDER}). Use 'openai' for any OpenAI-compatible server.")
     parser.add_argument("--gemini_api_key", default=GEMINI_API_KEY, help="Google Gemini API key (required if using gemini provider).")
     parser.add_argument("--openai_api_key", default=OPENAI_API_KEY, help="OpenAI API key (required for OpenAI cloud, not needed for local servers).")
@@ -64,8 +64,10 @@ if __name__ == "__main__":
     if not args.refine_only and not args.source_lang.strip():
         parser.error("--source_lang is required for translation; pass a non-empty language or set DEFAULT_SOURCE_LANGUAGE")
 
-    if args.api_endpoint is None and args.provider in {"ollama", "openai"}:
+    if args.api_endpoint is None and args.provider == "ollama":
         args.api_endpoint = API_ENDPOINT
+    elif args.api_endpoint is None and args.provider == "openai":
+        args.api_endpoint = OPENAI_API_ENDPOINT
 
     # Auto-select default model based on provider if not explicitly set
     from src.config import NIM_MODEL, MISTRAL_MODEL, DEEPSEEK_MODEL, POE_MODEL, OPENROUTER_MODEL, GEMINI_MODEL

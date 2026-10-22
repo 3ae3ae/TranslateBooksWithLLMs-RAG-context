@@ -41,7 +41,7 @@ def cli(monkeypatch):
 @pytest.mark.parametrize("endpoint", [None, "https://custom.example/v1/chat/completions", "http://localhost:11434/api/generate"])
 @pytest.mark.parametrize("provider,constructor,default_endpoint", [
     ("ollama", "OllamaProvider", "http://localhost:11434/api/generate"),
-    ("openai", "OpenAICompatibleProvider", "http://localhost:11434/api/generate"),
+    ("openai", "OpenAICompatibleProvider", config.OPENAI_API_ENDPOINT),
     ("gemini", "GeminiProvider", None),
     ("openrouter", "OpenRouterProvider", config.OPENROUTER_API_ENDPOINT),
     ("mistral", "MistralProvider", config.MISTRAL_API_ENDPOINT),
