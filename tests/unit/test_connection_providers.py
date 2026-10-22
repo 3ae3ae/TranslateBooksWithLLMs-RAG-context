@@ -19,7 +19,7 @@ def reset_key_state():
 
 
 def connection(kind, model="test-model", reasoning="off", **fields):
-    return dict(llm_provider={"openai_compatible": "openai", "ollama_cloud": "ollama"}.get(kind, kind),
+    return dict(llm_provider={"openai_compatible": "openai", "neuralwatt": "openai", "ollama_cloud": "ollama"}.get(kind, kind),
                 llm_api_endpoint="https://custom.test/chat", api_key="sk-test-xxxx", model=model,
                 reasoning_effort=reasoning, connection_id="test", connection_name="Test", connection_type=kind,
                 local=False, request_timeout=47, max_attempts=1, temperature=None,
@@ -52,6 +52,7 @@ CASES = [
     ("ollama_cloud", "gpt-oss:120b", "think", ["low", "low", "medium", "high", None]),
     ("openai", "gpt-5.1", "reasoning_effort", ["none", "low", "medium", "high", None]),
     ("openai_compatible", "qwen3", "reasoning_effort", [None, "low", "medium", "high", None]),
+    ("neuralwatt", "test-model", "reasoning_effort", ["none", "low", "medium", "high", None]),
     ("openrouter", "anthropic/claude-sonnet-4", "reasoning", [{"enabled": False}, {"effort": "low"}, {"effort": "medium"}, {"effort": "high"}, {"enabled": False}]),
     ("gemini", "gemini-2.5-flash", "thinkingBudget", [0, 1024, 8192, 24576, 0]),
     ("gemini", "gemini-2.5-pro", "thinkingBudget", [128, 1024, 8192, 24576, 128]),
@@ -78,6 +79,8 @@ async def test_provider_reasoning_payloads(kind, model, field, expected, level_i
     assert len(requests) == 1
     assert str(requests[0].url) == config["llm_api_endpoint"]
     payload = json.loads(requests[0].content)
+    if kind == "neuralwatt" and level_index == 4:
+        assert not any(key in payload for key in ("reasoning", "reasoning_effort", "thinking", "think", "chat_template_kwargs"))
     if kind == "gemini":
         actual = payload["generationConfig"].get("thinkingConfig", {}).get(field)
     else:
@@ -109,7 +112,7 @@ async def test_openai_off_uses_lowest_supported_effort(model, expected):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kind", ["ollama", "ollama_cloud", "openai", "openai_compatible", "openrouter", "gemini", "mistral", "deepseek", "poe", "nim"])
+@pytest.mark.parametrize("kind", ["ollama", "ollama_cloud", "openai", "openai_compatible", "neuralwatt", "openrouter", "gemini", "mistral", "deepseek", "poe", "nim"])
 async def test_400_drops_reasoning_once_without_spending_attempt(kind, caplog):
     payloads = []
     def handler(request):
@@ -117,7 +120,10 @@ async def test_400_drops_reasoning_once_without_spending_attempt(kind, caplog):
         if len(payloads) == 1:
             return httpx.Response(400, json={"error": "Unsupported reasoning/thinking/think/chat_template_kwargs parameter"})
         return success(kind)
-    _, result = await generate_with_http(connection(kind, "gemini-2.5-flash" if kind == "gemini" else "gpt-5.1"), handler)
+    config = connection(kind, "gemini-2.5-flash" if kind == "gemini" else "gpt-5.1")
+    if kind == "neuralwatt":
+        config["reasoning_effort"] = "high"
+    _, result = await generate_with_http(config, handler)
     assert result
     assert len(payloads) == 2
     assert "optional parameters" in caplog.text
@@ -127,7 +133,7 @@ async def test_400_drops_reasoning_once_without_spending_attempt(kind, caplog):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kind", ["ollama_cloud", "openai", "openrouter", "gemini", "mistral", "deepseek", "poe", "nim"])
+@pytest.mark.parametrize("kind", ["ollama_cloud", "openai", "neuralwatt", "openrouter", "gemini", "mistral", "deepseek", "poe", "nim"])
 async def test_400_temperature_is_sent_then_dropped(kind):
     payloads = []
     def handler(request):

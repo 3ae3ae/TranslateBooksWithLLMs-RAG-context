@@ -24,6 +24,7 @@ _TYPES = {
     "ollama": ("Ollama", "http://localhost:11434", False, "levels"),
     "ollama_cloud": ("Ollama Cloud", "https://ollama.com", True, "levels"),
     "openai": ("OpenAI", "https://api.openai.com/v1", True, "levels"),
+    "neuralwatt": ("Neuralwatt", "https://api.neuralwatt.com/v1", True, "best_effort"),
     "openai_compatible": ("OpenAI-compatible", "", False, "best_effort"),
     "openrouter": ("OpenRouter", "https://openrouter.ai/api/v1", True, "levels"),
     "gemini": ("Gemini", "https://generativelanguage.googleapis.com/v1beta", True, "levels"),
@@ -167,7 +168,7 @@ def _migrate():
     items = [builtin]
     provider = setting("LLM_PROVIDER", "ollama").lower()
     default_id, default_model = builtin["id"], builtin["default_model"]
-    for kind in ("openai", "gemini", "openrouter", "mistral", "deepseek", "poe", "nim", "ollama_cloud"):
+    for kind in ("openai", "neuralwatt", "gemini", "openrouter", "mistral", "deepseek", "poe", "nim", "ollama_cloud"):
         prefix = "OLLAMA" if kind == "ollama_cloud" else kind.upper()
         keys = normalize_api_keys(setting(prefix + "_API_KEY"))
         endpoint = setting(prefix + "_API_ENDPOINT", _TYPES[kind][1]) if kind != "ollama_cloud" else "https://ollama.com"
@@ -289,7 +290,7 @@ def _resolve(connection, model, reasoning):
     if not isinstance(reasoning, str) or reasoning not in REASONING_LEVELS:
         raise ValueError("Reasoning must be off, low, medium, high, or default")
     kind = connection["type"]
-    provider = {"ollama_cloud": "ollama", "openai_compatible": "openai"}.get(kind, kind)
+    provider = {"ollama_cloud": "ollama", "openai_compatible": "openai", "neuralwatt": "openai"}.get(kind, kind)
     local = connection["local"] and not (kind == "ollama" and re.search(r"(?:-cloud|:cloud)(?:$|:)", model))
     return dict(llm_provider=provider,
                 llm_api_endpoint=connection["resolved"]["chat_url"].replace("{model}", model),
@@ -323,14 +324,28 @@ def _list_models(connection, client):
         for item in data.get("models" if kind in {"ollama", "ollama_cloud", "gemini"} else "data", []):
             if kind == "gemini" and "generateContent" not in item.get("supportedGenerationMethods", []):
                 continue
+            metadata = item.get("metadata") or {}
+            if kind == "neuralwatt" and (metadata.get("deprecated") or item.get("deprecated")):
+                continue
             model = item.get("id") or item.get("name", "")
             if kind == "gemini":
                 model = model.removeprefix("models/")
             if not model:
                 continue
             pricing = None
+            name = item.get("displayName") or item.get("name") or model
+            context_length = item.get("context_length") or item.get("inputTokenLimit") or item.get("max_context_length")
             raw = item.get("pricing") or {}
-            if kind in {"openrouter", "poe"} and raw.get("prompt") is not None and raw.get("completion") is not None:
+            if kind == "neuralwatt":
+                name = metadata.get("display_name") or model
+                context_length = item.get("max_model_len") or (metadata.get("limits") or {}).get("max_context_length")
+                raw = metadata.get("pricing") or {}
+                prices = (raw.get("input_per_million"), raw.get("output_per_million"))
+                if raw.get("currency") == "USD" and not raw.get("pricing_tbd") and all(
+                    type(price) in (int, float) and math.isfinite(price) and price >= 0 for price in prices
+                ):
+                    pricing = {"input_per_m": prices[0], "output_per_m": prices[1]}
+            elif kind in {"openrouter", "poe"} and raw.get("prompt") is not None and raw.get("completion") is not None:
                 pricing = {"input_per_m": float(raw["prompt"]) * 1_000_000,
                            "output_per_m": float(raw["completion"]) * 1_000_000}
             elif not connection["local"]:
@@ -339,8 +354,8 @@ def _list_models(connection, client):
                     pricing = {"input_per_m": known["input"], "output_per_m": known["output"]}
             remote = kind == "ollama_cloud" or (kind == "ollama" and connection["local"] and
                      bool(item.get("remote_host") or item.get("remote_model") or re.search(r"(?:-cloud|:cloud)(?:$|:)", model)))
-            models.append(dict(id=model, name=item.get("displayName") or item.get("name") or model,
-                               pricing=pricing, context_length=item.get("context_length") or item.get("inputTokenLimit") or item.get("max_context_length"),
+            models.append(dict(id=model, name=name,
+                               pricing=pricing, context_length=context_length,
                                remote=remote))
         page = data.get("nextPageToken") if kind == "gemini" else None
         if not page:

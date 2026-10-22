@@ -28,6 +28,9 @@ def reasoning_parameters(connection_type, model, effort, *, local=False):
         return {"reasoning": {"enabled": False} if effort == "off" else {"effort": effort}}
     if connection_type == "deepseek":
         return {"thinking": {"type": "disabled" if effort == "off" else "enabled"}}
+    if connection_type == "neuralwatt":
+        # "none" skips reasoning; models where reasoning is mandatory ignore it.
+        return {"reasoning_effort": "none" if effort == "off" else effort}
     if connection_type in {"openai_compatible", "nim"}:
         return {"chat_template_kwargs": {"enable_thinking": False}} if effort == "off" else {"reasoning_effort": effort}
     if connection_type in {"openai", "poe"}:
@@ -62,7 +65,7 @@ def reasoning_parameters(connection_type, model, effort, *, local=False):
 
 def drop_rejected_parameters(payload, response, *, log_callback=None):
     """A rejected optional field gets one retry; deleting it bounds the retries."""
-    if response.status_code != 400:
+    if response.status_code not in (400, 422):
         return False
     body = response.text.lower()
     removed = []

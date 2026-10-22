@@ -278,7 +278,7 @@ def test_estimate_requests_pricing_and_real_chunker(resources):
     assert client.post("/api/estimate", json=payload).get_json()["price_source"] == "override"
 
 
-@pytest.mark.parametrize("local,kind,billing", [(True, "ollama", "local"), (False, "ollama_cloud", "plan"), (False, "openai", "api")])
+@pytest.mark.parametrize("local,kind,billing", [(True, "ollama", "local"), (False, "ollama_cloud", "plan"), (False, "openai", "api"), (False, "neuralwatt", "api")])
 def test_estimate_srt_lines_read_only_notes_and_billing(resources, local, kind, billing):
     client, connections = resources
     from pathlib import Path
