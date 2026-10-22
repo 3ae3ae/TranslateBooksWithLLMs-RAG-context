@@ -175,8 +175,8 @@ function ReviewRow({ p, job, marks, onToggle }) {
   return html`<article id=${`passage-${p.index}`} class=${cx('review-row', checked && checkable && 'review-row--checked', flagged && 'review-row--flagged')}>
     <header class="review-row__head">
       <span class="review-row__num">${t('job.live.passage', { n: formatNumber(p.index + 1) })}</span>
-      ${p.status && p.status !== 'completed' && html`<${Pill} tone=${p.status === 'failed' ? 'danger' : 'warning'}>${t(`job.passages.status.${p.status}`)}<//>`}
-      <${StageBadge} p=${p} job=${job} />
+      ${p.stage ? html`<${StageBadge} p=${p} job=${job} />`
+        : p.status && p.status !== 'completed' && html`<${Pill} tone=${p.status === 'failed' ? 'danger' : 'warning'}>${t(`job.passages.status.${p.status}`)}<//>`}
       <span class="grow" />
       ${canCompare && html`<${Button} variant="link" size="sm" icon=${showDraft ? 'eye-off' : 'eye'} aria-pressed=${String(showDraft)}
         onClick=${() => setShowDraft(!showDraft)}>${showDraft ? t('job.review.show_polished') : t('job.review.show_draft')}<//>`}
