@@ -65,16 +65,6 @@ uv run translate.py -i input_file -o output_file
 | `--text-cleanup` | Enable OCR/typographic cleanup (fix broken lines, spacing, punctuation) |
 | `--refine` | Enable refinement pass: runs a second pass to polish translation quality and literary style |
 
-### TTS (Text-to-Speech)
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--tts` | Generate audio from translated text using Edge-TTS | disabled |
-| `--tts-voice` | TTS voice name | Auto-selected based on target language |
-| `--tts-rate` | Speech rate adjustment (e.g., `+10%`, `-20%`) | +0% |
-| `--tts-bitrate` | Audio bitrate (e.g., `64k`, `96k`) | 48k |
-| `--tts-format` | Audio output format: `opus` or `mp3` | opus |
-
 ### Display
 
 | Option | Description |
@@ -172,19 +162,6 @@ uv run translate.py -i novel.epub -tl French --refine
 uv run translate.py -i scanned_book.txt -tl French --text-cleanup --refine
 ```
 
-### With TTS (Text-to-Speech)
-
-```bash
-# Generate audio with auto-selected voice
-uv run translate.py -i book.txt -tl French --tts
-
-# Specify voice and format
-uv run translate.py -i book.txt -tl French --tts --tts-voice fr-FR-DeniseNeural --tts-format mp3
-
-# Adjust speech rate and quality
-uv run translate.py -i book.txt -tl French --tts --tts-rate "+10%" --tts-bitrate 96k
-```
-
 ---
 
 ## Environment Variables
@@ -213,13 +190,6 @@ MAX_TOKENS_PER_CHUNK=450  # Token-based chunking (default: 450 tokens)
 # Languages
 DEFAULT_SOURCE_LANGUAGE=English
 DEFAULT_TARGET_LANGUAGE=French
-
-# TTS
-TTS_ENABLED=false
-TTS_VOICE=               # Auto-selected if empty
-TTS_RATE=+0%
-TTS_BITRATE=48k
-TTS_OUTPUT_FORMAT=opus
 ```
 
 ---

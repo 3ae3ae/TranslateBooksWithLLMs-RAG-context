@@ -98,12 +98,6 @@ See the [ntfy publishing docs](https://docs.ntfy.sh/publish/) for the full list 
 
 ### gotify — self-hosted notification server
 
-The original use case from [issue #167](https://github.com/hydropix/TranslateBookWithLLM/issues/167). Run gotify in Docker:
-
-```bash
-docker run -d -p 8080:80 --name gotify gotify/server
-```
-
 In the gotify web UI, create an **Application** and copy its token. Then:
 
 ```bash
@@ -213,9 +207,6 @@ Payload format does not match what the service expects. Check the service's docu
 
 **Notifications during interrupted/paused jobs.**
 Set `NOTIFY_ON_INTERRUPTION=true` if you want them. Off by default because pausing is a deliberate user action.
-
-**A failed webhook is breaking my translation.**
-It cannot — the notifier swallows all HTTP and network exceptions and only logs a warning. If your translation is failing because of the webhook, please open an issue with `DEBUG_MODE=true` logs.
 
 ---
 

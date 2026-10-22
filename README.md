@@ -12,8 +12,6 @@ A local web app that translates **books**, **subtitles**, and **documents** with
 
 [<img width="867" height="861" alt="image" src="https://github.com/user-attachments/assets/3efcb2a4-e1f0-4d18-ac90-1068a694a2da">](https://github.com/user-attachments/assets/3efcb2a4-e1f0-4d18-ac90-1068a694a2da)
 
-> **[Translation Quality Benchmarks](https://github.com/hydropix/TranslateBooksWithLLMs/wiki)** - Find the best model for your target language.
-
 ---
 
 ## Quick Start
@@ -130,9 +128,6 @@ uv run translate.py -i book.txt --provider openai \
 | `--parallel` | Chunks translated concurrently (cloud only; Ollama stays at 1) | 1 |
 | `--text-cleanup` | OCR/typographic cleanup | disabled |
 | `--refine` | Second pass for literary polish | disabled |
-| `--tts` | Generate audio (Edge-TTS) | disabled |
-
-See [docs/CLI.md](docs/CLI.md) for all options (TTS voices, rates, formats, etc.).
 
 </details>
 
@@ -184,26 +179,6 @@ OPENROUTER_API_KEY=
 | [docs/GLOSSARY.md](docs/GLOSSARY.md) | Force consistent term translations across a book (Web UI + CLI, auto-extract via NER) |
 | [docs/CLI.md](docs/CLI.md) | Complete CLI reference |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Problem solutions |
-
----
-
-## Star History
-
-<a href="https://www.star-history.com/#hydropix/TranslateBooksWithLLMs&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=hydropix/TranslateBooksWithLLMs&type=Date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=hydropix/TranslateBooksWithLLMs&type=Date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=hydropix/TranslateBooksWithLLMs&type=Date&legend=top-left" />
- </picture>
-</a>
-
----
-
-## Support
-
-If TBL saves you time, you can support its development on Ko-fi:
-
-<a href="https://ko-fi.com/Y1M021FYBG" target="_blank"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support me on Ko-fi" height="36"></a>
 
 ---
 

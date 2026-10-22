@@ -18,7 +18,6 @@ Solutions to common problems with TranslateBookWithLLM.
 - [Checkpoint & Resume Issues](#checkpoint--resume-issues)
 - [Quick Reference](#quick-reference)
 - [Debugging](#debugging)
-- [Getting Help](#getting-help)
 
 ---
 
@@ -217,7 +216,6 @@ Some models (DeepSeek R1, Qwen3, QwQ, etc.) produce internal reasoning within `<
 **Solutions**:
 1. This should work automatically - check if content matches expected patterns
 2. Enable debug mode to see what's being protected
-3. Report issue if valid technical content is being translated
 
 ---
 
@@ -272,7 +270,6 @@ Some models (DeepSeek R1, Qwen3, QwQ, etc.) produce internal reasoning within `<
 
 **Solutions**:
 1. Check browser console for WebSocket errors
-2. Verify `HOST=127.0.0.1` or `HOST=0.0.0.0` in `.env`
 3. Check firewall allows WebSocket connections
 4. Try a different browser
 5. Disable proxy/VPN temporarily
@@ -415,23 +412,3 @@ The system uses structured logging with types:
 3. **Chunking**: Token count per chunk
 4. **API Calls**: Request/response logging
 5. **Error Recovery**: Retry attempts and strategies
-
----
-
-## Getting Help
-
-1. **Check this guide** for common solutions
-2. **Enable debug mode** (`DEBUG_MODE=true`) for detailed logs
-3. **Test with a small file** first to isolate issues
-4. **Review console/terminal logs** for error messages
-5. **Open an issue**: [GitHub Issues](https://github.com/hydropix/TranslateBookWithLLM/issues)
-
-### When reporting issues, include:
-
-- Operating system
-- Python version
-- LLM provider and model used
-- Error message (full traceback if available)
-- File type (EPUB, TXT, SRT)
-- Relevant `.env` settings (without API keys)
-- Debug logs if available

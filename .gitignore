@@ -11,15 +11,9 @@ __pycache__/
 !.env.example
 /venv
 /.venv
-/wiki/
-.wiki_repo/
-/prompt_optimization_results
-.watermark/
 tests/.placeholder_tests/
-.telemetry/
 /plan/
 /experiments
-/benchmark_results/
 /[Dd]ebug/
 /.tmp/
 /.test-tmp-*/
@@ -43,4 +37,3 @@ secrets.*
 credentials.*
 *_secret.*
 *_credentials.*
-.wiki_repo_archive/

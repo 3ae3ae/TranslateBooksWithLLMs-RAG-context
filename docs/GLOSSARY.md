@@ -103,8 +103,6 @@ The auto-extract is non-destructive, so running it 2-3 times on the same book is
 
 ### Workflow B: building the glossary in the UI, running the translation in the CLI
 
-Useful when the translation will take hours and you want to run it in a terminal (e.g. on a remote server, or overnight).
-
 ```text
 1. Build the glossary in the Web UI (Workflow A, steps 1-6)
 2. In the editor toolbar, click "Export" -> JSON
