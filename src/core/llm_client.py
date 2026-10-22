@@ -13,7 +13,12 @@ __all__ = ['LLMClient', 'default_client', 'create_llm_client', 'ContextOverflowE
 class LLMClient:
     """Centralized client for LLM API communication"""
     
-    def __init__(self, provider_type: str = "ollama", **kwargs):
+    def __init__(self, provider_type: str = "ollama", *, connection: dict | None = None, **kwargs):
+        if connection is not None:
+            provider_type = connection["llm_provider"]
+            kwargs.update(connection=connection, api_endpoint=connection["llm_api_endpoint"], model=connection["model"])
+        self.connection = connection
+        self.local = connection["local"] if connection is not None else kwargs.get("local")
         self.provider_type = provider_type
         self.provider_kwargs = kwargs
         self._provider: Optional[LLMProvider] = None
@@ -83,7 +88,7 @@ class LLMClient:
         provider = self._get_provider()
 
         # Update model if specified
-        if model:
+        if model and self.connection is None:
             provider.model = model
 
         if timeout:
@@ -133,8 +138,8 @@ class LLMClient:
 default_client = LLMClient(provider_type="ollama", api_endpoint=API_ENDPOINT, model=DEFAULT_MODEL)
 
 
-def create_llm_client(llm_provider: str, gemini_api_key: Optional[str],
-                      api_endpoint: str, model_name: str,
+def create_llm_client(llm_provider: str = "ollama", gemini_api_key: Optional[str] = None,
+                      api_endpoint: str = API_ENDPOINT, model_name: str = DEFAULT_MODEL,
                       openai_api_key: Optional[str] = None,
                       openrouter_api_key: Optional[str] = None,
                       mistral_api_key: Optional[str] = None,
@@ -142,7 +147,8 @@ def create_llm_client(llm_provider: str, gemini_api_key: Optional[str],
                       poe_api_key: Optional[str] = None,
                       nim_api_key: Optional[str] = None,
                       context_window: Optional[int] = None,
-                      log_callback: Optional[callable] = None) -> Optional[LLMClient]:
+                      log_callback: Optional[callable] = None,
+                      connection: dict | None = None) -> Optional[LLMClient]:
     """
     Factory function to create LLM client based on provider or custom endpoint
 
@@ -163,6 +169,8 @@ def create_llm_client(llm_provider: str, gemini_api_key: Optional[str],
     Returns:
         LLMClient instance or None if using default client
     """
+    if connection is not None:
+        return LLMClient(connection=connection, context_window=context_window, log_callback=log_callback)
     if llm_provider == "gemini" and gemini_api_key:
         return LLMClient(provider_type="gemini", api_key=gemini_api_key, model=model_name)
     if llm_provider == "openai":

@@ -42,7 +42,7 @@ from .providers.deepseek import DeepSeekProvider
 from .providers.poe import PoeProvider
 
 # Factory
-from .factory import create_llm_provider
+from .factory import create_llm_provider, create_llm_client
 
 __all__ = [
     # Exceptions
@@ -77,4 +77,5 @@ __all__ = [
 
     # Factory
     'create_llm_provider',
+    'create_llm_client',
 ]

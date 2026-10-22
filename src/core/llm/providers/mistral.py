@@ -16,8 +16,9 @@ import httpx
 import asyncio
 import json
 
-from src.config import REQUEST_TIMEOUT, MAX_TRANSLATION_ATTEMPTS, TEMPERATURE
 from ..base import LLMProvider, LLMResponse
+from ..thinking.parameters import reasoning_parameters, drop_rejected_parameters
+from src import config
 from ..exceptions import ContextOverflowError
 from ..rate_limit_handler import handle_rate_limit, is_retryable_http_status
 
@@ -76,7 +77,9 @@ class MistralProvider(LLMProvider):
         self,
         api_key: Union[str, List[str]],
         model: str = "mistral-large-latest",
-        api_endpoint: Optional[str] = None
+        api_endpoint: Optional[str] = None,
+        *, request_timeout=None, max_attempts=None, temperature=...,
+        reasoning_effort="default", local=None, connection_type=None, log_callback=None
     ):
         """
         Initialize the Mistral provider.
@@ -86,7 +89,10 @@ class MistralProvider(LLMProvider):
             model: Model identifier (default: mistral-large-latest)
             api_endpoint: Optional custom API endpoint
         """
-        super().__init__(model, api_keys=api_key, provider_name="mistral")
+        super().__init__(model, api_keys=api_key, provider_name="mistral",
+                         request_timeout=request_timeout, max_attempts=max_attempts,
+                         temperature=config.TEMPERATURE if temperature is ... else temperature, reasoning_effort=reasoning_effort,
+                         local=local, connection_type=connection_type, log_callback=log_callback)
         self.api_endpoint = api_endpoint or self.API_URL
 
     def _get_context_limit(self) -> int:
@@ -120,7 +126,7 @@ class MistralProvider(LLMProvider):
             client = await self._get_client()
 
             response = await client.get(
-                self.MODELS_URL,
+                self.models_url,
                 headers=headers,
                 timeout=15
             )
@@ -184,7 +190,7 @@ class MistralProvider(LLMProvider):
     async def generate(
         self,
         prompt: str,
-        timeout: int = REQUEST_TIMEOUT,
+        timeout: int = None,
         system_prompt: Optional[str] = None
     ) -> Optional[LLMResponse]:
         """
@@ -210,19 +216,23 @@ class MistralProvider(LLMProvider):
         payload = {
             "model": self.model,
             "messages": messages,
-            "temperature": TEMPERATURE,
             "stream": False
         }
+
+        timeout = self.request_timeout if timeout is None else timeout
+        payload.update(reasoning_parameters(self.connection_type, self.model, self.reasoning_effort, local=self.local))
+        if self.temperature is not None:
+            payload["temperature"] = self.temperature
 
         client = await self._get_client()
         # 429s have their own budget (rate_limit_events): rotating to a spare
         # key must not consume a transient-retry attempt (issue #217).
         attempt = 0
         rate_limit_events = 0
-        while attempt < MAX_TRANSLATION_ATTEMPTS:
-            current_key = await self._key_pool.acquire()
+        while attempt < self.max_attempts:
+            current_key = await self._key_pool.acquire() if self._key_pool else None
             headers = {
-                "Authorization": f"Bearer {current_key}",
+                **({"Authorization": f"Bearer {current_key}"} if current_key else {}),
                 "Content-Type": "application/json",
                 "Accept": "application/json"
             }
@@ -238,11 +248,11 @@ class MistralProvider(LLMProvider):
                 if response.status_code == 401:
                     raise ValueError("Invalid Mistral API key")
 
-                if response.status_code == 429:
+                if response.status_code == 429 and self._key_pool:
                     rate_limit_events += 1
                     await handle_rate_limit(
                         self._key_pool, current_key, response.headers,
-                        rate_limit_events, MAX_TRANSLATION_ATTEMPTS,
+                        rate_limit_events, self.max_attempts,
                     )
                     continue
 
@@ -254,6 +264,8 @@ class MistralProvider(LLMProvider):
                     return None
 
                 response_text = result["choices"][0].get("message", {}).get("content", "")
+                if isinstance(response_text, list):
+                    response_text = "".join(part.get("text", "") for part in response_text if part.get("type") == "text")
 
                 # Extract token usage
                 usage = result.get("usage", {})
@@ -272,14 +284,16 @@ class MistralProvider(LLMProvider):
                 )
 
             except httpx.TimeoutException as e:
-                print(f"Mistral API Timeout (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
+                print(f"Mistral API Timeout (attempt {attempt + 1}/{self.max_attempts}): {e}")
                 attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
+                if attempt < self.max_attempts:
                     await asyncio.sleep(2)
                     continue
                 return None
 
             except httpx.HTTPStatusError as e:
+                if drop_rejected_parameters(payload, e.response, log_callback=self.log_callback):
+                    continue
                 error_body = ""
                 error_message = str(e)
                 if hasattr(e, 'response') and hasattr(e.response, 'text'):
@@ -295,7 +309,7 @@ class MistralProvider(LLMProvider):
                 elif e.response.status_code == 402:
                     print(f"❌ Mistral: Insufficient credits!")
                 else:
-                    print(f"Mistral API HTTP Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
+                    print(f"Mistral API HTTP Error (attempt {attempt + 1}/{self.max_attempts}): {e}")
                     print(f"Response details: Status {e.response.status_code}, Body: {error_body}...")
 
                 # Detect context overflow errors
@@ -313,23 +327,23 @@ class MistralProvider(LLMProvider):
                     return None
 
                 attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
+                if attempt < self.max_attempts:
                     await asyncio.sleep(2)
                     continue
                 return None
 
             except json.JSONDecodeError as e:
-                print(f"Mistral API JSON Decode Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
+                print(f"Mistral API JSON Decode Error (attempt {attempt + 1}/{self.max_attempts}): {e}")
                 attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
+                if attempt < self.max_attempts:
                     await asyncio.sleep(2)
                     continue
                 return None
 
             except Exception as e:
-                print(f"Mistral API Unknown Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
+                print(f"Mistral API Unknown Error (attempt {attempt + 1}/{self.max_attempts}): {e}")
                 attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
+                if attempt < self.max_attempts:
                     await asyncio.sleep(2)
                     continue
                 return None

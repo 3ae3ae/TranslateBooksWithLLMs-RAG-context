@@ -10,7 +10,8 @@ from dataclasses import dataclass
 from typing import Iterable, List, Optional, Union
 import httpx
 
-from src.config import TRANSLATE_TAG_IN, TRANSLATE_TAG_OUT, REQUEST_TIMEOUT
+from src.config import TRANSLATE_TAG_IN, TRANSLATE_TAG_OUT
+from src import config
 from src.core.llm.utils.extraction import TranslationExtractor
 from src.core.llm.key_pool import KeyPool
 
@@ -55,6 +56,9 @@ class LLMProvider(ABC):
         model: str,
         api_keys: Optional[Union[str, Iterable[str]]] = None,
         provider_name: str = "",
+        *, request_timeout=None, max_attempts=None, temperature=None,
+        reasoning_effort="default", local=None, connection_type=None,
+        log_callback=None,
     ):
         """
         Initialize the LLM provider.
@@ -68,6 +72,13 @@ class LLMProvider(ABC):
                 error reports. Defaults to the empty string ("unknown" in logs).
         """
         self.model = model
+        self.request_timeout = config.REQUEST_TIMEOUT if request_timeout is None else request_timeout
+        self.max_attempts = config.MAX_TRANSLATION_ATTEMPTS if max_attempts is None else max_attempts
+        self.temperature = temperature
+        self.reasoning_effort = reasoning_effort
+        self.local = local
+        self.connection_type = connection_type or provider_name.replace("-", "_")
+        self.log_callback = log_callback
         self._extractor = TranslationExtractor(TRANSLATE_TAG_IN, TRANSLATE_TAG_OUT)
         self._client = None
         self._key_pool: Optional[KeyPool] = None
@@ -85,12 +96,17 @@ class LLMProvider(ABC):
         """
         return self._key_pool.peek() if self._key_pool else None
 
+    @property
+    def models_url(self):
+        from .connections import normalize_url
+        return normalize_url(self.connection_type, self.api_endpoint)[1]["models_url"]
+
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create a persistent HTTP client with connection pooling"""
         if self._client is None:
             self._client = httpx.AsyncClient(
                 limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
-                timeout=httpx.Timeout(REQUEST_TIMEOUT),
+                timeout=httpx.Timeout(self.request_timeout),
             )
         return self._client
 
@@ -101,7 +117,7 @@ class LLMProvider(ABC):
             self._client = None
 
     @abstractmethod
-    async def generate(self, prompt: str, timeout: int = REQUEST_TIMEOUT,
+    async def generate(self, prompt: str, timeout: int = None,
                       system_prompt: Optional[str] = None) -> Optional["LLMResponse"]:
         """
         Generate text from prompt.

@@ -80,7 +80,8 @@ class ContextDetector:
         model: str,
         endpoint: str,
         log_callback: Optional[Callable[[str, str], None]] = None,
-        fallback_context: int = 2048
+        fallback_context: int = 2048,
+        api_key: Optional[str] = None,
     ) -> int:
         """
         Detect context size for Ollama models using /api/show endpoint.
@@ -102,6 +103,7 @@ class ContextDetector:
             response = await client.post(
                 show_endpoint,
                 json={"name": model},
+                headers={"Authorization": f"Bearer {api_key}"} if api_key else {},
                 timeout=10.0
             )
             response.raise_for_status()
