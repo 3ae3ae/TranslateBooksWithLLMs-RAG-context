@@ -669,3 +669,44 @@ def test_legacy_config_freezes_one_worker(jobs):
     frozen = freeze_legacy_config(config, jobs.state)
     assert frozen['parallel_workers'] == 1
     assert config['parallel_workers'] == 8
+
+
+def test_passages_stage_contract_revision_and_socket_draft_final(jobs):
+    tid = create(jobs, polish_after=True)
+    source, draft, polished = '[id0]Source[id1]', '[id0]' + 'Draft ' * 900 + '[id1]', '[id0]Polished[id1]'
+    revision = jobs.client.get(f'/api/jobs/{tid}').json['passages_revision']
+    for polish_status, stage, text, status in [
+        ('pending', 'draft', draft, 'partial'),
+        ('failed', 'polish_failed', draft, 'failed'),
+        ('done', 'polished', polished, 'completed'),
+    ]:
+        jobs.db.save_chunk(tid, 0, source, text,
+                           {'draft_text': draft, 'polish_status': polish_status, 'passage_workflow_version': 1, 'local_to_global': {'0': 3}}, status=status)
+        item = jobs.client.get(f'/api/jobs/{tid}/passages').json['items'][0]
+        assert item == {'index': 0, 'source': 'Source', 'translation': text.replace('[id0]', '').replace('[id1]', ''),
+                        'draft': 'Draft ' * 900, 'stage': stage, 'status': status}
+        summary = jobs.client.get(f'/api/jobs/{tid}').json
+        assert summary['passages_revision'] == revision + 1
+        assert summary['current_unit'] is None
+        emitted = [call.args[1] for call in jobs.socket.emit.call_args_list if call.args[0] == 'job_update'][-1]
+        assert emitted['job']['passages_revision'] == revision + 1
+        revision += 1
+    jobs.db.save_chunk(tid, 0, source, polished, {'context_snapshot': 'snapshot'})
+    metadata = jobs.db.get_chunks(tid)[0]['chunk_data']
+    assert metadata['polish_status'] == 'done' and metadata['draft_text'] == draft and metadata['local_to_global'] == {'0': 3}
+    listing = jobs.client.get('/api/jobs').json['jobs']
+    assert next(item for item in listing if item['id'] == tid)['passages_revision'] == revision + 1
+
+
+def test_translate_only_passages_have_null_draft_and_stage(jobs):
+    tid = create(jobs)
+    jobs.db.save_chunk(tid, 0, 'Source', 'Translation')
+    assert jobs.client.get(f'/api/jobs/{tid}/passages').json['items'] == [
+        {'index': 0, 'source': 'Source', 'translation': 'Translation', 'draft': None, 'stage': None, 'status': 'completed'}]
+
+
+def test_legacy_refine_after_passages_are_exposed_as_drafts(jobs):
+    tid = create(jobs, polish_after=True)
+    jobs.db.save_chunk(tid, 0, 'Source', 'Legacy draft')
+    item = jobs.client.get(f'/api/jobs/{tid}/passages').json['items'][0]
+    assert item['stage'] == 'draft' and item['draft'] == 'Legacy draft'
