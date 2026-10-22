@@ -56,8 +56,8 @@ export const uploadsApi = {
     form.append('file', file);
     return request('POST', '/api/upload', { form, signal });
   },
-  // Abandoned upload: the backend deletes files under OUTPUT_DIR/uploads by name.
-  remove: (filePath) => post('/api/uploads/delete', { file_path: filePath }),
+  // Abandoned upload: deleted by its stored file name (referenced uploads are protected).
+  remove: (filePath) => post(`/api/uploads/${enc(String(filePath).split(/[\\/]/).pop())}/delete`, {}),
 };
 
 // ---- job story notes (rebuild = "resync")

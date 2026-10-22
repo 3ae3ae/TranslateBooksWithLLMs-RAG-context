@@ -312,7 +312,7 @@ function LogTab({ job }) {
   const [follow, setFollow] = useState(true);
   const boxRef = useRef(null);
   useEffect(() => {
-    jobsApi.log(job.id, 1000).then((r) => setEntries(r.entries || [])).catch(() => setEntries([]));
+    jobsApi.log(job.id, 1000).then((r) => setEntries(r.items || [])).catch(() => setEntries([]));
     return onSocket('job_update', (msg) => {
       if (msg && msg.log_entry && msg.job && msg.job.id === job.id) setEntries((cur) => [...(cur || []), msg.log_entry].slice(-3000));
     });

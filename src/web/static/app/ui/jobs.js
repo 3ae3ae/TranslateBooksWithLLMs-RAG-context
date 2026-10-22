@@ -6,7 +6,7 @@ import { Dropzone } from './layout.js';
 import { ModelPicker, ReasoningControl } from './model-picker.js';
 import { jobsApi, uploadsApi } from '../lib/api.js';
 import { downloadUrl } from '../lib/api-core.js';
-import { upsertJob, dropJob, jobsById } from '../lib/stores.js';
+import { upsertJob, dropJob, jobsById, loadJobs } from '../lib/stores.js';
 import { navigate } from '../lib/router.js';
 import { t } from '../lib/i18n.js';
 import { formatDuration, formatRelativeTime, formatCost, formatNumber } from '../lib/format.js';
@@ -186,8 +186,8 @@ export function AddChaptersDialog({ job, onClose }) {
     try {
       const up = await uploadsApi.upload(file);
       const r = await jobsApi.continueWith(job.id, { file_path: up.file_path, input_filename: up.original_filename || file.name });
-      const created = r && (r.job || (r.jobs && r.jobs[0]));
-      if (created) upsertJob(created);
+      const created = r && (r.job || (r.jobs && r.jobs[0]) || (r.id && { id: r.id }));
+      await loadJobs();
       toast({ tone: 'success', title: t('job.add_chapters.started') });
       onClose();
       if (created) navigate(`/job/${created.id}`);
