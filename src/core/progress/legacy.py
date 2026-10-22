@@ -35,7 +35,12 @@ def snapshot_from_legacy_stats(stats: Dict[str, Any]) -> ProgressSnapshot:
     refine_only = bool(stats.get("refine_only"))
     phase_num = stats.get("current_phase") or 1
 
-    if enable_refinement:
+    if stats.get('interleaved'):
+        phase = Phase.NOTES if stats.get('phase') == 'notes' else Phase.REFINING if stats.get('phase') in ('polishing', 'refining') else Phase.TRANSLATING
+        steps = _as_int(stats.get('translated_chunks')) + _as_int(stats.get('polished_chunks'))
+        percent = min(100.0, 100.0 * steps / (2 * total)) if total else 0.0
+        refinement_enabled = True
+    elif enable_refinement:
         # Two-phase refine-after: translation in [0, 50], refinement in [50, 100].
         phase = Phase.REFINING if phase_num == 2 else Phase.TRANSLATING
         percent = global_percent(phase, done, total, True, _REFINE_SPLIT)

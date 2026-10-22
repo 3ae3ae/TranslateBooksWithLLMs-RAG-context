@@ -34,6 +34,15 @@ class JobRunner:
         clean = lambda value: placeholders.remove_all(value or '')[:4000]
         preview = {'unit': index, 'source': clean(source), 'translation': clean(translation)}
         self.state.set_translation_field(tid, 'latest_preview', preview)
+        job = self.db.get_job(tid)
+        if job and job['config'].get('_passage_workflow') and not job['config'].get('refine_only'):
+            from src.core.common.passage_workflow import passage_progress
+            stats = (self.state.get_translation_field(tid, 'stats') or {}).copy()
+            progress = passage_progress(self.db.get_chunks(tid), max(stats.get('total_chunks', 0), job['progress'].get('total_chunks', 0)))
+            progress['percent'] = max(stats.get('percent', 0), progress['percent'])
+            stats.update(progress)
+            self.state.update_stats(tid, stats)
+
         if self.socketio:
             from .blueprints.jobs_routes import job_summary
             self.socketio.emit('job_update', {'job': job_summary(self, self.db.get_job(tid)), 'preview': preview}, namespace='/')

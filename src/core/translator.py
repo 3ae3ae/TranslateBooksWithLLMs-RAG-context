@@ -147,7 +147,7 @@ async def _make_llm_request_with_adaptive_context(
             )
 
             # Log the request
-            if log_callback and reduction_attempt == 0:
+            if log_callback:
                 log_callback("llm_request", "Sending request to LLM", data={
                     'type': 'llm_request',
                     'system_prompt': prompt_pair.system,
@@ -799,6 +799,7 @@ async def refine_chunks(
                 log_callback(
                     "refinement_chunk_start",
                     f"🪄 Refining chunk {i+1}/{total_chunks}...",
+                    data={"current_unit": i, "phase": "polishing"},
                 )
 
             # Skip empty chunks
@@ -935,7 +936,8 @@ async def refine_chunks(
                 from src.utils.novel_context import compress_dynamic_state
                 checkpoint_manager.db.save_chunk(
                     translation_id, i, draft_text, refined_parts[-1],
-                    {'context_snapshot': compress_dynamic_state(context_content)} if context_content else None,
+                    {'context_snapshot': compress_dynamic_state(context_content), 'draft_text': draft_text,
+                     'polish_status': 'done' if refined_text is not None else 'failed', 'passage_workflow_version': 1},
                     status='completed' if refined_text is not None else 'failed',
                 )
             if stats_callback:

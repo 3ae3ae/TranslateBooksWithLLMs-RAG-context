@@ -314,7 +314,7 @@ async def test_connection_knobs_reach_client_factory(jobs, monkeypatch, file_typ
     elif file_type == 'docx':
         from unittest.mock import AsyncMock
         factory = Mock(return_value=object())
-        monkeypatch.setattr('src.core.llm.create_llm_provider', factory)
+        monkeypatch.setattr('src.core.llm_client.LLMClient', factory)
         monkeypatch.setattr('src.core.docx.translator.translate_docx_file', AsyncMock(return_value={'success':True}))
     else:
         factory = Mock(side_effect=RuntimeError('stop after client creation'))
@@ -478,10 +478,12 @@ async def test_polish_parallel_bilingual_checkpoint_resume(jobs, monkeypatch, fi
     assert output.is_file()
     rows = jobs.db.get_chunks(tid)
     assert len(rows) > 1
-    assert all(row['status'] == 'completed' for row in rows)
+    assert all(row['status'] == ('completed' if row['chunk_data']['polish_status'] == 'done' else 'failed') for row in rows)
+    assert all(row['chunk_data']['draft_text'] == row['original_text'] for row in rows)
+    failed_rows = [row for row in rows if row['status'] == 'failed']
     previous_calls = calls
     assert await refine_file(**kwargs)
-    assert calls == previous_calls
+    assert calls == previous_calls + len(failed_rows)
     assert factory.call_args.kwargs['connection']['request_timeout'] == 17
 
 

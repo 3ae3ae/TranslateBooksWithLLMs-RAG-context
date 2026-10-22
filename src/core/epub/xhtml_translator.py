@@ -615,6 +615,14 @@ async def _translate_all_chunks_with_checkpoint(
     if prompt_options is None:
         prompt_options = {}
 
+    if continuation_base_id and checkpoint_manager and translation_id:
+        from src.core.continuation import seed_matching_prefix
+        previous = checkpoint_manager.load_checkpoint(continuation_base_id) or {}
+        seed_matching_prefix(checkpoint_manager=checkpoint_manager, translation_id=translation_id,
+                             previous_chunks=previous.get('chunks', []), new_source_units=[chunk['text'] for chunk in chunks],
+                             total_units=global_total_chunks or len(chunks), offset=global_completed_chunks or 0,
+                             log_callback=log_callback)
+
     novel_context_file = prompt_options.get('novel_context_file')
     auto_update_context = prompt_options.get('auto_update_context', False)
 
@@ -813,6 +821,18 @@ async def _translate_all_chunks_with_checkpoint(
     else:
         workers = max(1, int(parallel_workers))
 
+    from src.core.common.passage_workflow import PassageWorkflow
+    workflow = PassageWorkflow(checkpoint_manager, translation_id, llm_client, model_name,
+                               target_language, prompt_options, log_callback, check_interruption_callback) if prompt_options.get('_passage_workflow') else None
+    if workflow:
+        workers = 1
+        # SQLite commits every stage; the periodic JSON prefix is only a cache.
+        translated_chunks = []
+        start_chunk_index = 0
+        failed_indices.clear()
+        stats.processed_chunks = 0
+        stats.failed_chunks = 0
+
     def _save_state(next_index):
         """Persist resume state with current_chunk_index = next chunk to do."""
         if not (checkpoint_manager and translation_id and file_href):
@@ -845,7 +865,7 @@ async def _translate_all_chunks_with_checkpoint(
             original_body_html="",
             doc_metadata={},
             stats=stats.to_dict(),
-            prompt_options=prompt_options,
+            prompt_options={k: v for k, v in prompt_options.items() if k != '_draft_artifacts'},
             bilingual=bilingual,
             original_chunks=original_chunks,
             protect_technical=True,
@@ -889,6 +909,21 @@ async def _translate_all_chunks_with_checkpoint(
     async def _translate_one(i, analyze_context=True):
         chunk = chunks[i]
         global_chunk_idx = _global_chunk_index(i)
+        if workflow:
+            draft = workflow.draft(global_chunk_idx, chunk['text'])
+            if draft is not None:
+                metadata = {**chunk, **(workflow.saved(global_chunk_idx, chunk['text']).get('chunk_data') or {})}
+                text, ok = await workflow.finish(global_chunk_idx, chunk['text'], draft, metadata,
+                                                kind='structured', chunk=chunk, placeholder_format=placeholder_format,
+                                                context_manager=context_manager)
+                reused_context_data_by_index[i] = metadata
+                return _ChunkTranslationOutcome(text, ok)
+            if prompt_options.get('_repolish_passages'):
+                raise ValueError('Saved passage draft is required for corrective polish')
+            workflow.action(global_chunk_idx, 'translating')
+        if not workflow and log_callback:
+            log_callback('unit_start', f'Translating chunk {i + 1}/{len(chunks)}',
+                         data={'current_unit': global_chunk_idx, 'phase': 'translating'})
         checkpoint_context_data = checkpoint_context_data_by_global_index.get(
             global_chunk_idx
         )
@@ -956,7 +991,14 @@ async def _translate_all_chunks_with_checkpoint(
                     )
             except Exception:
                 pass
-        return await translate_chunk_with_fallback(
+        request_options = prompt_options
+        if workflow:
+            metadata = _context_data_for_save(i)[2]
+            if metadata.get('context_snapshot'):
+                from src.utils.novel_context import decode_context_snapshot
+                request_options = {**prompt_options, 'novel_context': decode_context_snapshot(metadata['context_snapshot'], '')[0],
+                                   'dialogue_attribution': metadata.get('dialogue_attribution')}
+        result = await translate_chunk_with_fallback(
             chunk_text=chunk['text'],
             local_tag_map=chunk['local_tag_map'],
             global_indices=chunk['global_indices'],
@@ -969,8 +1011,16 @@ async def _translate_all_chunks_with_checkpoint(
             max_retries=max_retries,
             context_manager=context_manager,
             placeholder_format=placeholder_format,
-            prompt_options=prompt_options
+            prompt_options=request_options
         )
+        if workflow and getattr(result, 'succeeded', True):
+            metadata = {**chunk, **_context_data_for_save(i)[2]}
+            text, ok = await workflow.finish(global_chunk_idx, chunk['text'], str(result), metadata,
+                                            kind='structured', chunk=chunk, placeholder_format=placeholder_format,
+                                            context_manager=context_manager)
+            reused_context_data_by_index[i] = metadata
+            return _ChunkTranslationOutcome(text, ok)
+        return result
 
     pending = sorted(
         failed_indices | set(range(start_chunk_index, len(chunks)))
@@ -1071,7 +1121,7 @@ async def _translate_all_chunks_with_checkpoint(
     # is the full list from index 0 (resume restores the prefix), so its length IS
     # the absolute next index — do NOT add start_chunk_index (that double-counts).
     next_index = len(translated_chunks)
-    if next_index < len(chunks) and check_interruption_callback and check_interruption_callback():
+    if (next_index < len(chunks) or workflow) and check_interruption_callback and check_interruption_callback():
         if log_callback:
             log_callback("xhtml_translation_interrupted",
                 f"⏸️ Translation interrupted at chunk {next_index}/{len(chunks)}")
@@ -1792,6 +1842,7 @@ async def _refine_epub_chunks(
     checkpoint_manager=None,
     translation_id=None,
     checkpoint_offset=0,
+    result_callback=None,
 ) -> List[str]:
     """
     Refine translated EPUB chunks using a second LLM pass.
@@ -1890,6 +1941,7 @@ async def _refine_epub_chunks(
             log_callback(
                 "epub_refinement_chunk_start",
                 f"🪄 Refining chunk {idx + 1}/{total_chunks}...",
+                data={"current_unit": (prompt_options or {}).get("_passage_index", checkpoint_offset + idx), "phase": "polishing"},
             )
 
         # Build context only inside the same chapter when chapter-aware mode is
@@ -2006,6 +2058,7 @@ async def _refine_epub_chunks(
         )
 
         # Make refinement request
+        refinement_succeeded = False
         try:
             # Log the refinement request (like translation does)
             if log_callback:
@@ -2076,6 +2129,7 @@ async def _refine_epub_chunks(
                         )
 
                         refined_chunks.append(refined_with_global_indices)
+                        refinement_succeeded = True
                         if log_callback:
                             log_callback("epub_chunk_refined", f"Chunk {idx + 1}/{total_chunks} refined successfully")
                 else:
@@ -2097,11 +2151,15 @@ async def _refine_epub_chunks(
             refined_chunks.append(translated_text)
             _log_error(log_callback, "epub_refinement_error", f"Chunk {idx + 1}/{total_chunks}: error during refinement: {e}")
 
+        if result_callback:
+            result_callback(checkpoint_offset + idx, refined_chunks[-1], refinement_succeeded)
         if checkpoint_manager and translation_id and not (prompt_options or {}).get('_refine_after'):
             from src.utils.novel_context import compress_dynamic_state
             checkpoint_manager.db.save_chunk(
                 translation_id, checkpoint_offset + idx, translated_text, refined_chunks[-1],
-                {'context_snapshot': compress_dynamic_state(context_content)} if context_content else None,
+                {'context_snapshot': compress_dynamic_state(context_content), 'draft_text': translated_text,
+                 'polish_status': 'done' if refinement_succeeded else 'failed', 'passage_workflow_version': 1},
+                status='completed' if refinement_succeeded else 'failed',
             )
 
         # Update progress after each refinement chunk.
@@ -2357,7 +2415,7 @@ async def translate_xhtml_simplified(
 
     if log_callback:
         log_callback("epub_refinement_config",
-                     f"Refinement enabled: {enable_refinement} (prompt_options={prompt_options})")
+                     f"Refinement enabled: {enable_refinement}")
 
     # 4. Translation with checkpoint support
     # Note: Progress is reported as raw 0-100% chunk-based progress
@@ -2457,6 +2515,19 @@ async def translate_xhtml_simplified(
         bilingual=bilingual
     )
 
+    if (prompt_options or {}).get('_passage_workflow') and '_draft_artifacts' in prompt_options:
+        import copy
+        draft_root = copy.deepcopy(doc_root)
+        draft_body = draft_root.find('.//{http://www.w3.org/1999/xhtml}body')
+        if draft_body is None:
+            draft_body = draft_root.find('.//body')
+        rows = {row['chunk_index']: row for row in checkpoint_manager.db.get_chunks(translation_id)}
+        drafts = [(rows.get((global_completed_chunks or 0) + i, {}).get('chunk_data') or {}).get('draft_text', text) for i, text in enumerate(translated_chunks)]
+        draft_html = _reconstruct_html(drafts, global_tag_map, tag_preserver, original_chunks=chunks if bilingual else None, bilingual=bilingual)
+        if not _replace_body(draft_body, draft_html, log_callback):
+            raise RuntimeError('Could not reconstruct draft XHTML')
+        prompt_options['_draft_artifacts'][file_href] = etree.tostring(draft_root, encoding='unicode')
+
     # 6. Replace body
     xml_success = _replace_body(body_element, final_html, log_callback)
 
@@ -2467,4 +2538,4 @@ async def translate_xhtml_simplified(
     # 8. Report stats
     _report_statistics(stats, log_callback)
 
-    return xml_success and stats.failed_chunks == 0, stats
+    return xml_success and (bool((prompt_options or {}).get('_passage_workflow')) or stats.failed_chunks == 0), stats

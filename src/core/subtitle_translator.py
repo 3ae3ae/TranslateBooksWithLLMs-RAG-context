@@ -35,6 +35,8 @@ async def refine_subtitle_translations(
     checkpoint_manager=None,
     translation_id=None,
     checkpoint_offset=0,
+    refinement_state=None,
+    result_callback=None,
 ) -> Dict[int, str]:
     """
     Refine subtitle translations using a second LLM pass.
@@ -121,8 +123,9 @@ async def refine_subtitle_translations(
             index_groups.append(current)
 
     total_blocks = len(index_groups)
+    passage_progress = bool((prompt_options or {}).get('_polish_passages'))
     srt_processor = SRTProcessor()
-    previous_refined_block = ""
+    previous_refined_block = (refinement_state or {}).get("previous_refined_block", "")
     if context_tracker is None:
         from src.utils.novel_context import RefinementContextTracker
         context_tracker = RefinementContextTracker(
@@ -154,7 +157,7 @@ async def refine_subtitle_translations(
                 refined_translations.update({int(key): value for key, value in values.items()})
                 completed_count += len(group)
                 if stats_callback:
-                    stats_callback({'total_chunks': total_subtitles, 'completed_chunks': completed_count, 'failed_chunks': failed_count})
+                    stats_callback({'total_chunks': total_blocks if passage_progress else total_subtitles, 'completed_chunks': block_idx + 1 if passage_progress else completed_count, 'failed_chunks': failed_count})
                 continue
 
         if check_interruption_callback and check_interruption_callback():
@@ -173,6 +176,7 @@ async def refine_subtitle_translations(
             log_callback(
                 "srt_refinement_block_start",
                 f"🪄 Refining subtitle block {block_idx + 1}/{total_blocks}...",
+                data={"current_unit": (prompt_options or {}).get("_passage_index", checkpoint_offset + block_idx), "phase": "polishing"},
             )
 
         # Build local-index tuples and the local->global mapping.
@@ -243,6 +247,11 @@ async def refine_subtitle_translations(
                                  f"Block {block_idx + 1}: retry attempt {attempt} "
                                  f"({len(local_subtitle_tuples) - len(block_refined)} subtitles still missing)")
 
+                if log_callback:
+                    log_callback("refinement_request", "Sending subtitle refinement request", data={
+                        'type': 'refinement_request', 'system_prompt': prompt_pair.system,
+                        'user_prompt': prompt_pair.user, 'model': model_name,
+                    })
                 llm_response = await llm_client.make_request(
                     prompt_pair.user, model_name, system_prompt=prompt_pair.system
                 )
@@ -302,25 +311,35 @@ async def refine_subtitle_translations(
                     log_callback("srt_refinement_fallback",
                                  f"Subtitle {g_idx + 1}: keeping original (block missed this index)")
             completed_count += 1
-            if stats_callback:
+            if stats_callback and not passage_progress:
                 stats_callback({
                     'total_chunks': total_subtitles,
                     'completed_chunks': completed_count,
                     'failed_chunks': failed_count,
                 })
 
+        block_succeeded = len(block_refined) == len(group)
+        if result_callback:
+            result_callback(checkpoint_offset + block_idx, {index: refined_translations[index] for index in group}, block_succeeded)
         if checkpoint_manager and translation_id and not (prompt_options or {}).get('_refine_after'):
             checkpoint_manager.db.save_chunk(
                 translation_id, checkpoint_offset + block_idx, source,
                 '\n'.join(refined_translations[index] for index in group),
-                {'subtitle_indices': group, 'refined_subtitles': {index: refined_translations[index] for index in group}},
+                {'subtitle_indices': group, 'refined_subtitles': {index: refined_translations[index] for index in group},
+                 'draft_text': source, 'polish_status': 'done' if block_succeeded else 'failed', 'passage_workflow_version': 1},
+                status='completed' if block_succeeded else 'failed',
             )
+
+        if stats_callback and passage_progress:
+            stats_callback({'total_chunks': total_blocks, 'completed_chunks': block_idx + 1, 'failed_chunks': failed_count})
 
         # Update previous_refined_block context (last up to 5 subtitles of this group).
         last_items = []
         for local_idx, g_idx in enumerate(group[-5:]):
             last_items.append(f"[{local_idx}]{refined_translations.get(g_idx, translations[g_idx])}")
         previous_refined_block = "\n".join(last_items)
+        if refinement_state is not None:
+            refinement_state["previous_refined_block"] = previous_refined_block
         if log_callback:
             log_callback(
                 "srt_refinement_block_complete",

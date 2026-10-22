@@ -294,6 +294,7 @@ class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
                 parallel_workers=parallel_workers,
                 checkpoint_manager=checkpoint_manager,
                 translation_id=translation_id,
+                continuation_base_id=kwargs.get("continuation_base_id"),
             )
 
         # === RESUME FROM PARTIAL STATE ===
@@ -360,7 +361,6 @@ class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
         # 4. Translation with checkpoint support
         # For DOCX, we have a single file so global stats = local stats
         total_chunks = len(chunks)
-        completed_chunks = len(translated_chunks) if translated_chunks else 0
 
         translated_chunks, stats, was_interrupted = await _translate_all_chunks_with_checkpoint(
             chunks=chunks,
@@ -385,9 +385,10 @@ class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
             prompt_options=prompt_options,
             # Pass global stats for DOCX (single file = global stats)
             global_total_chunks=total_chunks,
-            global_completed_chunks=completed_chunks,
+            global_completed_chunks=0,
             parallel_workers=parallel_workers,
             failed_chunk_indices=failed_chunk_indices,
+            continuation_base_id=kwargs.get("continuation_base_id"),
         )
 
         # If interrupted, save state and return partial result
@@ -412,6 +413,15 @@ class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
             if not html_content:
                 html_content, _ = self.converter.to_html(source_path)
             reconstructed_html = _interleave_bilingual(html_content, reconstructed_html) or f'<div>{reconstructed_html}</div><div>{html_content}</div>'
+
+        artifacts = (prompt_options or {}).get('_draft_artifacts')
+        if artifacts is not None:
+            rows = {row['chunk_index']: row for row in checkpoint_manager.db.get_chunks(translation_id)}
+            drafts = [(rows.get(i, {}).get('chunk_data') or {}).get('draft_text', text) for i, text in enumerate(translated_chunks)]
+            draft_html = self.reconstruct_content(drafts, global_tag_map, context)
+            if (prompt_options or {}).get('bilingual'):
+                draft_html = _interleave_bilingual(html_content, draft_html) or f'<div>{draft_html}</div><div>{html_content}</div>'
+            artifacts['output'] = self.finalize_output(draft_html, source_path, context, log_callback)
 
         # 6. Finalize output
         docx_bytes = self.finalize_output(
@@ -439,6 +449,7 @@ class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
         parallel_workers: int = 1,
         checkpoint_manager: Optional[Any] = None,
         translation_id: Optional[str] = None,
+        continuation_base_id: Optional[str] = None,
     ) -> Tuple[bytes, Any]:
         """
         Plain-text-mode DOCX translation: skip mammoth + placeholders.
@@ -486,6 +497,7 @@ class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
             parallel_workers=parallel_workers,
             checkpoint_manager=checkpoint_manager,
             translation_id=translation_id,
+            continuation_base_id=continuation_base_id,
         )
 
         if was_interrupted:
@@ -505,6 +517,12 @@ class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
             )
             with open(tmp_path, 'rb') as f:
                 docx_bytes = f.read()
+            artifacts = (prompt_options or {}).get('_draft_artifacts')
+            if artifacts is not None and 'plain:0' in artifacts:
+                build_minimal_docx(translated_paragraphs=artifacts.pop('plain:0'), content=content,
+                                   output_path=tmp_path, bilingual=bilingual_flag)
+                with open(tmp_path, 'rb') as f:
+                    artifacts['output'] = f.read()
         finally:
             if os.path.exists(tmp_path):
                 try:
