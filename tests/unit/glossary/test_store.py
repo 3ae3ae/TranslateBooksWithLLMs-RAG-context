@@ -53,6 +53,13 @@ class TestGlossaryStoreCRUD:
         assert fetched.source_language == "English"
         assert fetched.target_language == "French"
 
+    def test_timestamps_are_serialized_as_utc(self, store):
+        """SQLite stores naive UTC; the JSON must carry the zone so browsers do not read it as local."""
+        created = store.create_glossary(name="Zoned", source_language="en", target_language="fr")
+        data = store.get_glossary(created.id).to_dict()
+        assert data["created_at"].endswith("+00:00")
+        assert data["updated_at"].endswith("+00:00")
+
     def test_unique_name_conflict_raises(self, store):
         """Creating two glossaries with the same name raises ValueError."""
         store.create_glossary(name="Unique", source_language="en", target_language="fr")

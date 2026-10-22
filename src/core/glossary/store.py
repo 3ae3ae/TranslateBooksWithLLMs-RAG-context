@@ -12,7 +12,7 @@ import os
 import sqlite3
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 
 from src.core.glossary.models import BulkReplaceResult, Glossary, GlossaryTerm
@@ -34,17 +34,22 @@ def _parse_timestamp(value) -> Optional[datetime]:
     if value is None:
         return None
     if isinstance(value, datetime):
-        return value
-    text = str(value)
-    try:
-        return datetime.fromisoformat(text)
-    except ValueError:
-        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
-            try:
-                return datetime.strptime(text, fmt)
-            except ValueError:
-                continue
-    return None
+        parsed = value
+    else:
+        text = str(value)
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
+                try:
+                    parsed = datetime.strptime(text, fmt)
+                    break
+                except ValueError:
+                    continue
+            else:
+                return None
+    # SQLite CURRENT_TIMESTAMP is UTC without a zone; say so, or clients read it as local time.
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 def _row_to_term(row: sqlite3.Row) -> GlossaryTerm:
