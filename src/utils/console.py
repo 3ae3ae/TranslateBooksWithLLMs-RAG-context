@@ -5,11 +5,6 @@ Centralizes the one piece of setup every entrypoint needs: forcing stdout and
 stderr to UTF-8 so emoji log lines (e.g. 💬, ✅, ❌, ⚠️) never crash on Windows
 consoles using the cp1252 'charmap' codec.
 
-Previously each entrypoint reimplemented this (with two divergent patterns), and
-the main CLI forgot it entirely, so an emoji print inside a provider's request
-loop raised UnicodeEncodeError, was caught by the broad `except`, and failed the
-translation of that unit. See issue #184.
-
 Call ensure_utf8_stdio() once at the top of every entrypoint.
 """
 

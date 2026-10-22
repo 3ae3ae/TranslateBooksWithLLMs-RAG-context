@@ -31,7 +31,6 @@ class LogType(Enum):
     CHUNK_INFO = "chunk_info"
     FILE_OPERATION = "file_operation"
     TRANSLATION_START = "translation_start"
-    TRANSLATION_END = "translation_end"
     ERROR_DETAIL = "error_detail"
     NOVEL_CONTEXT_STATE = "novel_context_state"
 
@@ -93,7 +92,6 @@ class UnifiedLogger:
             'target_lang': '',
             'file_type': '',
             'model': '',
-            'start_time': None,
             'in_progress': False
         }
         
@@ -130,8 +128,6 @@ class UnifiedLogger:
             return self._format_progress(data or {})
         elif log_type == LogType.TRANSLATION_START:
             return self._format_translation_start(message, data or {})
-        elif log_type == LogType.TRANSLATION_END:
-            return self._format_translation_end(message, data or {})
         elif log_type == LogType.ERROR_DETAIL:
             return self._format_error_detail(message, data or {})
         elif log_type == LogType.TOKEN_USAGE:
@@ -240,7 +236,6 @@ class UnifiedLogger:
             'model': data.get('model', 'Unknown'),
             'total_chunks': data.get('total_chunks', 0),
             'current_chunk': 0,
-            'start_time': datetime.now(),
             'in_progress': True
         })
         
@@ -249,32 +244,6 @@ class UnifiedLogger:
         output.append(f"{Colors.GRAY}Model: {self.translation_state['model']}{Colors.ENDC}")
         if self.translation_state['total_chunks'] > 0:
             output.append(f"{Colors.WHITE}Total Chunks: {self.translation_state['total_chunks']}{Colors.ENDC}")
-        
-        return '\n'.join(output)
-    
-    def _format_translation_end(self, message: str, data: Dict[str, Any]) -> str:
-        """Format translation end message"""
-        output = []
-        
-        output.append(f"\n{Colors.WHITE}TRANSLATION COMPLETE{Colors.ENDC}")
-        
-        # Calculate duration
-        if self.translation_state['start_time']:
-            duration = datetime.now() - self.translation_state['start_time']
-            output.append(f"{Colors.GRAY}Duration: {duration}{Colors.ENDC}")
-        
-        if 'output_file' in data:
-            output.append(f"{Colors.WHITE}Output saved to: {data['output_file']}{Colors.ENDC}")
-        
-        # Statistics
-        if 'stats' in data:
-            stats = data['stats']
-            output.append(f"{Colors.WHITE}Completed chunks: {stats.get('completed', 0)}{Colors.ENDC}")
-            if stats.get('failed', 0) > 0:
-                output.append(f"{Colors.YELLOW}Failed chunks: {stats['failed']}{Colors.ENDC}")
-        
-        # Reset state
-        self.translation_state['in_progress'] = False
         
         return '\n'.join(output)
     
@@ -398,10 +367,6 @@ class UnifiedLogger:
     def critical(self, message: str, log_type: LogType = LogType.GENERAL, data: Optional[Dict[str, Any]] = None):
         self.log(LogLevel.CRITICAL, message, log_type, data)
     
-    def update_total_chunks(self, total: int):
-        """Update total chunks count"""
-        self.translation_state['total_chunks'] = total
-
     def update_progress(self, completed: int, total: int):
         """Update progress from stats callback"""
         self.translation_state['current_chunk'] = completed
@@ -409,68 +374,6 @@ class UnifiedLogger:
         if total > 0:
             self.translation_state['in_progress'] = True
     
-    def create_legacy_callback(self):
-        """
-        Create a legacy callback function for backward compatibility
-        Returns a function that matches the old log_callback signature
-        """
-        def legacy_callback(message: str, details: str = "", data: Optional[Dict[str, Any]] = None):
-            # Map old message types to new log types and levels
-            if data and isinstance(data, dict):
-                log_type = data.get('type')
-                if log_type == 'llm_request':
-                    self.log(LogLevel.DEBUG, "LLM Request", LogType.LLM_REQUEST, data)
-                elif log_type == 'llm_response':
-                    self.log(LogLevel.DEBUG, "LLM Response", LogType.LLM_RESPONSE, data)
-                elif log_type == 'progress':
-                    self.log(LogLevel.INFO, "Progress Update", LogType.PROGRESS, data)
-                elif log_type == 'novel_context_state':
-                    self.log(LogLevel.INFO, details or message, LogType.NOVEL_CONTEXT_STATE, data)
-                else:
-                    self.info(details or message, data=data)
-            else:
-                # Map specific message patterns
-                if message == "token_usage":
-                    # Parse token usage from details string
-                    # Format: "Tokens: prompt=X, response=Y, total=Z (num_ctx=W)"
-                    import re
-                    token_data = {}
-                    prompt_match = re.search(r'prompt=(\d+)', details)
-                    response_match = re.search(r'response=(\d+)', details)
-                    total_match = re.search(r'total=(\d+)', details)
-                    ctx_match = re.search(r'num_ctx=(\d+)', details)
-                    if prompt_match:
-                        token_data['prompt_tokens'] = int(prompt_match.group(1))
-                    if response_match:
-                        token_data['response_tokens'] = int(response_match.group(1))
-                    if total_match:
-                        token_data['total_tokens'] = int(total_match.group(1))
-                    if ctx_match:
-                        token_data['num_ctx'] = int(ctx_match.group(1))
-                    self.log(LogLevel.INFO, "Token Usage", LogType.TOKEN_USAGE, token_data)
-                elif "error" in message.lower():
-                    self.error(details or message)
-                elif "warning" in message.lower():
-                    self.warning(details or message)
-                elif message == "txt_translation_info_chunks1":
-                    # Extract chunk count
-                    import re
-                    match = re.search(r'(\d+)\s+main segments', details)
-                    if match:
-                        self.update_total_chunks(int(match.group(1)))
-                    self.info(details)
-                elif message == "txt_translation_loop_start":
-                    self.translation_state['in_progress'] = True
-                    self.info(details)
-                elif message == "novel_context_updated":
-                    self.log(LogLevel.INFO, details, LogType.NOVEL_CONTEXT_STATE, {})
-                elif message == "novel_context_diff":
-                    self.log(LogLevel.INFO, details, LogType.NOVEL_CONTEXT_STATE, {})
-                else:
-                    self.info(details or message)
-        
-        return legacy_callback
-
 
 # Global logger instance
 _global_logger = None
@@ -497,18 +400,6 @@ def get_logger(name: str = "TranslateBookWithLLM", **kwargs) -> UnifiedLogger:
         if 'storage_callback' in kwargs:
             _global_logger.storage_callback = kwargs['storage_callback']
     return _global_logger
-
-
-def setup_cli_logger(enable_colors: bool = True) -> UnifiedLogger:
-    """Setup logger for CLI usage"""
-    # Import here to avoid circular dependencies
-    from src.config import DEBUG_MODE
-
-    return get_logger(
-        console_output=True,
-        enable_colors=enable_colors,
-        min_level=LogLevel.DEBUG if DEBUG_MODE else LogLevel.INFO
-    )
 
 
 def setup_web_logger(web_callback: Callable, storage_callback: Callable) -> UnifiedLogger:

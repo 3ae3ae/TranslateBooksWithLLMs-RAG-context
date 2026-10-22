@@ -928,9 +928,6 @@ async def _process_all_content_files(
         total_chunks, chunks_per_file = precomputed_chunk_counts
         chunks_per_file = list(chunks_per_file)
 
-    # The progress denominator is the translation chunk count. In-translation
-    # refinement (CLI --refine) is a per-file polish pass reported via logs; it
-    # no longer doubles the total.
     effective_total_chunks = total_chunks
 
     # Start with restored documents
