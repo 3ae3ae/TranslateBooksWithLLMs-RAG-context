@@ -709,5 +709,6 @@
   "styles.toast.deleted": "Style guide deleted",
   "styles.toast.duplicated": "Style guide duplicated",
   "styles.confirm.delete_title": "Delete “{{name}}”?",
-  "styles.confirm.delete_body": "Translations that already started keep their own copy."
+  "styles.confirm.delete_body": "Translations that already started keep their own copy.",
+  "settings.notify.headers_invalid": "Headers must be a JSON object, like {\"Authorization\": \"Bearer …\"}"
 }

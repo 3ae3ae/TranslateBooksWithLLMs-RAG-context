@@ -77,7 +77,7 @@ export function GlossaryExtractDialog({ glossary, file: initialFile, sourceLangu
       const r = await glossariesApi.suggestTerms(g.id, form);
       setResult(r);
       setRows((r.candidates || []).map((c) => {
-        const dup = existing.has(c.source);
+        const dup = c.already_in_glossary ?? existing.has(c.source);
         const same = (c.source || '').trim() === (c.target || '').trim();
         return { ...c, category: c.category || '', checked: !dup && !same, dup, same };
       }));

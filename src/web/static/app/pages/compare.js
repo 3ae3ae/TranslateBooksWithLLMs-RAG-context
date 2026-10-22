@@ -11,6 +11,7 @@ import { navigate } from '../lib/router.js';
 import { LANGUAGES } from '../lib/languages.js';
 import { t } from '../lib/i18n.js';
 import { formatNumber, formatCost } from '../lib/format.js';
+import { displayName } from '../lib/names.js';
 
 let colSeq = 0;
 const newColumn = (base = {}) => ({ id: ++colSeq, connectionId: base.connectionId || null, model: base.model || '', reasoning: base.reasoning || 'off', style: base.style || '' });
@@ -189,7 +190,7 @@ export function ComparePage({ query }) {
           <//>
           <${Field} label=${t('compare.notes')} htmlFor="cmp-notes" help=${t('compare.notes_help')}>
             <${Select} id="cmp-notes" value=${notes} onChange=${setNotes}
-              options=${[{ value: '', label: t('common.none') }, ...((notesList.value || []).map((x) => ({ value: x.name, label: x.name })))]} />
+              options=${[{ value: '', label: t('common.none') }, ...((notesList.value || []).map((x) => ({ value: x.name, label: displayName(x.name) })))]} />
           <//>
         </div>
       </div>
@@ -219,7 +220,7 @@ export function ComparePage({ query }) {
             <${ModelPicker} value=${{ connectionId: c.connectionId, model: c.model }}
               onChange=${(v) => setColumns(columns.map((x) => (x.id === c.id ? { ...x, connectionId: v.connectionId, model: v.model } : x)))} />
             <${Select} value=${c.style} aria-label=${t('new.style.label')} onChange=${(v) => setColumns(columns.map((x) => (x.id === c.id ? { ...x, style: v } : x)))}
-              options=${[{ value: '', label: t('compare.no_style') }, ...((stylesList.value || []).map((s) => ({ value: s.name, label: s.name })))]} />
+              options=${[{ value: '', label: t('compare.no_style') }, ...((stylesList.value || []).map((s) => ({ value: s.name, label: s.display_name || displayName(s.name) })))]} />
           </div>
           ${c.connectionId && html`<${ReasoningControl} connectionId=${c.connectionId} value=${c.reasoning}
             onChange=${(v) => setColumns(columns.map((x) => (x.id === c.id ? { ...x, reasoning: v } : x)))} />`}
@@ -238,7 +239,7 @@ export function ComparePage({ query }) {
         <div class="compare-cell compare-cell--source compare-cell--head strong">${t('compare.original')}</div>
         ${columns.map((c, i) => html`<div class="compare-cell compare-cell--head">
           <div class="strong truncate">${c.model || t('compare.model_n', { n: i + 1 })}</div>
-          <div class="small muted">${t(`reasoning.${c.reasoning}`)}${c.style ? ` · ${c.style}` : ''}</div>
+          <div class="small muted">${t(`reasoning.${c.reasoning}`)}${c.style ? ` · ${displayName(c.style)}` : ''}</div>
         </div>`)}
         ${items.map((it, ri) => html`
           <div class="compare-cell compare-cell--source"><div class="compare-cell__text">${it.source_text}</div></div>

@@ -74,7 +74,7 @@ export const notesApi = {
   get: (name) => get(`/api/notes/${enc(name)}`),
   save: (name, sections, dryRun) => put(`/api/notes/${enc(name)}`, { sections }, { query: dryRun ? { dry_run: 1 } : undefined }),
   create: (name, from) => post('/api/notes', from ? { name, from } : { name }),
-  rename: (name, newName) => post(`/api/notes/${enc(name)}/rename`, { new_name: newName }),
+  rename: (name, newName) => post(`/api/notes/${enc(name)}/rename`, { name: newName }),
   remove: (name) => del(`/api/notes/${enc(name)}`),
 };
 
@@ -85,7 +85,7 @@ export const stylesApi = {
   create: (body) => post('/api/styles', body),
   save: (name, body) => put(`/api/styles/${enc(name)}`, body),
   remove: (name) => del(`/api/styles/${enc(name)}`),
-  duplicate: (name) => post(`/api/styles/${enc(name)}/duplicate`, {}),
+  duplicate: (name, newName) => post(`/api/styles/${enc(name)}/duplicate`, { name: newName }),
 };
 
 // ---- glossaries (existing API)

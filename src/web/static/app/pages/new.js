@@ -16,6 +16,7 @@ import { LANGUAGES, findLanguage } from '../lib/languages.js';
 import { navigate } from '../lib/router.js';
 import { t } from '../lib/i18n.js';
 import { formatBytes, formatCost, formatNumber, formatDuration } from '../lib/format.js';
+import { displayName } from '../lib/names.js';
 
 const ACCEPT = '.epub,.docx,.txt,.srt';
 const BOOKISH = ['epub', 'docx', 'txt'];
@@ -323,8 +324,8 @@ export function NewTranslationPage() {
   const selectedGlossary = (glossaries.value || []).find((g) => String(g.id) === String(d.glossaryId));
   const glossaryMismatch = selectedGlossary && d.target && selectedGlossary.target_lang
     && selectedGlossary.target_lang.toLowerCase() !== d.target.toLowerCase();
-  const styleOptions = [{ value: '', label: t('common.none') }, ...((stylesList.value || []).map((s) => ({ value: s.name, label: s.name })))];
-  const noteOptions = [{ value: '', label: t('new.notes.pick') }, ...((notesList.value || []).map((n) => ({ value: n.name, label: n.name })))];
+  const styleOptions = [{ value: '', label: t('common.none') }, ...((stylesList.value || []).map((s) => ({ value: s.name, label: s.display_name || displayName(s.name) })))];
+  const noteOptions = [{ value: '', label: t('new.notes.pick') }, ...((notesList.value || []).map((n) => ({ value: n.name, label: displayName(n.name) })))];
 
   const interval = d.notes.interval || 1;
   const notesCost = t('new.notes.cost');
@@ -333,7 +334,7 @@ export function NewTranslationPage() {
   if (!polish && d.polishAfter) chips.push(t('new.chip.polish'));
   if (notesOn) chips.push(d.notes.mode === 'build' ? t('new.chip.notes_build') : t('new.chip.notes_copy'));
   if (selectedGlossary) chips.push(t('new.chip.glossary', { name: selectedGlossary.name }));
-  if (d.style) chips.push(t('new.chip.style', { name: d.style }));
+  if (d.style) chips.push(t('new.chip.style', { name: displayName(d.style) }));
   if (hasLayout && d.simplify) chips.push(t('new.chip.simplify'));
   if (d.bilingual) chips.push(t('new.chip.bilingual'));
   if (d.ocr) chips.push(t('new.chip.ocr'));

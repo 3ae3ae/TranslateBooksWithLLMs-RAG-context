@@ -17,7 +17,7 @@ export function StyleDialog({ onClose, onSaved }) {
     setBusy(true);
     setError(null);
     try {
-      const r = await stylesApi.create({ name: name.trim(), translation, polish });
+      const r = await stylesApi.create({ name: name.trim(), translation, refinement: polish });
       toast({ tone: 'success', title: t('styles.toast.created') });
       onSaved && onSaved((r && r.name) || name.trim());
       onClose();

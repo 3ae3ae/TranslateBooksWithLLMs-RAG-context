@@ -120,7 +120,10 @@ function NotificationsSection() {
     try {
       const payload = { enabled: form.enabled, method: form.method, payload: form.payload, events: form.events };
       if (form.url) payload.url = form.url;
-      if (form.headers) payload.headers = form.headers;
+      if (form.headers.trim()) {
+        try { payload.headers = JSON.parse(form.headers); }
+        catch { setState('error'); toast({ tone: 'error', title: t('settings.notify.headers_invalid') }); return; }
+      }
       await savePreferences({ notifications: payload });
       setForm(null);
       setState('saved');

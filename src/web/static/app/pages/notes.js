@@ -9,6 +9,7 @@ import { notesApi, foldersApi } from '../lib/api.js';
 import { navigate } from '../lib/router.js';
 import { t } from '../lib/i18n.js';
 import { formatRelativeTime, formatBytes } from '../lib/format.js';
+import { displayName, noteFilename } from '../lib/names.js';
 
 function NameDialog({ title, initial = '', submitLabel, onSubmit, onClose }) {
   const [name, setName] = useState(initial);
@@ -43,7 +44,7 @@ export function NotesPage() {
     catch (e) { toast({ tone: 'error', title: t('errors.action_failed'), message: e.message }); }
   };
   const remove = async (n) => {
-    const ok = await confirm({ title: t('notes.confirm.delete_title', { name: n.name }), body: t('notes.confirm.delete_body'), confirmLabel: t('common.delete'), danger: true });
+    const ok = await confirm({ title: t('notes.confirm.delete_title', { name: displayName(n.name) }), body: t('notes.confirm.delete_body'), confirmLabel: t('common.delete'), danger: true });
     if (ok) act(() => notesApi.remove(n.name), t('notes.toast.deleted'));
   };
 
@@ -57,7 +58,7 @@ export function NotesPage() {
     ${list && list.length > 0 && html`<div class="table-wrap"><table class="table table--clickable">
       <thead><tr><th>${t('notes.col.name')}</th><th>${t('notes.col.updated')}</th><th>${t('notes.col.size')}</th><th>${t('notes.col.used')}</th><th class="col-actions"></th></tr></thead>
       <tbody>${list.map((n) => html`<tr onClick=${() => navigate(`/notes/${encodeURIComponent(n.name)}`)}>
-        <td class="strong">${n.name}</td>
+        <td class="strong">${displayName(n.name)}</td>
         <td class="muted">${n.updated_at ? formatRelativeTime(n.updated_at) : '—'}</td>
         <td class="muted">${n.size != null ? formatBytes(n.size) : '—'}</td>
         <td>${inUseLabel(n) ? html`<${Pill} tone="accent">${inUseLabel(n)}<//>` : html`<span class="faint">—</span>`}</td>
@@ -70,11 +71,11 @@ export function NotesPage() {
       </tr>`)}</tbody>
     </table></div>`}
     ${dialog && dialog.kind === 'new' && html`<${NameDialog} title=${t('notes.new')} submitLabel=${t('common.create')} onClose=${() => setDialog(null)}
-      onSubmit=${async (name) => { const r = await notesApi.create(name); await loadNotes(); navigate(`/notes/${encodeURIComponent((r && r.name) || name)}`); }} />`}
-    ${dialog && dialog.kind === 'dup' && html`<${NameDialog} title=${t('common.duplicate')} initial=${t('notes.copy_name', { name: dialog.note.name })} submitLabel=${t('common.duplicate')}
-      onClose=${() => setDialog(null)} onSubmit=${(name) => act(() => notesApi.create(name, dialog.note.name), t('notes.toast.duplicated'))} />`}
-    ${dialog && dialog.kind === 'rename' && html`<${NameDialog} title=${t('common.rename')} initial=${dialog.note.name} submitLabel=${t('common.rename')}
-      onClose=${() => setDialog(null)} onSubmit=${(name) => act(() => notesApi.rename(dialog.note.name, name), t('notes.toast.renamed'))} />`}
+      onSubmit=${async (name) => { const r = await notesApi.create(noteFilename(name)); await loadNotes(); navigate(`/notes/${encodeURIComponent((r && r.name) || noteFilename(name))}`); }} />`}
+    ${dialog && dialog.kind === 'dup' && html`<${NameDialog} title=${t('common.duplicate')} initial=${t('notes.copy_name', { name: displayName(dialog.note.name) })} submitLabel=${t('common.duplicate')}
+      onClose=${() => setDialog(null)} onSubmit=${(name) => act(() => notesApi.create(noteFilename(name), dialog.note.name), t('notes.toast.duplicated'))} />`}
+    ${dialog && dialog.kind === 'rename' && html`<${NameDialog} title=${t('common.rename')} initial=${displayName(dialog.note.name)} submitLabel=${t('common.rename')}
+      onClose=${() => setDialog(null)} onSubmit=${(name) => act(() => notesApi.rename(dialog.note.name, noteFilename(name)), t('notes.toast.renamed'))} />`}
   </div>`;
 }
 
@@ -111,7 +112,7 @@ export function NotePage({ name }) {
   };
 
   return html`<div class="page">
-    <${PageHeader} title=${name} back=${{ href: '#/notes', label: t('notes.title') }}
+    <${PageHeader} title=${displayName(name)} back=${{ href: '#/notes', label: t('notes.title') }}
       actions=${!editing && note && html`<${Button} variant="primary" icon="pencil" disabled=${usedBy.length > 0}
         onClick=${() => setEditing(note.sections.map((s) => ({ ...s })))}>${t('common.edit')}<//>`} />
     ${usedBy.length > 0 && html`<${Callout} tone="warning" title=${t('notes.locked.title')} class="group">
