@@ -83,6 +83,9 @@ def test_corrupt_store_is_not_replaced(connection_store):
     ("ollama", "http://host.local/prefix/api/chat/", "http://host.local/prefix", "/api/chat", "/api/tags"),
     ("ollama_cloud", "https://ollama.com", "https://ollama.com", "/api/chat", "/api/tags"),
     ("openai", "https://api.openai.com/v1/chat/completions/", "https://api.openai.com/v1", "/chat/completions", "/models"),
+    ("neuralwatt", "https://api.neuralwatt.com/v1", "https://api.neuralwatt.com/v1", "/chat/completions", "/models"),
+    ("neuralwatt", "https://api.neuralwatt.com/v1/chat/completions/", "https://api.neuralwatt.com/v1", "/chat/completions", "/models"),
+    ("neuralwatt", "https://custom.test/proxy/v1/models", "https://custom.test/proxy/v1", "/chat/completions", "/models"),
     ("openai_compatible", "http://[::1]:8000/", "http://[::1]:8000/v1", "/chat/completions", "/models"),
     ("openai_compatible", "https://server.example/custom/v2", "https://server.example/custom/v2", "/chat/completions", "/models"),
     ("openrouter", "https://openrouter.ai/api/v1/chat/completions", "https://openrouter.ai/api/v1", "/chat/completions", "/models"),
@@ -172,6 +175,22 @@ def test_resolve_and_factory_never_fall_back_to_env(connection_store, monkeypatc
         assert provider.connection_type == kind
 
 
+def test_neuralwatt_catalog_and_resolution(connection_store):
+    catalog = next(item for item in store.connection_types() if item["type"] == "neuralwatt")
+    assert catalog == dict(type="neuralwatt", default_base_url="https://api.neuralwatt.com/v1",
+                          base_url_editable=True, base_url_required=True, key_required=True,
+                          reasoning="best_effort", temperature=True)
+    created = store.create_connection({"type": "neuralwatt", "api_keys": ["YOUR_API_KEY_HERE"]})
+    assert created["name"] == "Neuralwatt"
+    assert created["local"] is False
+    resolved = store.resolve_for_pipeline(created["id"], "test-model", "high")
+    assert resolved["llm_provider"] == "openai"
+    assert resolved["connection_type"] == "neuralwatt"
+    assert resolved["llm_api_endpoint"] == "https://api.neuralwatt.com/v1/chat/completions"
+    assert resolved["reasoning_effort"] == "high"
+    assert create_llm_provider(connection=resolved).models_url == "https://api.neuralwatt.com/v1/models"
+
+
 @pytest.mark.parametrize("official", [False, True])
 def test_migration_seeds_existing_config_once(connection_store, monkeypatch, official):
     from src import config
@@ -181,12 +200,12 @@ def test_migration_seeds_existing_config_once(connection_store, monkeypatch, off
         "OLLAMA_API_ENDPOINT": "http://studio.local:11434/api/generate",
         "OPENAI_API_ENDPOINT": "https://api.openai.com/v1/chat/completions" if official else "https://custom.test/v1/chat/completions",
         "OPENAI_API_KEY": "sk-test-xxxx,sk-test-yyyy", "OLLAMA_API_KEY": "sk-test-ollama",
-        **{f"{name}_API_KEY": f"sk-test-{name.lower()}" for name in ("GEMINI", "OPENROUTER", "MISTRAL", "DEEPSEEK", "POE", "NIM")},
+        **{f"{name}_API_KEY": f"sk-test-{name.lower()}" for name in ("NEURALWATT", "GEMINI", "OPENROUTER", "MISTRAL", "DEEPSEEK", "POE", "NIM")},
     }
     for name, value in values.items():
         monkeypatch.setenv(name, value)
     items = store.list_connections()
-    assert len(items) == 9
+    assert len(items) == 10
     migrated = next(item for item in items if item["type"] in {"openai", "openai_compatible"})
     assert migrated["name"] == ("OpenAI" if official else "OpenAI-compatible")
     assert migrated["key_count"] == 2
@@ -199,6 +218,24 @@ def test_migration_seeds_existing_config_once(connection_store, monkeypatch, off
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-new")
     assert store.list_connections() == items
     assert store.resolve_for_pipeline(migrated["id"], "m")["api_key"] == "sk-test-xxxx,sk-test-yyyy"
+
+
+def test_neuralwatt_environment_migration_runs_once(connection_store, monkeypatch):
+    connection_store.unlink()
+    monkeypatch.setenv("NEURALWATT_API_KEY", "YOUR_API_KEY_HERE")
+    monkeypatch.setenv("LLM_PROVIDER", "neuralwatt")
+    monkeypatch.setenv("DEFAULT_MODEL", "test-model")
+    items = store.list_connections()
+    migrated = next(item for item in items if item["type"] == "neuralwatt")
+    assert migrated["name"] == "Neuralwatt"
+    assert migrated["base_url"] == "https://api.neuralwatt.com/v1"
+    assert migrated["local"] is False
+    assert migrated["key_count"] == 1
+    assert "api_keys" not in migrated
+    assert store.get_default() == {"connection_id": migrated["id"], "model": "test-model"}
+    monkeypatch.setenv("NEURALWATT_API_KEY", "REPLACEMENT_KEY_PLACEHOLDER")
+    assert store.list_connections() == items
+    assert store.resolve_for_pipeline(migrated["id"], "test-model")["api_key"] == "YOUR_API_KEY_HERE"
 
 
 @pytest.fixture
@@ -302,6 +339,72 @@ def test_models_include_api_prices(connection_store, monkeypatch, kind):
                 "pricing": {"input_per_m": 1, "output_per_m": 2}, "remote": False}]
 
 
+def test_neuralwatt_models_metadata_and_estimator_pricing(connection_store, monkeypatch):
+    from src.core.pricing.job_estimator import resolve_pricing
+    created = store.create_connection({"type": "neuralwatt", "api_keys": ["YOUR_API_KEY_HERE"]})
+    def handler(request):
+        assert request.method == "GET"
+        assert str(request.url) == "https://api.neuralwatt.com/v1/models"
+        assert request.headers["Authorization"] == "Bearer YOUR_API_KEY_HERE"
+        return httpx.Response(200, json={"object": "list", "scope": "public", "data": [
+            {"id": "test-model", "max_model_len": 64000, "metadata": {"display_name": "Test model",
+                "pricing": {"input_per_million": 0.35, "output_per_million": 1.38, "currency": "USD", "pricing_tbd": False},
+                "limits": {"max_context_length": 32000, "max_output_tokens": 4096}, "deprecated": False}},
+            {"id": "fallback-model", "name": "Ignored name", "metadata": {"limits": {"max_context_length": 16000}}},
+            {"id": "bare-model", "metadata": None},
+            {"id": "retired-model", "metadata": {"deprecated": True}},
+            {"id": "retired-top-level", "deprecated": True},
+        ]})
+    mock_models(monkeypatch, handler)
+    assert store.list_models(created["id"]) == [
+        dict(id="test-model", name="Test model", context_length=64000,
+             pricing={"input_per_m": 0.35, "output_per_m": 1.38}, remote=False),
+        dict(id="fallback-model", name="fallback-model", context_length=16000, pricing=None, remote=False),
+        dict(id="bare-model", name="bare-model", context_length=None, pricing=None, remote=False),
+    ]
+    resolved = store.resolve_for_pipeline(created["id"], "test-model")
+    assert resolve_pricing(resolved, {}) == ({"input_per_m": 0.35, "output_per_m": 1.38}, "models")
+
+
+@pytest.mark.parametrize("pricing,expected", [
+    ({"currency": "USD", "input_per_million": 0, "output_per_million": 0}, {"input_per_m": 0, "output_per_m": 0}),
+    ({"currency": "USD", "input_per_million": 1, "output_per_million": 2, "pricing_tbd": True}, None),
+    ({"currency": "USD", "input_per_million": 1}, None),
+    ({"currency": "USD", "input_per_million": None, "output_per_million": 2}, None),
+    ({"currency": "EUR", "input_per_million": 1, "output_per_million": 2}, None),
+    ({"input_per_million": 1, "output_per_million": 2}, None),
+    ({"currency": "USD", "input_per_million": -1, "output_per_million": 2}, None),
+    ({"currency": "USD", "input_per_million": "unknown", "output_per_million": 2}, None),
+])
+def test_neuralwatt_model_prices_require_published_usd_rates(connection_store, monkeypatch, pricing, expected):
+    created = store.create_connection({"type": "neuralwatt"})
+    mock_models(monkeypatch, lambda request: httpx.Response(200, json={"data": [
+        {"id": "test-model", "metadata": {"pricing": pricing}}]}))
+    assert store.list_models(created["id"])[0]["pricing"] == expected
+
+
+@pytest.mark.parametrize("level", ["off", "low", "medium", "high", "default"])
+def test_neuralwatt_draft_reasoning_payload(api, monkeypatch, level):
+    client, headers = api
+    def handler(request):
+        assert request.headers["Authorization"] == "Bearer YOUR_API_KEY_HERE"
+        if request.method == "GET":
+            return httpx.Response(200, json={"data": [{"id": "test-model"}]})
+        assert str(request.url) == "https://api.neuralwatt.com/v1/chat/completions"
+        payload = json.loads(request.content)
+        expected = {"model": "test-model", "messages": [{"role": "user", "content": "Hi"}],
+                    "stream": False, "max_tokens": 1, "temperature": 0.6}
+        if level != "default":
+            expected["reasoning_effort"] = "none" if level == "off" else level
+        assert payload == expected
+        return httpx.Response(200, json={})
+    mock_models(monkeypatch, handler)
+    result = client.post("/api/connections/test", headers=headers, json={"type": "neuralwatt",
+                         "api_keys": ["YOUR_API_KEY_HERE"], "model": "test-model",
+                         "reasoning": level, "temperature": 0.6}).json
+    assert result["ok"] and result["chat_ok"]
+
+
 def test_local_ollama_models_mark_remote_without_free_prices(connection_store, monkeypatch):
     mock_models(monkeypatch, lambda request: httpx.Response(200, json={"models": [
         {"name": "local:latest"}, {"name": "large-cloud"}, {"name": "large:cloud"}, {"name": "other", "remote_host": "https://ollama.com"}]}))
@@ -365,7 +468,7 @@ def test_empty_configuration_migrates_only_builtin(connection_store, monkeypatch
     from src import config
     connection_store.unlink()
     monkeypatch.setattr(store.os, "environ", {})
-    for name in ("OPENAI", "GEMINI", "OPENROUTER", "MISTRAL", "DEEPSEEK", "POE", "NIM", "OLLAMA"):
+    for name in ("OPENAI", "NEURALWATT", "GEMINI", "OPENROUTER", "MISTRAL", "DEEPSEEK", "POE", "NIM", "OLLAMA"):
         monkeypatch.setattr(config, f"{name}_API_KEY", "", raising=False)
     monkeypatch.setattr(config, "OPENAI_API_ENDPOINT", "https://api.openai.com/v1/chat/completions")
     monkeypatch.setattr(config, "LLM_PROVIDER", "ollama")
