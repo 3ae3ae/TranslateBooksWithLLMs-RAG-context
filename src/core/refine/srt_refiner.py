@@ -77,6 +77,9 @@ async def refine_srt_file(
     prompt_options: Optional[Dict[str, Any]] = None,
     checkpoint_manager: Optional[Any] = None,
     translation_id: Optional[str] = None,
+    connection: Optional[Dict] = None,
+    parallel_workers: int = 1,
+    srt_lines_per_block: Optional[int] = None,
 ) -> bool:
     """Run a refinement-only pass on an already-translated SRT file."""
     if not os.path.exists(input_filepath):
@@ -134,13 +137,14 @@ async def refine_srt_file(
         poe_api_key=poe_api_key,
         nim_api_key=nim_api_key,
         log_callback=log_callback,
+        **({'connection': connection} if connection is not None else {}),
     )
 
     # Fixed-count grouping for refine (no char cap): every block sent to
     # the LLM has the same shape, which keeps [N] marker accounting
     # predictable across the whole file.
     refine_blocks = srt_processor.group_subtitles_for_translation(
-        subtitles, SRT_LINES_PER_BLOCK, _NO_CHAR_CAP
+        subtitles, srt_lines_per_block or SRT_LINES_PER_BLOCK, _NO_CHAR_CAP
     )
 
     db_chunks = []
@@ -190,23 +194,51 @@ async def refine_srt_file(
     )
 
     try:
-        refined = await refine_subtitle_translations(
-            translations=translations,
-            target_language=target_language,
-            model_name=model_name,
-            llm_client=llm_client,
-            log_callback=log_callback,
-            prompt_options=prompt_options,
-            post_processing_instructions=(
-                prompt_options.get('refinement_instructions', '')
-                if prompt_options else ''
-            ),
-            stats_callback=stats_callback,
-            check_interruption_callback=check_interruption_callback,
-            subtitle_blocks=refine_blocks,
-            subtitle_positions=subtitle_positions,
-            context_tracker=context_tracker,
-        )
+        if parallel_workers > 1 and not context_tracker.auto_analyze:
+            import copy
+            from src.core.common.parallel import iter_ordered_concurrent
+            refined = dict(translations)
+            completed = 0
+
+            async def refine_one(index):
+                block = refine_blocks[index]
+                tracker = copy.deepcopy(context_tracker)
+                tracker.cursor += index
+                drafts = {subtitle_positions[id(sub)]: translations[subtitle_positions[id(sub)]] for sub in block}
+                return await refine_subtitle_translations(
+                    drafts, target_language, model_name, llm_client,
+                    log_callback=log_callback, prompt_options=prompt_options,
+                    subtitle_blocks=[block], subtitle_positions=subtitle_positions,
+                    check_interruption_callback=check_interruption_callback,
+                    context_tracker=tracker,
+                    checkpoint_manager=checkpoint_manager, translation_id=translation_id, checkpoint_offset=index,
+                )
+            async for index, result in iter_ordered_concurrent(list(range(len(refine_blocks))), parallel_workers, refine_one, check_interruption_callback):
+                if isinstance(result, Exception):
+                    raise result
+                refined.update(result)
+                completed += len(result)
+                if stats_callback:
+                    stats_callback({'total_chunks': len(subtitles), 'completed_chunks': completed, 'failed_chunks': 0})
+        else:
+            refined = await refine_subtitle_translations(
+                translations=translations,
+                target_language=target_language,
+                model_name=model_name,
+                llm_client=llm_client,
+                log_callback=log_callback,
+                prompt_options=prompt_options,
+                post_processing_instructions=(
+                    prompt_options.get('refinement_instructions', '')
+                    if prompt_options else ''
+                ),
+                stats_callback=stats_callback,
+                check_interruption_callback=check_interruption_callback,
+                subtitle_blocks=refine_blocks,
+                subtitle_positions=subtitle_positions,
+                context_tracker=context_tracker,
+                checkpoint_manager=checkpoint_manager, translation_id=translation_id,
+            )
     finally:
         if llm_client:
             try:
@@ -220,6 +252,8 @@ async def refine_srt_file(
                          "Refinement interrupted before save")
         return False
 
+    if (prompt_options or {}).get('bilingual'):
+        refined = {i: f"{text}\n{subtitles[i].get('text', '')}" for i, text in refined.items()}
     refined_subs = srt_processor.update_translated_subtitles(subtitles, refined)
     refined_srt = srt_processor.reconstruct_srt(refined_subs)
 

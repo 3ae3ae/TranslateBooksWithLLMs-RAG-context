@@ -590,7 +590,14 @@ class RateLimiter:
     def is_allowed(self, client_ip: str) -> bool:
         """Check if request is allowed for this IP"""
         import time
-        
+        import ipaddress
+
+        try:
+            if ipaddress.ip_address(client_ip).is_loopback:
+                return True
+        except ValueError:
+            pass
+
         current_time = time.time()
         window_start = current_time - self._window_seconds
         

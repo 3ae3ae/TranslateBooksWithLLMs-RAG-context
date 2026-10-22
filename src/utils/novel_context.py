@@ -3307,6 +3307,7 @@ def _gate_unproven_character_gender(
     source_text: str,
     existing_value: str = "",
     explicit_correction: bool = False,
+    bypass: Optional[bool] = None,
 ) -> str:
     """Prevent model-guessed genders from entering durable lore.
 
@@ -3316,11 +3317,9 @@ def _gate_unproven_character_gender(
     Existing specific genders remain authoritative unless the source proves a
     correction; this gate only rejects an incoming unsupported claim.
     """
-    try:
+    if bypass is None:
         from src import config as _config
-        bypass = getattr(_config, "BYPASS_CONTEXT_GATING", True)
-    except Exception:
-        bypass = True
+        bypass = _config.BYPASS_CONTEXT_GATING
 
     if bypass:
         return value
@@ -5951,6 +5950,9 @@ class RefinementContextTracker:
                 context_view_max_tokens=self.prompt_options.get(
                     "novel_context_update_prompt_max_tokens",
                 ),
+                bypass_context_gating=self.prompt_options.get('bypass_context_gating'),
+                consolidation_interval=self.prompt_options.get('novel_context_consolidation_interval'),
+                log_callback=self.log_callback,
             )
             self.current_dialogue_attribution = (
                 dialogue_sink
@@ -6049,7 +6051,7 @@ class NovelContextSession:
             chunk for chunk in self.source_memory
             if chunk.strip()
         ]
-        bounded = _bounded_source_memory(self.source_memory)
+        bounded = _bounded_source_memory(self.source_memory, self.prompt_options.get('novel_context_source_memory_chars'))
         self.source_memory = (
             bounded.split("\n\n--- Previous source chunk ---\n\n")
             if bounded
@@ -6086,7 +6088,7 @@ class NovelContextSession:
         if normalized_scene_key is not None:
             self.dialogue_scene_key = normalized_scene_key
 
-        source_context = _bounded_source_memory(self.source_memory)
+        source_context = _bounded_source_memory(self.source_memory, self.prompt_options.get('novel_context_source_memory_chars'))
         dialogue_turns = detect_dialogue_turns(source_chunk)
         dialogue_sink: Dict[str, Any] = {}
         self.global_lore, self.dynamic_state, change_logs = await update_novel_context_chunk(
@@ -6111,6 +6113,9 @@ class NovelContextSession:
             context_view_max_tokens=self.prompt_options.get(
                 "novel_context_update_prompt_max_tokens",
             ),
+            bypass_context_gating=self.prompt_options.get('bypass_context_gating'),
+            consolidation_interval=self.prompt_options.get('novel_context_consolidation_interval'),
+            log_callback=self.log_callback,
         )
         self.remember_source(source_chunk)
         dialogue_state_after = dialogue_sink.get("state_after") or {}
@@ -6164,14 +6169,6 @@ def open_novel_context_session(
     log_callback: Optional[Callable] = None,
 ) -> Optional[NovelContextSession]:
     """Load/create context state, restore a snapshot, and inject it into prompts."""
-    # Override global bypass gating variable dynamically based on job parameters
-    if "bypass_context_gating" in prompt_options:
-        try:
-            from src import config as _config
-            _config.BYPASS_CONTEXT_GATING = bool(prompt_options["bypass_context_gating"])
-        except Exception:
-            pass
-
     novel_context_file = prompt_options.get("novel_context_file")
     auto_update_context = bool(prompt_options.get("auto_update_context", False))
 
@@ -6394,6 +6391,7 @@ async def consolidate_context_lore(
     model_name: str,
     global_lore: str,
     dynamic_state: str = "",
+    log_callback: Optional[Callable] = None,
 ) -> Tuple[str, List[str]]:
     """Run an LLM pass that deduplicates/consolidates the Characters section.
 
@@ -6426,6 +6424,8 @@ async def consolidate_context_lore(
     )
 
     try:
+        if log_callback:
+            log_callback('notes_request', 'Updating story notes', {'type': 'llm_request', 'phase': 'context', 'model': model_name})
         response = await llm_client.generate(
             prompt=user_prompt,
             system_prompt=CONSOLIDATION_SYSTEM_PROMPT,
@@ -6757,6 +6757,7 @@ def merge_new_lore(
     new_aliases: str = "",
     source_text: str = "",
     trusted_aliases: str = "",
+    bypass_context_gating: Optional[bool] = None,
 ) -> Tuple[str, List[str]]:
     """Merge context updates through canonical character and glossary identities."""
     change_logs: List[str] = []
@@ -7020,6 +7021,7 @@ def merge_new_lore(
             source_text,
             characters[match_index][1] if match_index is not None else "",
             explicit_correction,
+            bypass=bypass_context_gating,
         )
         if match_index is None:
             if descriptive_name:
@@ -7147,6 +7149,9 @@ async def update_novel_context_chunk(
     dialogue_attribution_sink: Optional[Dict[str, Any]] = None,
     selective_context_view: bool = True,
     context_view_max_tokens: Optional[int] = None,
+    bypass_context_gating: Optional[bool] = None,
+    consolidation_interval: Optional[int] = None,
+    log_callback: Optional[Callable] = None,
 ) -> Tuple[str, str, List[str]]:
     """Calls the LLM to update global lore and dynamic state incrementally.
     
@@ -7203,6 +7208,8 @@ async def update_novel_context_chunk(
         system_prompt = UPDATE_SYSTEM_PROMPT
     
     try:
+        if log_callback:
+            log_callback('notes_request', 'Updating story notes', {'type': 'llm_request', 'phase': 'context', 'model': model_name})
         response = await llm_client.generate(
             prompt=user_prompt,
             system_prompt=system_prompt,
@@ -7324,6 +7331,7 @@ async def update_novel_context_chunk(
             new_aliases,
             source_analysis_text,
             trusted_dynamic_aliases,
+            bypass_context_gating=bypass_context_gating,
         )
         new_dynamic = merge_dynamic_state(
             current_dynamic_state,
@@ -7334,7 +7342,8 @@ async def update_novel_context_chunk(
 
         # LLM consolidation pass: periodically deduplicate character descriptions
         # that the deterministic merge layer missed (semantically similar rephrasing).
-        consolidation_interval = _consolidation_interval()
+        if consolidation_interval is None:
+            consolidation_interval = _consolidation_interval()
         is_last_chunk = (total_chunks > 0 and chunk_index == total_chunks)
         if (
             consolidation_interval > 0
@@ -7349,6 +7358,7 @@ async def update_novel_context_chunk(
                 model_name=model_name,
                 global_lore=updated_global_lore,
                 dynamic_state=new_dynamic,
+                log_callback=log_callback,
             )
             updated_global_lore = consolidated_lore
             change_logs.extend(consolidation_logs)

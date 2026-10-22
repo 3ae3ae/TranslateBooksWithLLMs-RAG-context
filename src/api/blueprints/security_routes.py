@@ -21,6 +21,21 @@ def create_security_blueprint(output_dir):
     upload_dir = Path(output_dir) / 'uploads'
     secure_file_handler = SecureFileHandler(upload_dir)
 
+    @bp.route('/api/uploads/<name>/delete', methods=['POST'])
+    def delete_upload(name):
+        from src.api.services.path_validator import PathValidator
+        from src.api.translation_state import get_state_manager
+        if not PathValidator.validate_filename(name)[0]:
+            return jsonify(error='Invalid upload filename'), 400
+        path, error = PathValidator.validate_upload_path(name, upload_dir)
+        if error or not path.is_file():
+            return jsonify(error=error or 'Upload is not a file'), 404
+        for job in get_state_manager().get_checkpoint_manager().db.list_jobs():
+            if any(job['config'].get(key) and Path(job['config'][key]).resolve() == path for key in ('file_path', 'preserved_input_path')):
+                return jsonify(error='Upload belongs to a saved job'), 409
+        path.unlink()
+        return jsonify(deleted=name)
+
     @bp.route('/api/upload', methods=['POST'])
     def upload_file():
         """Secure file upload with comprehensive validation"""
@@ -269,3 +284,17 @@ def create_security_blueprint(output_dir):
             return jsonify({"error": "Failed to serve thumbnail"}), 500
 
     return bp
+
+
+def sweep_abandoned_uploads(upload_dir, db, *, now=None):
+    import time
+    now = time.time() if now is None else now
+    referenced = {Path(job['config'][key]).resolve() for job in db.list_jobs() for key in ('file_path', 'preserved_input_path') if job['config'].get(key)}
+    removed = 0
+    directory = Path(upload_dir)
+    if directory.exists():
+        for path in directory.iterdir():
+            if path.is_file() and path.resolve() not in referenced and now - path.stat().st_mtime > 86400:
+                path.unlink()
+                removed += 1
+    return removed

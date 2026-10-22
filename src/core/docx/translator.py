@@ -64,6 +64,9 @@ async def translate_docx_file(
     """
     import os
 
+    prompt_options = dict(prompt_options or {})
+    prompt_options['bilingual'] = kwargs.get('bilingual', prompt_options.get('bilingual', False))
+
     # Create adapter and orchestrator
     adapter = DocxTranslationAdapter()
     orchestrator = GenericTranslationOrchestrator(adapter)

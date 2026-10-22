@@ -26,6 +26,7 @@ from .blueprints import (
     create_styles_blueprint,
     create_estimate_blueprint,
     create_connections_blueprint,
+    create_jobs_blueprint,
 )
 from .sample_state import SampleStateManager
 
@@ -85,6 +86,8 @@ def configure_routes(app, state_manager, output_dir, start_translation_job, sock
     app.register_blueprint(create_styles_blueprint())
     app.register_blueprint(create_estimate_blueprint(output_dir))
     app.register_blueprint(create_connections_blueprint())
+
+    app.register_blueprint(create_jobs_blueprint(state_manager, output_dir, socketio))
 
     # Register error handlers
     _register_error_handlers(app)

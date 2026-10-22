@@ -61,6 +61,20 @@ def emit_update(socketio, translation_id, data_to_emit, state_manager):
                 translation_id, 'last_translation', log_entry['data']['response']
             )
 
-        socketio.emit(EVENT_TRANSLATION_UPDATE, data_to_emit, namespace='/')
+        if log_entry:
+            state_manager.persist_log(translation_id, log_entry)
+        elif data_to_emit.get('log'):
+            state_manager.persist_log(translation_id, {'message': data_to_emit['log']})
+        runner = getattr(state_manager, 'job_runner', None)
+        if runner and runner.db.get_job(translation_id):
+            from .blueprints.jobs_routes import job_summary
+            payload = {'job': job_summary(runner, runner.db.get_job(translation_id))}
+            if log_entry:
+                payload['log_entry'] = log_entry
+                detail = log_entry.get('data') or {}
+            if socketio:
+                socketio.emit('job_update', payload, namespace='/')
+        if socketio:
+            socketio.emit(EVENT_TRANSLATION_UPDATE, data_to_emit, namespace='/')
     except Exception as e:
         print(f"WebSocket emission error for {translation_id}: {e}")

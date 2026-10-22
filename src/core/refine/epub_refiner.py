@@ -92,6 +92,9 @@ async def _refine_one_xhtml(
     container: Optional[TranslationContainer] = None,
     context_tracker: Optional[Any] = None,
     stats_callback: Optional[Callable] = None,
+    checkpoint_manager=None,
+    translation_id=None,
+    checkpoint_offset=0,
 ) -> bool:
     """Refine a single parsed XHTML document in place."""
     body_html, body_element, tag_preserver = _setup_translation(
@@ -137,6 +140,9 @@ async def _refine_one_xhtml(
         context_tracker=context_tracker,
         check_interruption_callback=check_interruption_callback,
         stats_callback=stats_callback,
+        checkpoint_manager=checkpoint_manager,
+        translation_id=translation_id,
+        checkpoint_offset=checkpoint_offset,
     )
 
     if check_interruption_callback and check_interruption_callback():
@@ -148,6 +154,9 @@ async def _refine_one_xhtml(
     full_text = ''.join(refined_chunks)
     full_text = _escape_stray_angle_brackets(full_text)
     final_html = tag_preserver.restore_tags(full_text, global_tag_map)
+    if (prompt_options or {}).get('bilingual'):
+        from src.core.epub.xhtml_translator import _interleave_bilingual
+        final_html = _interleave_bilingual(body_html, final_html) or f'<div>{final_html}</div><div>{body_html}</div>'
 
     return _replace_body(body_element, final_html, log_callback)
 
@@ -175,6 +184,9 @@ async def refine_epub_file(
     max_tokens_per_chunk: int = MAX_TOKENS_PER_CHUNK,
     checkpoint_manager: Optional[Any] = None,
     translation_id: Optional[str] = None,
+    connection: Optional[Dict] = None,
+    parallel_workers: int = 1,
+    srt_lines_per_block: Optional[int] = None,
 ) -> bool:
     """Run a refinement-only pass on an already-translated EPUB."""
     if not os.path.exists(input_filepath):
@@ -197,6 +209,7 @@ async def refine_epub_file(
         poe_api_key=poe_api_key,
         nim_api_key=nim_api_key,
         log_callback=log_callback,
+        connection=connection,
     )
     if llm_client is None:
         return False
@@ -364,6 +377,9 @@ async def refine_epub_file(
                     check_interruption_callback=check_interruption_callback,
                     context_tracker=context_tracker,
                     stats_callback=_file_stats_callback,
+                    checkpoint_manager=checkpoint_manager,
+                    translation_id=translation_id,
+                    checkpoint_offset=completed_refine_chunks,
                 )
 
                 if ok:

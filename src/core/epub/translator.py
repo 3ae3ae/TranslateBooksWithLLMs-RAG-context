@@ -61,6 +61,7 @@ async def translate_epub_file(
     bilingual: bool = False,
     parallel_workers: int = 1,
     continuation_base_id: Optional[str] = None,
+    connection: Optional[Dict] = None,
 ) -> bool:
     """
     Translate an EPUB file using LLM with generic orchestrator.
@@ -144,7 +145,8 @@ async def translate_epub_file(
         nim_api_key=nim_api_key,
         cli_api_endpoint=cli_api_endpoint,
         initial_context=initial_context,
-        log_callback=log_callback
+        log_callback=log_callback,
+        connection=connection,
     )
 
     if llm_client is None:
@@ -154,7 +156,7 @@ async def translate_epub_file(
     # translate_file() already logged the effective count; this re-resolve is
     # idempotent and covers the direct-call path (CLI EPUB goes through here).
     from src.config import resolve_parallel_workers
-    parallel_workers = resolve_parallel_workers(llm_provider, parallel_workers)
+    parallel_workers = (1 if connection['local'] else max(1, int(parallel_workers))) if connection is not None else resolve_parallel_workers(llm_provider, parallel_workers)
 
     # Create adaptive context manager
     context_manager = _create_context_manager(
@@ -162,7 +164,8 @@ async def translate_epub_file(
         auto_adjust_context=auto_adjust_context,
         initial_context=initial_context,
         is_thinking_model=is_known_thinking_model,
-        log_callback=log_callback
+        log_callback=log_callback,
+        connection=connection,
     )
 
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -306,6 +309,8 @@ async def translate_epub_file(
             # siblings from previous interrupted runs targeting this same output.
             if not results.get('was_interrupted'):
                 for stale in find_partial_output_paths(output_filepath):
+                    if os.path.abspath(stale) == os.path.abspath(output_filepath):
+                        continue
                     try:
                         os.remove(stale)
                         if log_callback:
@@ -452,7 +457,8 @@ def _create_llm_client(
     nim_api_key: Optional[str],
     cli_api_endpoint: str,
     initial_context: int,
-    log_callback: Optional[Callable] = None
+    log_callback: Optional[Callable] = None,
+    connection: Optional[Dict] = None,
 ) -> Any:
     """Create LLM client with specified configuration."""
     from ..llm_client import create_llm_client
@@ -463,7 +469,8 @@ def _create_llm_client(
         poe_api_key=poe_api_key,
         nim_api_key=nim_api_key,
         context_window=initial_context,
-        log_callback=log_callback
+        log_callback=log_callback,
+        **({'connection': connection} if connection is not None else {}),
     )
 
     if llm_client is None:
@@ -478,11 +485,13 @@ def _create_context_manager(
     auto_adjust_context: bool,
     initial_context: int,
     is_thinking_model: bool,
-    log_callback: Optional[Callable] = None
+    log_callback: Optional[Callable] = None,
+    connection: Optional[Dict] = None,
 ) -> Optional[AdaptiveContextManager]:
     """Create adaptive context manager if applicable."""
     context_manager = None
-    if llm_provider == "ollama" and auto_adjust_context:
+    local_ollama = connection['local'] and connection['connection_type'] == 'ollama' if connection is not None else llm_provider == "ollama"
+    if local_ollama and auto_adjust_context:
         context_manager = AdaptiveContextManager(
             initial_context=initial_context,
             context_step=CONTEXT_STEP,
@@ -608,6 +617,7 @@ async def _translate_single_xhtml_file(
     global_completed_chunks: Optional[int] = None,
     parallel_workers: int = 1,
     continuation_base_id: Optional[str] = None,
+    connection: Optional[Dict] = None,
 ) -> Tuple[Optional[etree._Element], bool, Any]:
     """
     Translate a single XHTML file using GenericTranslationOrchestrator.
@@ -867,6 +877,7 @@ async def _process_all_content_files(
     parallel_workers: int = 1,
     precomputed_chunk_counts: Optional[Tuple[int, List[int]]] = None,
     continuation_base_id: Optional[str] = None,
+    connection: Optional[Dict] = None,
 ) -> Dict:
     """
     Process all XHTML content files using GenericTranslationOrchestrator.

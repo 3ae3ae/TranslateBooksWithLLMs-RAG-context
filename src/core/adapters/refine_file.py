@@ -36,6 +36,9 @@ async def refine_file(
     auto_adjust_context: bool = True,
     max_tokens_per_chunk: Optional[int] = None,
     prompt_options: Optional[Dict[str, Any]] = None,
+    connection: Optional[Dict[str, Any]] = None,
+    parallel_workers: int = 1,
+    bilingual_output: bool = False,
     **additional_config,
 ) -> bool:
     """Run a refinement-only pass on an already-translated file.
@@ -47,6 +50,10 @@ async def refine_file(
     """
     if prompt_options is None:
         prompt_options = {}
+    prompt_options = dict(prompt_options)
+    prompt_options['bilingual'] = bilingual_output
+    parallel_workers = 1 if connection is not None and connection['local'] else max(1, int(parallel_workers))
+    prompt_options['parallel_workers'] = parallel_workers
 
     # Load novel context if a file is specified
     novel_context_file = prompt_options.get('novel_context_file')
@@ -132,6 +139,9 @@ async def refine_file(
             prompt_options=prompt_options,
             checkpoint_manager=checkpoint_manager,
             translation_id=translation_id,
+            connection=connection,
+            parallel_workers=parallel_workers,
+            srt_lines_per_block=additional_config.get('srt_lines_per_block'),
         )
 
     if detected_type == 'epub':
@@ -159,6 +169,9 @@ async def refine_file(
             prompt_options=prompt_options,
             checkpoint_manager=checkpoint_manager,
             translation_id=translation_id,
+            connection=connection,
+            parallel_workers=parallel_workers,
+            srt_lines_per_block=additional_config.get('srt_lines_per_block'),
         )
 
     if detected_type == 'docx':
@@ -186,6 +199,9 @@ async def refine_file(
             prompt_options=prompt_options,
             checkpoint_manager=checkpoint_manager,
             translation_id=translation_id,
+            connection=connection,
+            parallel_workers=parallel_workers,
+            srt_lines_per_block=additional_config.get('srt_lines_per_block'),
         )
 
     if detected_type == 'srt':
@@ -210,6 +226,9 @@ async def refine_file(
             prompt_options=prompt_options,
             checkpoint_manager=checkpoint_manager,
             translation_id=translation_id,
+            connection=connection,
+            parallel_workers=parallel_workers,
+            srt_lines_per_block=additional_config.get('srt_lines_per_block'),
         )
 
     supported = ', '.join(['txt', 'epub', 'srt', 'docx'])

@@ -29,4 +29,7 @@ __all__ = [
     'create_styles_blueprint',
     'create_estimate_blueprint',
     'create_connections_blueprint',
+    'create_jobs_blueprint',
 ]
+
+from .jobs_routes import create_jobs_blueprint

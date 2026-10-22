@@ -231,7 +231,13 @@ class GenericTranslator:
             )
 
             # 6. Translate each unit (sequentially, or with continuous concurrency)
-            from src.config import resolve_parallel_workers, UNIT_VALIDATION_RETRIES
+            from src.config import resolve_parallel_workers as legacy_workers, UNIT_VALIDATION_RETRIES
+            connection = llm_kwargs.get('connection')
+
+            def resolve_parallel_workers(provider, workers):
+                if connection is not None:
+                    return 1 if connection['local'] else max(1, int(workers))
+                return legacy_workers(provider, workers)
             from src.core.common.parallel import iter_ordered_concurrent
             from src.core.llm.exceptions import RateLimitError
 
@@ -385,7 +391,7 @@ class GenericTranslator:
 
             workers = resolve_parallel_workers(llm_provider, parallel_workers)
             sequential = workers == 1
-            max_validation_attempts = 1 + max(0, UNIT_VALIDATION_RETRIES)
+            max_validation_attempts = 1 + max(0, self.adapter.config.get('unit_validation_retries') if self.adapter.config.get('unit_validation_retries') is not None else UNIT_VALIDATION_RETRIES)
 
             last_context = ""
             failed_count = 0
@@ -1329,7 +1335,7 @@ async def _resync_context_snapshots_async(
     live_config = live_job.get('config') or {}
     if not provider_key:
         provider_key = live_config.get(f'{llm_provider}_api_key')
-    if not provider_key:
+    if not provider_key and not config.get('connection_id'):
         import os
         import src.config as runtime_config
 
@@ -1339,7 +1345,7 @@ async def _resync_context_snapshots_async(
             or getattr(runtime_config, env_var, '')
         )
 
-    if llm_provider not in ('ollama', 'openai') and not provider_key:
+    if not config.get('connection_id') and llm_provider not in ('ollama', 'openai') and not provider_key:
         err_msg = (
             f"Cannot re-sync context with '{llm_provider}': the live API key "
             "is unavailable."
@@ -1353,6 +1359,9 @@ async def _resync_context_snapshots_async(
         'api_key': provider_key,
         'timeout': config.get('request_timeout', 120),
     }
+    if config.get('connection_id'):
+        from src.api.job_runner import resolve_connection
+        llm_kwargs['connection'] = resolve_connection(config)
     try:
         llm_client = LLMClient(provider_type=llm_provider, model=model_name, **llm_kwargs)
     except Exception as e:
@@ -1361,6 +1370,16 @@ async def _resync_context_snapshots_async(
         append_and_emit(f"❌ {err_msg}")
         return False
     
+    def resync_request_log(kind, message, data=None):
+        if isinstance(data, dict) and data.get('type') == 'llm_request':
+            stats = state_manager.get_translation_field(translation_id, 'stats') or {}
+            stats['requests'] = stats.get('requests', 0) + 1
+            state_manager.update_stats(translation_id, stats)
+            current_config, _ = _load_resync_state()
+            current_config['stats'] = stats
+            state_manager.checkpoint_manager.update_job_config(translation_id, current_config)
+        append_and_emit(message)
+
     source_memory_chunks = [
         c.get('original_text') or ''
         for c in completed_chunks
@@ -1419,7 +1438,7 @@ async def _resync_context_snapshots_async(
                 target_language=config.get('target_language'),
                 chunk_index=idx + 1,
                 total_chunks=len(chunks),
-                source_context=_bounded_source_memory(source_memory_chunks),
+                source_context=_bounded_source_memory(source_memory_chunks, (config.get('prompt_options') or {}).get('novel_context_source_memory_chars')),
                 dialogue_turns=dialogue_turns,
                 current_dialogue_state=current_dialogue_state,
                 dialogue_attribution_sink=dialogue_sink,
@@ -1434,10 +1453,13 @@ async def _resync_context_snapshots_async(
                         "novel_context_update_prompt_max_tokens",
                     )
                 ),
+                bypass_context_gating=(config.get('prompt_options') or {}).get('bypass_context_gating'),
+                consolidation_interval=(config.get('prompt_options') or {}).get('novel_context_consolidation_interval'),
+                log_callback=resync_request_log,
             )
             if source_text.strip():
                 source_memory_chunks.append(source_text)
-                bounded_source_memory = _bounded_source_memory(source_memory_chunks)
+                bounded_source_memory = _bounded_source_memory(source_memory_chunks, (config.get('prompt_options') or {}).get('novel_context_source_memory_chars'))
                 source_memory_chunks = (
                     bounded_source_memory.split("\n\n--- Previous source chunk ---\n\n")
                     if bounded_source_memory

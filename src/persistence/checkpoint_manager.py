@@ -586,6 +586,9 @@ class CheckpointManager:
             except OSError:
                 refinement_source_path = None
 
+        if job.get('config', {}).get('connection_id'):
+            return True
+
         # Delete preserved files except the immutable first-pass output.
         job_upload_dir = self.uploads_dir / translation_id
         if job_upload_dir.exists():

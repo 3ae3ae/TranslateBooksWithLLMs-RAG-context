@@ -48,6 +48,7 @@ async def translate_file(
     prompt_options: Optional[Dict[str, Any]] = None,
     bilingual_output: bool = False,
     parallel_workers: int = 1,
+    connection: Optional[Dict[str, Any]] = None,
     **additional_config
 ) -> bool:
     """
@@ -110,6 +111,9 @@ async def translate_file(
     # Initialize prompt_options if not provided
     if prompt_options is None:
         prompt_options = {}
+    prompt_options['bilingual'] = bilingual_output
+    if connection is not None:
+        prompt_options['parallel_workers'] = 1 if connection['local'] else parallel_workers
 
     # Resolve max_tokens_per_chunk: when the caller passed nothing, read the
     # current .env-backed default. Doing it here (not at function definition)
@@ -122,7 +126,7 @@ async def translate_file(
     # Every downstream pipeline re-resolves idempotently.
     from src.config import resolve_parallel_workers, is_local_provider
     requested_workers = parallel_workers
-    parallel_workers = resolve_parallel_workers(llm_provider, parallel_workers)
+    parallel_workers = (1 if connection['local'] else max(1, int(parallel_workers))) if connection is not None else resolve_parallel_workers(llm_provider, parallel_workers)
     if log_callback:
         if parallel_workers > 1:
             log_callback("parallel_enabled",
@@ -192,6 +196,7 @@ async def translate_file(
             prompt_options=prompt_options,
             bilingual=bilingual_output,
             parallel_workers=parallel_workers,
+            connection=connection,
             **filtered_config
         )
 
@@ -212,7 +217,9 @@ async def translate_file(
             openrouter_api_key=openrouter_api_key,
             mistral_api_key=mistral_api_key,
             deepseek_api_key=deepseek_api_key,
-            poe_api_key=poe_api_key
+            poe_api_key=poe_api_key,
+            log_callback=log_callback,
+            connection=connection,
         )
 
         result = await translate_docx_file(
@@ -226,13 +233,14 @@ async def translate_file(
             log_callback=log_callback,
             stats_callback=stats_callback,
             prompt_options=prompt_options,
-            max_retries=1,
+            max_retries=max(0, (additional_config.get('max_attempts') or 2) - 1),
             context_manager=None,
             check_interruption_callback=check_interruption_callback,
             checkpoint_manager=checkpoint_manager,
             translation_id=translation_id,
             parallel_workers=parallel_workers,
             continuation_base_id=additional_config.get('continuation_base_id'),
+            bilingual=bilingual_output,
         )
         return result.get('success', False)
 
@@ -257,6 +265,7 @@ async def translate_file(
         'auto_adjust_context': auto_adjust_context,
         'max_tokens_per_chunk': max_tokens_per_chunk,
         'prompt_options': prompt_options,
+        'lines_per_block': additional_config.get('srt_lines_per_block'),
         **additional_config
     }
 
@@ -284,6 +293,11 @@ async def translate_file(
         'deepseek_api_key': deepseek_api_key,
         'poe_api_key': poe_api_key,
         'prompt_options': prompt_options,
+        'connection': connection,
+        'context_window': context_window,
+        'timeout': additional_config.get('request_timeout'),
+        'max_attempts': additional_config.get('max_attempts'),
+        'retry_delay': additional_config.get('retry_delay', 2),
     }
 
     # Execute translation

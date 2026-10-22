@@ -1788,6 +1788,10 @@ async def _refine_epub_chunks(
     dynamic_contexts: Optional[List[str]] = None,
     context_tracker: Optional[Any] = None,
     check_interruption_callback: Optional[Callable] = None,
+    _unit_index: Optional[int] = None,
+    checkpoint_manager=None,
+    translation_id=None,
+    checkpoint_offset=0,
 ) -> List[str]:
     """
     Refine translated EPUB chunks using a second LLM pass.
@@ -1835,7 +1839,44 @@ async def _refine_epub_chunks(
             log_callback=log_callback,
         )
 
+    saved_rows = {}
+    if checkpoint_manager and translation_id and not (prompt_options or {}).get('_refine_after'):
+        saved_rows = {row['chunk_index']: row for row in checkpoint_manager.db.get_chunks(translation_id)}
+
+    workers = max(1, int((prompt_options or {}).get('parallel_workers', 1)))
+    if workers > 1 and _unit_index is None and not context_tracker.auto_analyze:
+        import copy
+        from src.core.common.parallel import iter_ordered_concurrent
+
+        async def refine_one(index):
+            tracker = copy.deepcopy(context_tracker)
+            tracker.cursor += index
+            return await _refine_epub_chunks(
+                translated_chunks, chunks, target_language, model_name, llm_client,
+                None, placeholder_format, log_callback, prompt_options,
+                context_tracker=tracker, check_interruption_callback=check_interruption_callback,
+                _unit_index=index, checkpoint_manager=checkpoint_manager,
+                translation_id=translation_id, checkpoint_offset=checkpoint_offset,
+            )
+
+        async for index, result in iter_ordered_concurrent(list(range(total_chunks)), workers, refine_one, check_interruption_callback):
+            if isinstance(result, Exception):
+                raise result
+            refined_chunks.extend(result)
+            if stats_callback:
+                stats_callback({'total_chunks': total_chunks, 'completed_chunks': len(refined_chunks), 'failed_chunks': 0})
+        refined_chunks.extend(translated_chunks[len(refined_chunks):])
+        return refined_chunks
+
     for idx, (translated_text, chunk_dict) in enumerate(zip(translated_chunks, chunks)):
+        if _unit_index is not None and idx != _unit_index:
+            continue
+        saved = saved_rows.get(checkpoint_offset + idx)
+        if saved and saved['status'] == 'completed' and saved['original_text'] == translated_text:
+            refined_chunks.append(saved['translated_text'])
+            if stats_callback:
+                stats_callback({'total_chunks': total_chunks, 'completed_chunks': len(refined_chunks), 'failed_chunks': 0})
+            continue
         if check_interruption_callback and check_interruption_callback():
             if log_callback:
                 log_callback(
@@ -2055,6 +2096,13 @@ async def _refine_epub_chunks(
             # Fallback to original translation on error
             refined_chunks.append(translated_text)
             _log_error(log_callback, "epub_refinement_error", f"Chunk {idx + 1}/{total_chunks}: error during refinement: {e}")
+
+        if checkpoint_manager and translation_id and not (prompt_options or {}).get('_refine_after'):
+            from src.utils.novel_context import compress_dynamic_state
+            checkpoint_manager.db.save_chunk(
+                translation_id, checkpoint_offset + idx, translated_text, refined_chunks[-1],
+                {'context_snapshot': compress_dynamic_state(context_content)} if context_content else None,
+            )
 
         # Update progress after each refinement chunk.
         if stats_callback:

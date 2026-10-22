@@ -5,6 +5,8 @@ import atexit
 import threading
 import time
 import copy
+import json
+from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional, TYPE_CHECKING
 from src.persistence.checkpoint_manager import CheckpointManager
@@ -54,6 +56,7 @@ class TranslationStateManager:
                 'interrupted': False,
                 'output_filepath': None
             }
+            self.persist_log(translation_id, self._translations[translation_id]['logs'][0])
 
     def get_translation(self, translation_id: str) -> Optional[Dict[str, Any]]:
         """Get translation state safely"""
@@ -78,6 +81,16 @@ class TranslationStateManager:
             self._translations[translation_id][field] = value
             return True
     
+    def log_path(self, translation_id):
+        directory = Path(self.checkpoint_manager.db.db_path).parent / 'logs'
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory / f'{translation_id}.jsonl'
+
+    def persist_log(self, translation_id, entry):
+        with self._lock:
+            with self.log_path(translation_id).open('a', encoding='utf-8') as stream:
+                stream.write(json.dumps(entry, ensure_ascii=False) + '\n')
+
     def append_log(self, translation_id: str, log_entry: str) -> bool:
         """Append a log entry to translation"""
         with self._lock:
@@ -86,6 +99,7 @@ class TranslationStateManager:
             if 'logs' not in self._translations[translation_id]:
                 self._translations[translation_id]['logs'] = []
             self._translations[translation_id]['logs'].append(log_entry)
+            self.persist_log(translation_id, log_entry)
             return True
     
     def update_stats(self, translation_id: str, stats_update: Dict[str, Any]) -> bool:
@@ -178,6 +192,7 @@ class TranslationStateManager:
                 'output_filepath': job['config'].get('output_filepath'),
                 'resume_from_index': checkpoint_data['resume_from_index']
             }
+            self.persist_log(translation_id, self._translations[translation_id]['logs'][0])
 
         return True
 
@@ -191,13 +206,17 @@ class TranslationStateManager:
         Returns:
             True if deleted successfully
         """
-        # Remove from in-memory state if exists
-        with self._lock:
-            if translation_id in self._translations:
-                del self._translations[translation_id]
-
-        # Delete from database
-        return self.checkpoint_manager.delete_checkpoint(translation_id)
+        from contextlib import nullcontext
+        runner = getattr(self, 'job_runner', None)
+        with runner.condition if runner else nullcontext():
+            if runner and runner.active == translation_id:
+                return False
+            with self._lock:
+                self._translations.pop(translation_id, None)
+            deleted = self.checkpoint_manager.delete_checkpoint(translation_id)
+            if deleted and runner and runner.socketio:
+                runner.socketio.emit('job_removed', {'id': translation_id}, namespace='/')
+            return deleted
 
     def cleanup_completed_job(self, translation_id: str) -> bool:
         """
