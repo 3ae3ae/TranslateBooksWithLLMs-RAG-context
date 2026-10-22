@@ -391,9 +391,9 @@ export function NewTranslationPage() {
           <div class="form-rows">
             <div class="stack" style="--gap:10px">
               <h3>${t('new.notes.title')}</h3>
-              <p class="small muted">${t('new.notes.explain')}</p>
+              <p class="small muted">${polish ? t('new.notes.explain_polish') : t('new.notes.explain')}</p>
               <${ChoiceGroup} label=${t('new.notes.title')} value=${mode} cols=${2} onChange=${(v) => updateNotes({ mode: v })} options=${polish
-                ? [{ value: 'copy', title: t('new.notes.copy'), desc: t('new.notes.copy_polish_desc'), icon: 'copy' },
+                ? [{ value: 'copy', title: t('new.notes.copy_polish'), desc: t('new.notes.copy_polish_desc'), icon: 'copy' },
                   { value: 'off', title: t('new.notes.off'), desc: t('new.notes.off_desc'), icon: 'minus' }]
                 : [{ value: 'build', title: t('new.notes.build'), desc: t('new.notes.build_desc'), icon: 'notebook-pen' },
                   { value: 'copy', title: t('new.notes.copy'), desc: t('new.notes.copy_desc'), icon: 'copy' }]} />
