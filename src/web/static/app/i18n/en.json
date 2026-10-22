@@ -712,6 +712,8 @@
   "styles.toast.deleted": "Style guide deleted",
   "styles.toast.duplicated": "Style guide duplicated",
   "styles.confirm.delete_title": "Delete “{{name}}”?",
+  "styles.error.exists": "A style with this name already exists.",
+  "styles.error.name": "Use only letters, numbers, spaces, - and _ in the name.",
   "styles.confirm.delete_body": "Translations that already started keep their own copy.",
   "settings.notify.headers_invalid": "Headers must be a JSON object, like {\"Authorization\": \"Bearer …\"}",
   "connection.type.neuralwatt": "Neuralwatt",

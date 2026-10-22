@@ -23,7 +23,7 @@ from typing import Optional, TypedDict
 import yaml
 
 
-SAFE_FILENAME_RE = re.compile(r"^[A-Za-z0-9_\-\.]+\.(?:txt|ya?ml)$")
+SAFE_FILENAME_RE = re.compile(r"^\w[\w\-. ]*\.(?:txt|ya?ml)$")
 SUPPORTED_EXTENSIONS = (".txt", ".yaml", ".yml")
 _style_lock = threading.RLock()
 
@@ -34,7 +34,7 @@ class CustomInstructions(TypedDict, total=False):
 
 
 def is_safe_filename(filename: str) -> bool:
-    """Whitelist filenames to alphanumerics + `_-.` with a supported extension."""
+    """Whitelist filenames to letters/digits in any script plus `_-. `, with a supported extension."""
     return bool(SAFE_FILENAME_RE.match(filename or ""))
 
 

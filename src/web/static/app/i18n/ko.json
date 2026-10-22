@@ -712,6 +712,8 @@
   "styles.toast.deleted": "번역 지침을 삭제했어요",
   "styles.toast.duplicated": "번역 지침을 복제했어요",
   "styles.confirm.delete_title": "“{{name}}” 지침을 삭제할까요?",
+  "styles.error.exists": "같은 이름의 번역 지침이 이미 있어요.",
+  "styles.error.name": "이름에는 글자, 숫자, 공백, -, _만 쓸 수 있어요.",
   "styles.confirm.delete_body": "이미 시작한 번역은 자체 복사본을 그대로 써요.",
   "settings.notify.headers_invalid": "헤더는 {\"Authorization\": \"Bearer …\"} 같은 JSON 객체여야 해요",
   "connection.type.neuralwatt": "Neuralwatt",

@@ -22,7 +22,7 @@ export function StyleDialog({ onClose, onSaved }) {
       onSaved && onSaved((r && r.name) || name.trim());
       onClose();
     } catch (e) {
-      setError(e.message);
+      setError(e.code === 'already_exists' ? t('styles.error.exists') : e.code === 'validation_error' ? t('styles.error.name') : e.message);
     } finally {
       setBusy(false);
     }
