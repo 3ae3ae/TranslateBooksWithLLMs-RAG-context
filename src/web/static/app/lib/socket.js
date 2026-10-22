@@ -5,7 +5,6 @@ import { upsertJob, dropJob, queueState, loadJobs } from './stores.js';
 export const socketConnected = signal(false);
 const listeners = new Map(); // event -> Set<fn>
 let socket = null;
-let knownSession = null;
 
 /** Subscribe to a raw socket event; returns an unsubscribe function. */
 export function onSocket(event, fn) {
@@ -22,18 +21,12 @@ function emitLocal(event, payload) {
 export function connectSocket() {
   if (socket || !window.io) return;
   socket = window.io({ auth: { token: window.__TBL_TOKEN__ }, transports: ['websocket', 'polling'] });
-  socket.on('connect', async () => {
+  socket.on('connect', () => {
     socketConnected.value = true;
-    // A server restart invalidates everything we hold: refetch.
-    try {
-      const res = await fetch('/api/health', { cache: 'no-store' });
-      const health = await res.json();
-      const session = String(health.session_id || health.startup_time || '');
-      if (knownSession && session !== knownSession) emitLocal('server_restarted', health);
-      knownSession = session;
-    } catch { /* offline */ }
     loadJobs().catch(() => {});
   });
+  // A restarted server mints a new API token and refuses ours; reload to pick it up.
+  socket.on('connect_error', () => { if (!socket.active) window.location.reload(); });
   socket.on('disconnect', () => { socketConnected.value = false; });
   socket.on('job_update', (msg) => {
     if (msg && msg.job) upsertJob(msg.job);
