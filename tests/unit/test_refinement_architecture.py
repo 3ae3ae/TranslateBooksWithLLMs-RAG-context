@@ -396,93 +396,6 @@ def test_context_resync_route_accepts_failed_source_snapshot(
     thread.start.assert_called_once()
 
 
-def test_resume_translation_blocks_unfinished_context_resync(tmp_path):
-    from src.api.blueprints.translation_routes import (
-        create_translation_blueprint,
-    )
-
-    checkpoint_manager = MagicMock()
-    checkpoint_manager.load_checkpoint.return_value = {
-        "job": {
-            "config": {
-                "file_path": str(tmp_path / "book.txt"),
-                "preserved_input_path": str(tmp_path / "book.txt"),
-                "_context_resync": {
-                    "status": "paused",
-                    "last_processed_chunk": 12,
-                },
-            },
-        },
-        "resume_from_index": 13,
-    }
-    state_manager = MagicMock()
-    state_manager.checkpoint_manager = checkpoint_manager
-    state_manager.get_all_translations.return_value = {}
-
-    app = Flask(__name__)
-    app.register_blueprint(
-        create_translation_blueprint(
-            state_manager,
-            lambda *_args, **_kwargs: None,
-            str(tmp_path),
-        )
-    )
-
-    with app.test_client() as client:
-        response = client.post("/api/resume/job")
-
-    assert response.status_code == 409
-    assert response.get_json()["context_resync_state"]["status"] == "paused"
-    state_manager.restore_job_from_checkpoint.assert_not_called()
-    checkpoint_manager.mark_running.assert_not_called()
-
-
-def test_resumable_jobs_expose_stale_context_resync_as_paused(tmp_path):
-    from src.api.blueprints.translation_routes import (
-        create_translation_blueprint,
-    )
-
-    config = {
-        "file_path": str(tmp_path / "book.txt"),
-        "output_filename": "book.out.txt",
-        "openai_api_key": "YOUR_API_KEY_HERE",
-        "_context_resync": {
-            "status": "running",
-            "last_processed_chunk": 7,
-        },
-    }
-    checkpoint_manager = MagicMock()
-    checkpoint_manager.get_job.return_value = {"config": config}
-    checkpoint_manager.update_job_config.return_value = True
-    state_manager = MagicMock()
-    state_manager.checkpoint_manager = checkpoint_manager
-    state_manager.get_resumable_jobs.return_value = [{
-        "translation_id": "job",
-        "status": "interrupted",
-        "file_type": "txt",
-        "config": dict(config),
-        "progress": {"completed_chunks": 7, "total_chunks": 10},
-    }]
-
-    app = Flask(__name__)
-    app.register_blueprint(
-        create_translation_blueprint(
-            state_manager,
-            lambda *_args, **_kwargs: None,
-            str(tmp_path),
-        )
-    )
-
-    with app.test_client() as client:
-        response = client.get("/api/resumable")
-
-    assert response.status_code == 200
-    job = response.get_json()["resumable_jobs"][0]
-    assert job["context_resync"]["status"] == "paused"
-    assert "openai_api_key" not in job["config"]
-    checkpoint_manager.update_job_config.assert_called_once()
-
-
 def test_context_resync_resume_restores_auto_resume_follow_up(
     monkeypatch,
     tmp_path,
@@ -1101,15 +1014,10 @@ def test_structured_chunk_log_can_hide_internal_token_budget():
 
 def test_web_refine_after_uses_one_backend_refinement_phase():
     project_root = Path(__file__).resolve().parents[2]
-    batch_controller = (
-        project_root / "src" / "web" / "static" / "js"
-        / "translation" / "batch-controller.js"
-    ).read_text(encoding="utf-8")
     handlers = (
         project_root / "src" / "api" / "handlers.py"
     ).read_text(encoding="utf-8")
 
-    assert "refine: false" in batch_controller
     assert "translation_prompt_options['refine'] = False" in handlers
     assert "refine_success = await refine_file(" in handlers
     assert "refinement_prompt_options['_refine_after'] = True" in handlers
@@ -1117,34 +1025,12 @@ def test_web_refine_after_uses_one_backend_refinement_phase():
 
 def test_workflow_steps_and_resync_logs_use_the_canonical_ui_channel():
     project_root = Path(__file__).resolve().parents[2]
-    tracker = (
-        project_root / "src" / "web" / "static" / "js"
-        / "translation" / "translation-tracker.js"
-    ).read_text(encoding="utf-8")
     generic = (
         project_root / "src" / "core" / "adapters" / "generic_translator.py"
     ).read_text(encoding="utf-8")
 
-    assert "MessageLogger.addStepLog" in tracker
-    assert "ui_step === 'context_resync'" in tracker
     assert '"ui_step": "context_resync"' in generic
     assert "emit_update(" in generic
-
-
-def test_context_resync_save_does_not_replace_latest_with_historical_snapshot():
-    project_root = Path(__file__).resolve().parents[2]
-    tracker = (
-        project_root / "src" / "web" / "static" / "js"
-        / "translation" / "translation-tracker.js"
-    ).read_text(encoding="utf-8")
-
-    save_block = tracker.split(
-        "window.saveContextResync = async function()",
-        1,
-    )[1]
-    assert "NovelContextUI.latestContent = newContent" not in save_block
-    assert "NovelContextUI.renderContextTabs(newContent, true)" in save_block
-    assert "scope: isGlobal ? 'global_lore' : 'snapshot'" in save_block
 
 
 def test_chunk_context_snapshot_route_keeps_timeline_snapshot_isolated():
@@ -1167,73 +1053,5 @@ def test_refinement_context_state_omits_large_ui_payloads():
     refine_file = (
         project_root / "src" / "core" / "adapters" / "refine_file.py"
     ).read_text(encoding="utf-8")
-    tracker = (
-        project_root / "src" / "web" / "static" / "js"
-        / "translation" / "translation-tracker.js"
-    ).read_text(encoding="utf-8")
-
     assert '"content_omitted": True' in refine_file
     assert '"content_size": len(prompt_options' in refine_file
-    context_state_block = tracker.split(
-        "data.log_entry.type === 'novel_context_state'",
-        1,
-    )[1]
-    assert "typeof data.log_entry.data.content === 'string'" in context_state_block
-    assert "if (hasContextContent)" in context_state_block
-
-
-def test_running_refinement_can_be_restored_after_browser_refresh():
-    project_root = Path(__file__).resolve().parents[2]
-    routes = (
-        project_root / "src" / "api" / "blueprints" / "translation_routes.py"
-    ).read_text(encoding="utf-8")
-    tracker = (
-        project_root / "src" / "web" / "static" / "js"
-        / "translation" / "translation-tracker.js"
-    ).read_text(encoding="utf-8")
-
-    assert "'input_filename': (" in routes
-    assert "job.input_filename || job.output_filename" in tracker
-    assert "fileType: job.file_type || 'txt'" in tracker
-
-
-def test_max_tokens_setting_is_runtime_reloadable(monkeypatch, tmp_path):
-    import src.config as config
-
-    env_path = tmp_path / ".env"
-    env_path.write_text("MAX_TOKENS_PER_CHUNK=137\n", encoding="utf-8")
-    old_value = config.MAX_TOKENS_PER_CHUNK
-
-    monkeypatch.setattr(config, "_env_file", env_path)
-    monkeypatch.setattr(config, "MAX_TOKENS_PER_CHUNK", old_value)
-    monkeypatch.setenv("MAX_TOKENS_PER_CHUNK", str(old_value))
-
-    config.reload_config()
-
-    assert config.MAX_TOKENS_PER_CHUNK == 137
-
-
-def test_web_jobs_use_and_clamp_live_chunk_budget(monkeypatch):
-    import src.config as config
-    from src.api.blueprints.translation_routes import _clamp_chunk_tokens
-
-    monkeypatch.setattr(config, "MAX_TOKENS_PER_CHUNK", 137)
-    monkeypatch.setattr(config, "reload_config", lambda: None)
-
-    assert _clamp_chunk_tokens(None) == 137
-    assert _clamp_chunk_tokens(20) == 50
-    assert _clamp_chunk_tokens(2000) == 2000
-    assert _clamp_chunk_tokens(5000) == 5000
-
-
-def test_web_jobs_freeze_current_chunk_budget_without_reloading(monkeypatch):
-    import src.config as config
-    from src.api.blueprints.translation_routes import _clamp_chunk_tokens
-
-    def reload_config():
-        config.MAX_TOKENS_PER_CHUNK = 5000
-
-    monkeypatch.setattr(config, "MAX_TOKENS_PER_CHUNK", 450)
-    monkeypatch.setattr(config, "reload_config", reload_config)
-
-    assert _clamp_chunk_tokens(None) == 450

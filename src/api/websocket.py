@@ -2,10 +2,9 @@
 WebSocket handlers for real-time communication
 """
 from flask import request
-from flask_socketio import emit
 
 from .auth import is_authorized
-from .socket_events import EVENT_TRANSLATION_UPDATE, LLM_RESPONSE_TYPES
+from .socket_events import EVENT_TRANSLATION_UPDATE
 
 
 def configure_websocket_handlers(socketio, state_manager):
@@ -21,7 +20,6 @@ def configure_websocket_handlers(socketio, state_manager):
             print(f'🚫 WebSocket handshake rejected (bad token): {request.sid}')
             return False
         print(f'🔌 WebSocket client connected: {request.sid}')
-        emit('connected', {'message': 'Connected to translation server via WebSocket'})
 
     @socketio.on('disconnect')
     def handle_websocket_disconnect():
@@ -50,17 +48,7 @@ def emit_update(socketio, translation_id, data_to_emit, state_manager):
 
     data_to_emit['translation_id'] = translation_id
     try:
-        # Store last translation for UI restoration after browser refresh.
-        # Both the translate path (`llm_response`) and the refine path
-        # (`refinement_response`) produce displayable LLM output — keep the
-        # preview in sync for either.
         log_entry = data_to_emit.get('log_entry')
-        if (log_entry and log_entry.get('type') in LLM_RESPONSE_TYPES and
-            log_entry.get('data', {}).get('response')):
-            state_manager.set_translation_field(
-                translation_id, 'last_translation', log_entry['data']['response']
-            )
-
         if log_entry:
             state_manager.persist_log(translation_id, log_entry)
         elif data_to_emit.get('log'):

@@ -14,7 +14,6 @@ from .behavior import (
     ThinkingBehavior,
     get_thinking_behavior_from_known_lists,
     get_thinking_behavior_sync,
-    get_model_warning_message
 )
 
 # Cache
@@ -31,7 +30,6 @@ __all__ = [
     "ThinkingBehavior",
     "get_thinking_behavior_from_known_lists",
     "get_thinking_behavior_sync",
-    "get_model_warning_message",
 
     # Cache
     "ThinkingCache",

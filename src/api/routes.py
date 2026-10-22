@@ -18,9 +18,7 @@ from .blueprints import (
     create_file_blueprint,
     create_security_blueprint,
     create_glossary_blueprint,
-    create_cost_blueprint,
     create_sample_blueprint,
-    create_profile_blueprint,
     create_preferences_blueprint,
     create_notes_blueprint,
     create_styles_blueprint,
@@ -60,10 +58,6 @@ def configure_routes(app, state_manager, output_dir, start_translation_job, sock
     security_bp = create_security_blueprint(output_dir)
     app.register_blueprint(security_bp)
 
-    # Register cost estimation routes
-    cost_bp = create_cost_blueprint(output_dir)
-    app.register_blueprint(cost_bp)
-
     # Register glossary management routes
     # Reuse the process-wide GlossaryStore so we don't multiply SQLite
     # connections across the blueprint and the translation handler.
@@ -78,9 +72,6 @@ def configure_routes(app, state_manager, output_dir, start_translation_job, sock
     sample_bp = create_sample_blueprint(sample_state_manager, socketio, output_dir)
     app.register_blueprint(sample_bp)
 
-    # Register profile routes
-    profile_bp = create_profile_blueprint()
-    app.register_blueprint(profile_bp)
     app.register_blueprint(create_preferences_blueprint())
     app.register_blueprint(create_notes_blueprint())
     app.register_blueprint(create_styles_blueprint())

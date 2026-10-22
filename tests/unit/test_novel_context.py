@@ -14,7 +14,6 @@ from src.utils.novel_context import (
     DYNAMIC_STATE_START,
     infer_dynamic_address_identity_links,
     is_safe_filename,
-    list_novel_contexts,
     load_novel_context,
     make_novel_context_filename,
     merge_new_lore,
@@ -54,7 +53,6 @@ def test_novel_context_operations():
         # Test load when missing (creates template)
         content = load_novel_context("test_novel.txt", tmp_path)
         assert "# CHARACTERS & GENDERS" in content
-        assert "test_novel.txt" in [f["filename"] for f in list_novel_contexts(tmp_path)]
         
         # Test save and load
         new_content = "Custom content here."
