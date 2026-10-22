@@ -3,7 +3,7 @@ import { Button, Icon, Progress, Callout, Cover, Spinner, Pill, EmptyState } fro
 import { Field, Select, Segmented, NumberInput } from '../ui/forms.js';
 import { Tabs, Disclosure } from '../ui/layout.js';
 import { Menu, Dialog, toast } from '../ui/overlays.js';
-import { JobStatusPill, primaryAction, menuItems, langPair, phaseLabel, jobActions, ChangeModelDialog, AddChaptersDialog } from '../ui/jobs.js';
+import { JobStatusPill, primaryAction, menuItems, langPair, phaseLabel, jobActions, ChangeModelDialog, AddChaptersDialog, QueuePausedNotice } from '../ui/jobs.js';
 import { NotesView, NotesEditor, NormalizationPreview } from '../ui/notes-editor.js';
 import { jobsById, upsertJob, jobsLoaded } from '../lib/stores.js';
 import { jobsApi, jobNotesApi } from '../lib/api.js';
@@ -90,6 +90,7 @@ function ProgressTab({ job, detail, preview }) {
           <${Button} size="sm" icon="folder-open" onClick=${() => jobActions.reveal(job)}>${t('job.action.reveal')}<//>`}>
       ${job.output_filename}
     <//>`}
+    ${job.status === 'queued' && html`<${QueuePausedNotice} />`}
     ${job.status === 'failed' && job.error && html`<${Callout} tone="danger" title=${t('job.failed.title')}>${job.error}<//>`}
     ${job.status === 'paused' && job.status_reason === 'connection_removed' && html`<${Callout} tone="warning" title=${t('job.paused.connection_removed')}>${t('job.paused.connection_removed_desc')}<//>`}
 

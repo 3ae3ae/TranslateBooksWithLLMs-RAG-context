@@ -1,12 +1,12 @@
 import { html, useState } from './html.js';
-import { Pill, Button } from './core.js';
+import { Pill, Button, Callout } from './core.js';
 import { Dialog, confirm, toast } from './overlays.js';
 import { Field } from './forms.js';
 import { Dropzone } from './layout.js';
 import { ModelPicker, ReasoningControl } from './model-picker.js';
-import { jobsApi, uploadsApi } from '../lib/api.js';
+import { jobsApi, uploadsApi, queueApi } from '../lib/api.js';
 import { downloadUrl } from '../lib/api-core.js';
-import { upsertJob, dropJob, jobsById, loadJobs } from '../lib/stores.js';
+import { upsertJob, dropJob, jobsById, loadJobs, queueState } from '../lib/stores.js';
 import { navigate } from '../lib/router.js';
 import { t } from '../lib/i18n.js';
 import { formatDuration, formatRelativeTime, formatCost, formatNumber } from '../lib/format.js';
@@ -214,4 +214,25 @@ export function AddChaptersDialog({ job, onClose }) {
 
 export function useJob(id) {
   return jobsById.value[id] || null;
+}
+
+export async function setQueuePaused(paused) {
+  try {
+    const r = await queueApi.setPaused(paused);
+    queueState.value = { ...queueState.value, ...r };
+  } catch (e) {
+    toast({ tone: 'error', title: t('errors.action_failed'), message: e.message });
+  }
+}
+
+/** Explains a held queue wherever queued work would otherwise just sit there. */
+export function QueuePausedNotice({ context }) {
+  const q = queueState.value;
+  if (!q.paused) return null;
+  const restart = q.reason === 'restart';
+  return html`<${Callout} tone=${restart ? 'warning' : 'info'}
+      title=${restart ? t('translations.queue.held_restart') : t('translations.queue.held_user')}
+      actions=${html`<${Button} size="sm" variant="primary" icon="play" onClick=${() => setQueuePaused(false)}>${t('translations.queue.resume')}<//>`}>
+    ${context === 'new' ? t('translations.queue.held_new') : restart ? t('translations.queue.held_desc') : t('translations.queue.held_user_desc')}
+  <//>`;
 }

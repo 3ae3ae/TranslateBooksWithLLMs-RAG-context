@@ -49,9 +49,11 @@ class JobRunner:
 
     def restart_hold(self):
         with self.condition:
+            interrupted = False
             for job in self.db.list_jobs():
                 config = job['config']
                 if job['status'] in ('running', 'rate_limited') or config.get('_pending_operation'):
+                    interrupted = True
                     if config.get('_pending_operation'):
                         config.setdefault('_context_resync', {})['status'] = 'paused'
                         self.db.set_queue_order([tid for tid in self.db.queue_state()['order'] if tid != job['translation_id']])
@@ -65,7 +67,8 @@ class JobRunner:
                 self.state.create_translation(job['translation_id'], config)
                 self.state.set_translation_field(job['translation_id'], 'status', self.db.get_job(job['translation_id'])['status'])
                 self.state.update_stats(job['translation_id'], config.get('stats', job['progress']))
-            if self.db.list_jobs():
+            # Hold the queue only when work was cut off, so the interrupted job can go first.
+            if interrupted:
                 self.db.set_queue_paused(True, 'restart')
 
     def _emit_queue(self):

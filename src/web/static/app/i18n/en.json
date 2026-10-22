@@ -712,5 +712,7 @@
   "styles.confirm.delete_body": "Translations that already started keep their own copy.",
   "settings.notify.headers_invalid": "Headers must be a JSON object, like {\"Authorization\": \"Bearer …\"}",
   "connection.type.neuralwatt": "Neuralwatt",
-  "connection.type_desc.neuralwatt": "Open models served by Neuralwatt with a Neuralwatt API key."
+  "connection.type_desc.neuralwatt": "Open models served by Neuralwatt with a Neuralwatt API key.",
+  "translations.queue.held_user_desc": "Nothing new will start until you resume it.",
+  "translations.queue.held_new": "New translations will wait in the queue until you resume it."
 }

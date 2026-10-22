@@ -712,5 +712,7 @@
   "styles.confirm.delete_body": "이미 시작한 번역은 자체 복사본을 그대로 써요.",
   "settings.notify.headers_invalid": "헤더는 {\"Authorization\": \"Bearer …\"} 같은 JSON 객체여야 해요",
   "connection.type.neuralwatt": "Neuralwatt",
-  "connection.type_desc.neuralwatt": "Neuralwatt API 키로 Neuralwatt가 서비스하는 오픈 모델을 써요."
+  "connection.type_desc.neuralwatt": "Neuralwatt API 키로 Neuralwatt가 서비스하는 오픈 모델을 써요.",
+  "translations.queue.held_user_desc": "다시 시작하기 전까지 새 번역은 시작되지 않아요.",
+  "translations.queue.held_new": "다시 시작하기 전까지 새 번역은 대기열에서 기다려요."
 }

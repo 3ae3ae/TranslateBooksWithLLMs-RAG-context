@@ -5,6 +5,7 @@ import { PageHeader, Section, Disclosure, Dropzone, usePageDrop } from '../ui/la
 import { toast } from '../ui/overlays.js';
 import { ModelPicker, ReasoningControl } from '../ui/model-picker.js';
 import { StyleDialog } from '../ui/style-dialog.js';
+import { QueuePausedNotice } from '../ui/jobs.js';
 import { GlossaryExtractDialog } from '../ui/glossary-extract.js';
 import { ConnectionDialog } from '../ui/connection-dialog.js';
 import {
@@ -540,6 +541,7 @@ export function NewTranslationPage() {
             <div class="row small muted" style="align-items:flex-start"><${Icon} name="info" size="sm" />${t('new.summary.notes_sequential')}</div>
           </div>`}
           <div class="summary__actions">
+            <${QueuePausedNotice} context="new" />
             <${Button} variant="primary" size="lg" block icon="play" disabled=${!ready} loading=${starting} onClick=${start}>
               ${polish ? t('new.start_polish') : t('new.start')}
             <//>

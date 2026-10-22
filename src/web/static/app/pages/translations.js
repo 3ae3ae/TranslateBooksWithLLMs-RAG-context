@@ -1,10 +1,10 @@
 import { html, useState } from '../ui/html.js';
-import { Button, Icon, Progress, Cover, EmptyState, Callout } from '../ui/core.js';
+import { Button, Icon, Progress, Cover, EmptyState } from '../ui/core.js';
 import { Menu, toast } from '../ui/overlays.js';
 import { PageHeader } from '../ui/layout.js';
-import { JobStatusPill, primaryAction, menuItems, langPair, jobFacts, ChangeModelDialog, AddChaptersDialog } from '../ui/jobs.js';
+import { JobStatusPill, primaryAction, menuItems, langPair, jobFacts, ChangeModelDialog, AddChaptersDialog, QueuePausedNotice, setQueuePaused } from '../ui/jobs.js';
 import { jobGroups, jobsLoaded, queueState } from '../lib/stores.js';
-import { queueApi, foldersApi, jobsApi } from '../lib/api.js';
+import { foldersApi, jobsApi } from '../lib/api.js';
 import { navigate } from '../lib/router.js';
 import { t } from '../lib/i18n.js';
 import { formatNumber, formatDuration } from '../lib/format.js';
@@ -70,14 +70,7 @@ export function TranslationsPage() {
   const finished = filter(groups.finished);
   const hasQueue = groups.inProgress.some((j) => j.status === 'queued');
 
-  const toggleQueue = async () => {
-    try {
-      const r = await queueApi.setPaused(!queue.paused);
-      queueState.value = { ...queue, ...r };
-    } catch (e) {
-      toast({ tone: 'error', title: t('errors.action_failed'), message: e.message });
-    }
-  };
+  const toggleQueue = () => setQueuePaused(!queue.paused);
 
   if (!jobsLoaded.value) {
     return html`<div class="page"><${PageHeader} title=${t('translations.title')} /><p class="muted">${t('common.loading')}</p></div>`;
@@ -107,12 +100,7 @@ export function TranslationsPage() {
         <${Button} icon="folder-open" onClick=${() => foldersApi.open('output').catch((e) => toast({ tone: 'error', title: t('errors.action_failed'), message: e.message }))}>${t('translations.open_output')}<//>
         <${Button} variant="primary" icon="plus" href="#/new">${t('nav.new')}<//>`}
     />
-    ${queue.paused && html`<${Callout} tone=${queue.reason === 'restart' ? 'warning' : 'info'}
-        title=${queue.reason === 'restart' ? t('translations.queue.held_restart') : t('translations.queue.held_user')}
-        actions=${html`<${Button} size="sm" variant="primary" icon="play" onClick=${toggleQueue}>${t('translations.queue.resume')}<//>`}
-        class="group">
-      ${t('translations.queue.held_desc')}
-    <//>`}
+    <div class="group"><${QueuePausedNotice} /></div>
     <div class="toolbar">
       <div class="input-affix toolbar__search">
         <${Icon} name="search" size="sm" />
