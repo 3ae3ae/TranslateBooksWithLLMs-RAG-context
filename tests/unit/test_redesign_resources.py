@@ -81,6 +81,7 @@ def test_preferences_validation_is_atomic(resources):
 
 
 @pytest.mark.parametrize("patch", [
+    {"notes_mode": "off"},
     {"price_overrides": {"test:model": {"input_per_m": -1, "output_per_m": 1}}},
     {"price_overrides": {"test:model": {"input_per_m": True, "output_per_m": 1}}},
 ])
@@ -93,7 +94,8 @@ def test_remember_defaults_copies_job_fields(resources):
     preferences.remember_job_defaults({"connection_id": "other", "model": "model", "reasoning": "low", "bilingual": True, "notes": {"mode": "copy", "update_interval": 3}, "files": []})
     values = preferences.get_preferences()
     assert (values["default_connection_id"], values["default_model"], values["default_reasoning"]) == ("other", "model", "low")
-    assert values["notes_mode"] == "copy" and values["notes_update_interval"] == 3
+    assert values["notes_mode"] == "copy"
+    assert "notes_update_interval" not in values
     assert values["bilingual"] is True
     connections.set_default.assert_called_with("other", "model")
 
@@ -243,16 +245,16 @@ def test_estimate_requests_pricing_and_real_chunker(resources):
     uploads.mkdir(parents=True)
     path = uploads / "book.txt"
     path.write_text("\n\n".join(["A passage about Alice. " * 15] * 10))
-    payload = dict(files=[{"file_path": str(path), "input_filename": "book.txt"}], connection_id="test", model="test-model", passage_tokens=100, polish_after=True, notes={"mode": "build", "update_interval": 2, "consolidation_interval": 2, "prompt_max_tokens": 100, "source_memory_chars": 0})
+    payload = dict(files=[{"file_path": str(path), "input_filename": "book.txt"}], connection_id="test", model="test-model", passage_tokens=100, polish_after=True, notes={"mode": "build", "keep_updating": False, "update_interval": "ignored", "consolidation_interval": 2, "prompt_max_tokens": 100, "source_memory_chars": 0})
     seed_job("history", "completed", {"connection_id": "test", "model": "test-model", "stats": {"requests": 10, "elapsed_seconds": 50}})
     result = client.post("/api/estimate", json=payload)
     assert result.status_code == 200
     value = result.get_json()
     from src.api.blueprints.sample_routes import _load_source_units
     passages = len(_load_source_units(str(path), "txt", passage_tokens=100))
-    updates = (passages + 1) // 2
+    updates = passages
     assert value["passages"] == passages
-    consolidations = sum(i % 2 == 0 or i == passages for i in range(1, passages + 1, 2))
+    consolidations = sum(i % 2 == 0 or i == passages for i in range(1, passages + 1))
     assert value["requests"] == passages * 2 + updates + consolidations
     assert value["time_min_s"] == round(value["requests"] * 5 * 0.8)
     assert value["time_max_s"] == round(value["requests"] * 5 * 1.2)
@@ -275,7 +277,7 @@ def test_estimate_srt_lines_read_only_notes_and_billing(resources, local, kind, 
     path.write_text("\n\n".join(f"{i}\n00:00:01,000 --> 00:00:02,000\nHello Alice." for i in range(1, 6)))
     connections.resolve_for_pipeline.side_effect = lambda *a: dict(connection_id="test", model="unknown", llm_provider="openai", local=local, connection_type=kind)
     connections.list_models.return_value = []
-    payload = dict(files=[{"file_path": str(path)}], connection_id="test", model="unknown", srt_lines_per_block=2, notes={"mode": "copy", "keep_updating": False})
+    payload = dict(files=[{"file_path": str(path)}], connection_id="test", model="unknown", task="polish", srt_lines_per_block=2, notes={"mode": "copy", "keep_updating": False})
     value = client.post("/api/estimate", json=payload).get_json()
     assert value["passages"] == value["requests"] == 3
     assert value["billing"] == billing and value["time_source"] == "unknown"
@@ -345,3 +347,48 @@ def test_folder_routes_use_runtime_paths(resources, monkeypatch):
         assert client.post(f"/api/folders/{folder}/open").status_code == 200
     assert opened == [Path(config.OUTPUT_DIR), config.NOVEL_CONTEXTS_DIR, config.CUSTOM_INSTRUCTIONS_DIR]
     assert client.post("/api/folders/unknown/open").status_code == 404
+
+
+def test_old_notes_preferences_fall_back_to_build(resources):
+    client, _ = resources
+    preferences._atomic_write({"notes_mode": "off", "notes_update_interval": 9})
+    result = client.get("/api/preferences").json
+    assert result["values"]["notes_mode"] == "build"
+    assert result["schema"]["notes_mode"]["choices"] == ["build", "copy"]
+    assert "notes_update_interval" not in result["values"]
+    assert "notes_update_interval" not in result["schema"]
+
+
+def test_remember_polish_without_notes_keeps_translation_notes_default(resources):
+    preferences.remember_job_defaults({"task": "polish", "notes": {"mode": "off"}})
+    assert preferences.get_preferences()["notes_mode"] == "build"
+    assert preferences.get_preferences()["task"] == "polish"
+
+
+@pytest.mark.parametrize("task,mode,message", [
+    ("translate", "off", "Translation requires notes.mode to be build or copy"),
+    ("polish", "build", "Polish supports existing read-only notes or notes off"),
+])
+def test_estimate_rejects_unsupported_notes_modes(resources, task, mode, message):
+    response = resources[0].post("/api/estimate", json={"files": [{"file_path": "unused"}], "task": task, "notes": {"mode": mode}})
+    assert response.status_code == 400
+    assert response.json["error"]["message"] == message
+
+
+@pytest.mark.parametrize("mode", [None, "copy"])
+def test_estimate_srt_translation_updates_notes_for_every_passage(resources, mode):
+    client, _ = resources
+    uploads = Path(config.OUTPUT_DIR) / "uploads"
+    uploads.mkdir(parents=True)
+    path = uploads / "subtitles.srt"
+    path.write_text("\n\n".join(f"{i}\n00:00:01,000 --> 00:00:02,000\nHello Alice." for i in range(1, 6)))
+    note_options = {"keep_updating": False, "update_interval": None, "consolidation_interval": 2}
+    if mode:
+        notes.create_notes("existing.txt")
+        note_options.update(mode=mode, source="existing.txt")
+    response = client.post("/api/estimate", json={"files": [{"file_path": str(path)}], "srt_lines_per_block": 2, "notes": note_options})
+    assert response.status_code == 200
+    file = response.json["per_file"][0]
+    assert file["passages"] == file["notes_updates"] == 3
+    assert file["consolidation_calls"] == 2
+    assert file["requests"] == 8

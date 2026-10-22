@@ -24,7 +24,7 @@ def jobs(tmp_path, monkeypatch):
                       request_timeout=17, max_attempts=3, temperature=0.2, parallel_requests=3,
                       rate_limit_behavior='pause', rate_limit_retry_seconds=8)
     resolve = Mock(side_effect=lambda cid, model, reasoning: {**connection, 'connection_id': cid, 'model': model, 'reasoning_effort': reasoning})
-    preferences = dict(default_connection_id='local', default_model='test', source_language='English', target_language='Korean', notes_mode='off', passage_tokens=123)
+    preferences = dict(default_connection_id='local', default_model='test', source_language='English', target_language='Korean', notes_mode='build', passage_tokens=123)
     remember = Mock()
     notes_calls = []
     def prepare(mode, **kw):
@@ -63,6 +63,47 @@ def create(jobs, **kwargs):
     response = jobs.client.post('/api/jobs', json={'files': [jobs.files[0]], **kwargs})
     assert response.status_code == 201, response.json
     return response.json['jobs'][0]['id']
+
+
+@pytest.mark.parametrize('file_type', ['txt', 'srt'])
+@pytest.mark.parametrize('mode', [None, 'build', 'copy'])
+def test_translation_always_updates_notes_every_passage(jobs, file_type, mode):
+    path = Path(jobs.files[0]['file_path']).with_suffix('.' + file_type)
+    path.write_text('1\n00:00:01,000 --> 00:00:02,000\nHello Alice.\n' if file_type == 'srt' else 'Hello Alice.')
+    notes = {'keep_updating': False, 'update_interval': 'ignored'}
+    if mode:
+        notes['mode'] = mode
+    if mode == 'copy':
+        notes['source'] = 'existing.txt'
+    tid = create(jobs, files=[{'file_path': str(path)}], notes=notes)
+    config = jobs.db.get_job(tid)['config']
+    assert config['notes']['mode'] == (mode or 'build')
+    assert config['notes']['keep_updating'] is True
+    assert config['notes']['update_interval'] == 1
+    assert config['prompt_options']['auto_update_context'] is True
+    assert config['prompt_options']['novel_context_update_interval'] == 1
+    assert config['notes_file']
+
+
+@pytest.mark.parametrize('task,mode,message', [
+    ('translate', 'off', 'Translation requires notes.mode to be build or copy'),
+    ('polish', 'build', 'Polish supports existing read-only notes or notes off'),
+])
+def test_notes_modes_reject_unsupported_task_combinations(jobs, task, mode, message):
+    response = jobs.client.post('/api/jobs', json={'files': [jobs.files[0]], 'task': task, 'notes': {'mode': mode}})
+    assert response.status_code == 400
+    assert response.json['error'] == message
+    assert not jobs.notes_calls
+    assert not jobs.db.list_jobs()
+
+
+@pytest.mark.parametrize('notes,mode', [({}, 'off'), ({'mode': 'off'}, 'off'), ({'source': 'existing.txt'}, 'copy'), ({'mode': 'copy', 'source': 'existing.txt'}, 'copy')])
+def test_polish_keeps_notes_read_only_or_off(jobs, notes, mode):
+    tid = create(jobs, task='polish', notes={**notes, 'keep_updating': True})
+    config = jobs.db.get_job(tid)['config']
+    assert config['notes']['mode'] == mode
+    assert config['notes']['keep_updating'] is False
+    assert config['prompt_options']['auto_update_context'] is False
 
 
 def test_creation_freezes_defaults_without_keys(jobs):

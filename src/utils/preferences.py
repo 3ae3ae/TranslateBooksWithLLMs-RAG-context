@@ -30,8 +30,7 @@ SCHEMA = {
     "target_language": _field("string", ""),
     "task": _field("string", "translate", choices=["translate", "polish"]),
     "polish_after": _field("boolean", False),
-    "notes_mode": _field("string", "build", choices=["build", "copy", "off"]),
-    "notes_update_interval": _field("integer", 1, min=1, max=10000),
+    "notes_mode": _field("string", "build", choices=["build", "copy"]),
     "notes_prompt_max_tokens": _field("integer", 1800, min=0, max=1000000),
     "notes_source_memory_chars": _field("integer", 6000, min=0, max=1000000),
     "notes_consolidation_interval": _field("integer", 5, min=0, max=10000),
@@ -68,7 +67,7 @@ def _seed():
     env_keys = {
         "source_language": "DEFAULT_SOURCE_LANGUAGE", "target_language": "DEFAULT_TARGET_LANGUAGE",
         "passage_tokens": "MAX_TOKENS_PER_CHUNK", "srt_lines_per_block": "SRT_LINES_PER_BLOCK",
-        "output_filename_pattern": "OUTPUT_FILENAME_PATTERN", "notes_update_interval": "NOVEL_CONTEXT_UPDATE_INTERVAL",
+        "output_filename_pattern": "OUTPUT_FILENAME_PATTERN",
         "notes_prompt_max_tokens": "NOVEL_CONTEXT_PROMPT_MAX_TOKENS", "notes_source_memory_chars": "NOVEL_CONTEXT_SOURCE_MEMORY_CHARS",
         "notes_consolidation_interval": "NOVEL_CONTEXT_CONSOLIDATION_INTERVAL", "notes_accept_gender_corrections": "BYPASS_CONTEXT_GATING",
     }
@@ -112,6 +111,8 @@ def get_preferences() -> dict:
             _atomic_write(values)
         defaults = {k: copy.deepcopy(v["default"]) for k, v in SCHEMA.items()}
         defaults.update({k: v for k, v in values.items() if k in SCHEMA})
+        if defaults["notes_mode"] == "off":
+            defaults["notes_mode"] = "build"
         defaults.update(_connection_defaults())
         return defaults
 
@@ -177,6 +178,6 @@ def remember_job_defaults(job_request: dict) -> None:
         if source in job_request:
             patch[target] = job_request[source]
     for key, value in (job_request.get("notes") or {}).items():
-        if "notes_" + key in SCHEMA:
+        if "notes_" + key in SCHEMA and not (key == "mode" and value == "off"):
             patch["notes_" + key] = value
     patch_preferences(patch)

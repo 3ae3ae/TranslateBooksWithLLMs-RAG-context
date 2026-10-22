@@ -122,22 +122,23 @@ def build_configs(body, state_manager, output_dir):
     if not isinstance(notes_input, dict):
         raise ValueError('notes must be an object')
     notes = {key: defaults.get('notes_' + key, fallback) for key, fallback in (
-        ('mode', 'build'), ('update_interval', 1), ('prompt_max_tokens', 1800), ('source_memory_chars', 6000), ('consolidation_interval', 5), ('accept_gender_corrections', True))}
-    notes.update(keep_updating=True, series=False)
+        ('mode', 'build'), ('prompt_max_tokens', 1800), ('source_memory_chars', 6000), ('consolidation_interval', 5), ('accept_gender_corrections', True))}
+    notes.update(series=False)
     notes.update(notes_input)
+    notes.update(keep_updating=task == 'translate', update_interval=1)
+    if task == 'polish' and 'mode' not in notes_input:
+        notes['mode'] = 'copy' if notes.get('source') else 'off'
     if notes['mode'] not in ('build', 'copy', 'off'):
         raise ValueError('Invalid notes mode')
-    for key in ('keep_updating', 'series', 'accept_gender_corrections'):
+    if task == 'translate' and notes['mode'] == 'off':
+        raise ValueError('Translation requires notes.mode to be build or copy')
+    for key in ('series', 'accept_gender_corrections'):
         if not isinstance(notes[key], bool):
             raise ValueError(f'notes.{key} must be a boolean')
-    for key in ('update_interval', 'prompt_max_tokens', 'source_memory_chars', 'consolidation_interval'):
-        _integer(notes[key], f'notes.{key}', 1 if key == 'update_interval' else 0, 10000 if key in ('update_interval', 'consolidation_interval') else 1000000)
+    for key in ('prompt_max_tokens', 'source_memory_chars', 'consolidation_interval'):
+        _integer(notes[key], f'notes.{key}', 0, 10000 if key == 'consolidation_interval' else 1000000)
     if task == 'polish' and notes['mode'] == 'build':
-        if 'mode' in notes_input:
-            raise ValueError('Polish supports existing read-only notes or notes off')
-        notes['mode'] = 'off'
-    if task == 'polish':
-        notes['keep_updating'] = False
+        raise ValueError('Polish supports existing read-only notes or notes off')
     if notes['mode'] == 'copy' and not notes.get('source'):
         raise ValueError('notes.source is required for copy')
     tokens = _integer(data.get('passage_tokens', 450), 'passage_tokens', 50)
@@ -185,8 +186,6 @@ def build_configs(body, state_manager, output_dir):
         if not PathValidator.validate_filename(output)[0] or output in ('.', '..'):
             raise ValueError('Invalid output filename')
         file_notes = copy.deepcopy(notes)
-        if file_type == 'srt' and 'mode' not in notes_input:
-            file_notes['mode'] = 'off'
         prompt = {
             'text_cleanup': data.get('ocr_cleanup', False), 'plain_text_mode': data.get('simplify_formatting', False),
             'bilingual': data.get('bilingual', False), 'chapter_mode': data.get('chapter_mode', False),

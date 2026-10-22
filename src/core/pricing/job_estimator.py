@@ -134,13 +134,17 @@ def estimate_job(data, uploads_dir):
     notes = data.get("notes") or {}
     if not isinstance(notes, dict):
         raise ValueError("notes must be an object")
-    if notes.get("mode", defaults["notes_mode"]) not in ("off", "build", "copy"):
+    mode = notes.get("mode", ("copy" if notes.get("source") else "off") if task == "polish" else defaults["notes_mode"])
+    if mode not in ("off", "build", "copy"):
         raise ValueError("Invalid notes mode")
-    interval = notes.get("update_interval", defaults["notes_update_interval"])
+    if task == "translate" and mode == "off":
+        raise ValueError("Translation requires notes.mode to be build or copy")
+    if task == "polish" and mode == "build":
+        raise ValueError("Polish supports existing read-only notes or notes off")
     consolidation = notes.get("consolidation_interval", defaults["notes_consolidation_interval"])
     budget = notes.get("prompt_max_tokens", defaults["notes_prompt_max_tokens"])
     memory = notes.get("source_memory_chars", defaults["notes_source_memory_chars"])
-    for name, value, minimum in [("update_interval", interval, 1), ("consolidation_interval", consolidation, 0), ("prompt_max_tokens", budget, 0), ("source_memory_chars", memory, 0)]:
+    for name, value, minimum in [("consolidation_interval", consolidation, 0), ("prompt_max_tokens", budget, 0), ("source_memory_chars", memory, 0)]:
         if type(value) is not int or not minimum <= value <= 1000000:
             raise ValueError("Invalid notes " + name)
     chunker = TokenChunker(max_tokens=passage_tokens)
@@ -166,9 +170,7 @@ def estimate_job(data, uploads_dir):
         main_tokens = sum(chunker.count_tokens(unit["main_content"]) for unit in units)
         context_tokens = sum(chunker.count_tokens(unit.get("context_before", "") + unit.get("context_after", "")) for unit in units)
         passes = 1 + int(task == "translate" and bool(data.get("polish_after", defaults["polish_after"])))
-        mode = notes.get("mode", "off" if ft == "srt" else defaults["notes_mode"])
-        updating = task == "translate" and mode != "off" and (mode == "build" or notes.get("keep_updating", True))
-        update_indices = range(1, passages + 1, interval) if updating else ()
+        update_indices = range(1, passages + 1) if task == "translate" else ()
         updates = len(update_indices)
         consolidations = sum(index % consolidation == 0 or index == passages for index in update_indices) if consolidation else 0
         requests = passages * passes + updates + consolidations
