@@ -724,3 +724,4 @@ button.chip:hover { color: var(--text); border-color: var(--text-3); }
 @keyframes slide-in { from { transform: translateX(24px); opacity: 0; } }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
 @media (min-width: 901px) { .jump-pill { left: calc(50% + var(--sidebar-w) / 2); } }
+.passage__col--draft { background: var(--surface-2); }

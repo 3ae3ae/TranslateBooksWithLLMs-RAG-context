@@ -154,21 +154,43 @@ function useReviewMarks(jobId) {
 const nearBottom = () => window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 160;
 const scrollToEnd = () => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
 
+/** Stage badge for passages of jobs that polish each passage right after translating it. */
+function StageBadge({ p, job }) {
+  if (p.stage === 'draft') {
+    const active = job.status === 'running' && job.phase === 'polishing' && job.current_unit === p.index;
+    return html`<${Pill} tone=${active ? 'accent' : undefined} dot=${active ? 'busy' : undefined}>${t(active ? 'job.review.stage.polishing' : 'job.review.stage.waiting')}<//>`;
+  }
+  if (p.stage === 'polish_failed') return html`<${Pill} tone="warning" icon="triangle-alert">${t('job.review.stage.polish_failed')}<//>`;
+  return null;
+}
+
 function ReviewRow({ p, job, marks, onToggle }) {
+  const [showDraft, setShowDraft] = useState(false);
   const checked = marks.checked.has(p.index);
   const flagged = marks.flagged.has(p.index);
-  return html`<article id=${`passage-${p.index}`} class=${cx('review-row', checked && 'review-row--checked', flagged && 'review-row--flagged')}>
+  // Text still being polished will change, so it can't be signed off yet.
+  const checkable = p.stage !== 'draft';
+  const canCompare = p.stage === 'polished' && p.draft && p.draft !== p.translation;
+  const text = showDraft && canCompare ? p.draft : p.translation;
+  return html`<article id=${`passage-${p.index}`} class=${cx('review-row', checked && checkable && 'review-row--checked', flagged && 'review-row--flagged')}>
     <header class="review-row__head">
       <span class="review-row__num">${t('job.live.passage', { n: formatNumber(p.index + 1) })}</span>
       ${p.status && p.status !== 'completed' && html`<${Pill} tone=${p.status === 'failed' ? 'danger' : 'warning'}>${t(`job.passages.status.${p.status}`)}<//>`}
+      <${StageBadge} p=${p} job=${job} />
       <span class="grow" />
+      ${canCompare && html`<${Button} variant="link" size="sm" icon=${showDraft ? 'eye-off' : 'eye'} aria-pressed=${String(showDraft)}
+        onClick=${() => setShowDraft(!showDraft)}>${showDraft ? t('job.review.show_polished') : t('job.review.show_draft')}<//>`}
       ${job.notes_name && html`<a class="small" href=${`#/job/${encodeURIComponent(job.id)}/notes?at=${p.index}`}>${t('job.passages.notes_here')}</a>`}
       <${IconButton} size="sm" icon="flag" label=${t('job.review.flag')} pressed=${flagged} onClick=${() => onToggle('flagged', p.index)} />
-      <${IconButton} size="sm" icon="check" label=${t('job.review.check')} pressed=${checked} onClick=${() => onToggle('checked', p.index)} />
+      <${IconButton} size="sm" icon="check" label=${checkable ? t('job.review.check') : t('job.review.check_after_polish')} pressed=${checked && checkable}
+        disabled=${!checkable} onClick=${() => onToggle('checked', p.index)} />
     </header>
     <div class="passage passage--review">
       <div class="passage__col"><div class="passage__text">${p.source}</div></div>
-      <div class="passage__col"><div class="passage__text">${p.translation || html`<span class="faint">${t('job.passages.not_yet')}</span>`}</div></div>
+      <div class=${cx('passage__col', showDraft && canCompare && 'passage__col--draft')}>
+        ${showDraft && canCompare && html`<div class="passage__lang">${t('job.review.draft_label')}</div>`}
+        <div class="passage__text">${text || html`<span class="faint">${t('job.passages.not_yet')}</span>`}</div>
+      </div>
     </div>
   </article>`;
 }
@@ -215,7 +237,7 @@ function ReviewStream({ job }) {
       }
     }).catch(() => {});
     return () => { alive = false; };
-  }, [job.units_done, job.status, job.phase]);
+  }, [job.units_done, job.status, job.phase, job.passages_revision]);
 
   useEffect(() => {
     const onScroll = () => { if (nearBottom()) setFresh(0); };
@@ -231,7 +253,7 @@ function ReviewStream({ job }) {
       .then((d) => { if (alive) setResults(d); })
       .catch((e) => { if (alive) setError(e); });
     return () => { alive = false; };
-  }, [query, job.id]);
+  }, [query, job.id, job.passages_revision]);
 
   const loadEarlier = async () => {
     const from = Math.max(0, start - WINDOW);
@@ -281,8 +303,8 @@ function ReviewStream({ job }) {
     ${!results && start > 0 && html`<${Button} block icon="chevron-up" onClick=${loadEarlier}>${t('job.review.load_earlier', { n: formatNumber(start) })}<//>`}
     ${rows.length === 0 && !running && html`<p class="muted">${results ? t('job.passages.no_match') : t('job.review.empty')}</p>`}
     ${rows.map((p) => html`<${ReviewRow} key=${p.index} p=${p} job=${job} marks=${marks} onToggle=${toggle} />`)}
-    ${!results && running && atEnd && html`<div class="review-row review-row--pending" role="status">
-      <${Spinner} size="sm" />${t(job.phase === 'polishing' ? 'job.review.polishing' : 'job.review.translating', { n: formatNumber((job.units_done || 0) + 1) })}
+    ${!results && running && atEnd && job.phase !== 'polishing' && html`<div class="review-row review-row--pending" role="status">
+      <${Spinner} size="sm" />${t(job.phase === 'notes' ? 'job.review.notes' : 'job.review.translating', { n: formatNumber((job.current_unit ?? job.units_done ?? 0) + 1) })}
     </div>`}
     ${!results && fresh > 0 && html`<button type="button" class="jump-pill" onClick=${() => { setFresh(0); scrollToEnd(); }}>
       <${Icon} name="arrow-down" size="sm" />${t('job.review.new_below', { count: fresh, n: formatNumber(fresh) })}
