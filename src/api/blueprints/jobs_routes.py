@@ -4,6 +4,7 @@ import json
 import re
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request, send_file
@@ -11,6 +12,20 @@ from flask import Blueprint, jsonify, request, send_file
 from src.api.job_runner import get_job_runner
 from src.api.services.path_validator import PathValidator
 from src.persistence.database import sanitize_config_secrets
+
+
+def _iso(value):
+    """Timestamps leave the API as ISO 8601 UTC, whatever form they were stored in."""
+    if value in (None, ''):
+        return None
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
+    text = str(value).replace(' ', 'T')
+    # SQLite CURRENT_TIMESTAMP is UTC without an offset.
+    return text if text.endswith('Z') or '+' in text[10:] or '-' in text[10:] else text + 'Z'
+
+
+_PHASES = {'context': 'notes', 'refining': 'polishing', 'refinement': 'polishing', 'translation': 'translating'}
 
 
 def job_summary(runner, job):
@@ -33,13 +48,14 @@ def job_summary(runner, job):
         elapsed = stats.get('elapsed_seconds', 0) + max(0, time.time() - stats.get('start_time', time.time()))
     notes_rebuild = config.get('_context_resync')
     rebuild_indices = [row['chunk_index'] for row in runner.db.get_chunks(tid)] if notes_rebuild else []
+    phase = 'context' if config.get('_pending_operation') == 'notes_rebuild' else stats.get('phase', stats.get('current_phase', 'translation'))
     return {
         'id': tid, 'title': Path(config.get('input_filename') or 'Translation').stem,
         'input_filename': config.get('input_filename'), 'file_type': job['file_type'],
         'task': config.get('task', 'polish' if config.get('refine_only') else 'translate'),
         'polish_after': config.get('polish_after', config.get('refine_after', False)),
         'status': status, 'status_reason': config.get('status_reason'),
-        'phase': 'context' if config.get('_pending_operation') == 'notes_rebuild' else stats.get('phase', stats.get('current_phase', 'translation')),
+        'phase': _PHASES.get(phase, phase),
         'percent': stats.get('percent', stats.get('progress_percent', done / total * 100 if total else 0)),
         'units_done': done, 'units_total': total, 'units_failed': stats.get('failed_chunks', 0),
         'units_untranslated': stats.get('fallback_used', epub.get('fallback_used', 0)),
@@ -47,8 +63,8 @@ def job_summary(runner, job):
         'source_language': config.get('source_language', ''), 'target_language': config.get('target_language'),
         'connection_id': config.get('connection_id'), 'connection_name': config.get('connection_name'),
         'model': config.get('model'), 'reasoning': config.get('reasoning', 'off'),
-        'created_at': job['created_at'], 'started_at': config.get('started_at'),
-        'updated_at': job['updated_at'], 'finished_at': config.get('finished_at', job.get('completed_at')),
+        'created_at': _iso(job['created_at']), 'started_at': _iso(config.get('started_at')),
+        'updated_at': _iso(job['updated_at']), 'finished_at': _iso(config.get('finished_at', job.get('completed_at'))),
         'queue_position': order.index(tid) + 1 if tid in order else None,
         'output_filename': Path(output).name if output else config.get('output_filename'),
         'output_exists': bool(output and Path(output).is_file()), 'has_cover': bool(config.get('cover_path') and Path(config['cover_path']).is_file()),

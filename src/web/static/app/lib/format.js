@@ -15,7 +15,8 @@ export function formatBytes(bytes) {
 }
 
 export function formatDuration(seconds) {
-    const total = Math.max(0, Math.floor(seconds));
+    // Anything that took time shows at least one second.
+    const total = seconds > 0 && seconds < 1 ? 1 : Math.max(0, Math.floor(seconds));
     const hours = Math.floor(total / 3600);
     const minutes = Math.floor(total / 60) % 60;
     const korean = locale.value === 'ko';
@@ -25,8 +26,11 @@ export function formatDuration(seconds) {
     return unit(total, 's', '초');
 }
 
+// The API sends timestamps as ISO strings or Unix seconds.
+export const toDate = (value) => new Date(typeof value === 'number' && value < 1e12 ? value * 1000 : value);
+
 export function formatRelativeTime(dateOrIso) {
-    const seconds = (new Date(dateOrIso).getTime() - Date.now()) / 1000;
+    const seconds = (toDate(dateOrIso).getTime() - Date.now()) / 1000;
     const units = [['year', 31536000], ['month', 2592000], ['week', 604800],
         ['day', 86400], ['hour', 3600], ['minute', 60], ['second', 1]];
     const [unit, size] = units.find(([, size]) => Math.abs(seconds) >= size) || units.at(-1);
@@ -34,7 +38,7 @@ export function formatRelativeTime(dateOrIso) {
 }
 
 export const formatDate = (dateOrIso, options = {}) =>
-    new Intl.DateTimeFormat(locale.value, options).format(new Date(dateOrIso));
+    new Intl.DateTimeFormat(locale.value, options).format(toDate(dateOrIso));
 
 export function formatCost(usd) {
     const digits = usd > 0 && usd < 0.01 ? 4 : 2;
