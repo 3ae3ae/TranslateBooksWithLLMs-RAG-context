@@ -3,9 +3,9 @@ import { Button, Icon, Progress, Callout, Cover, Spinner, Pill, EmptyState } fro
 import { Field, Select, Segmented, NumberInput } from '../ui/forms.js';
 import { Tabs, Disclosure } from '../ui/layout.js';
 import { Menu, Dialog, toast } from '../ui/overlays.js';
-import { JobStatusPill, primaryAction, menuItems, langPair, phaseLabel, jobActions, ChangeModelDialog, AddChaptersDialog, QueuePausedNotice } from '../ui/jobs.js';
+import { JobStatusPill, primaryAction, menuItems, langPair, phaseLabel, statusInfo, jobActions, ChangeModelDialog, AddChaptersDialog, QueuePausedNotice } from '../ui/jobs.js';
 import { NotesView, NotesEditor, NormalizationPreview } from '../ui/notes-editor.js';
-import { jobsById, upsertJob, jobsLoaded } from '../lib/stores.js';
+import { jobsById, upsertJob, jobsLoaded, connections } from '../lib/stores.js';
 import { jobsApi, jobNotesApi } from '../lib/api.js';
 import { onSocket } from '../lib/socket.js';
 import { navigate, route } from '../lib/router.js';
@@ -33,6 +33,14 @@ function useCountdown(iso) {
 }
 
 // ---------------------------------------------------------------- progress
+
+/** Same billing rule as the estimate: local models and Ollama plans have no per-request price. */
+function costLabel(job) {
+  if (job.cost_usd != null) return formatCost(job.cost_usd);
+  const conn = connections.value.find((c) => c.id === job.connection_id);
+  if (conn && conn.type === 'ollama_cloud') return t('new.summary.plan_billing');
+  return conn && conn.local ? t('new.summary.no_api_cost') : t('job.stat.cost_unknown');
+}
 
 function Stat({ label, value }) {
   return html`<div class="stat"><span class="stat__label">${label}</span><span class="stat__value">${value}</span></div>`;
@@ -96,7 +104,7 @@ function ProgressTab({ job, detail, preview }) {
 
     <div class="card"><div class="card__body">
       <div class="phase">
-        <span class="phase__label">${done ? t('job.phase.done') : job.status === 'queued' ? t('job.status.queued') : phaseLabel(job)}${unitsLine && html` <span class="muted" style="font-weight:500">— ${unitsLine}</span>`}</span>
+        <span class="phase__label">${done ? t('job.phase.done') : job.status === 'running' ? phaseLabel(job) : statusInfo(job).label}${unitsLine && html` <span class="muted" style="font-weight:500">— ${unitsLine}</span>`}</span>
         <span class="phase__pct">${formatNumber(Math.round(job.percent || 0))}%</span>
       </div>
       <${Progress} size="lg" value=${job.percent} tone=${done ? 'success' : job.status === 'failed' ? 'danger' : undefined}
@@ -104,7 +112,7 @@ function ProgressTab({ job, detail, preview }) {
       <div class="stat-row">
         <${Stat} label=${t('job.stat.elapsed')} value=${job.elapsed_seconds ? formatDuration(job.elapsed_seconds) : '—'} />
         ${!done && html`<${Stat} label=${t('job.stat.remaining')} value=${job.eta_seconds ? formatDuration(job.eta_seconds) : '—'} />`}
-        <${Stat} label=${t('job.stat.cost')} value=${job.cost_usd != null ? formatCost(job.cost_usd) : t('job.stat.cost_unknown')} />
+        <${Stat} label=${done ? t('job.stat.cost_total') : t('job.stat.cost')} value=${costLabel(job)} />
         <${Stat} label=${t('job.stat.requests')} value=${job.requests != null ? formatNumber(job.requests) : '—'} />
       </div>
     </div></div>

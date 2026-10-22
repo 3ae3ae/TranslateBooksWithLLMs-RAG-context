@@ -69,9 +69,12 @@ async function act(fn, successMsg) {
 
 export const jobActions = {
   pause: (job) => act(() => jobsApi.pause(job.id)),
-  resume: (job, overrides) => act(() => jobsApi.resume(job.id, overrides), (r) => {
-    const j = r && r.job;
-    return j && j.status === 'queued' ? t('job.toast.resume_queued') : t('job.toast.resumed');
+  resume: (job, overrides) => act(() => jobsApi.resume(job.id, overrides), () => {
+    // A resumed job is briefly "queued" even when it starts right away; only mention the queue if something else runs.
+    const q = queueState.value;
+    if (q.paused && q.reason !== 'restart') return t('job.toast.resume_held');
+    const busy = Object.values(jobsById.value).some((j) => j.status === 'running' && j.id !== job.id);
+    return busy ? t('job.toast.resume_queued') : t('job.toast.resumed');
   }),
   move: (job, to) => act(() => jobsApi.move(job.id, to)),
   removeFromQueue: async (job) => {
