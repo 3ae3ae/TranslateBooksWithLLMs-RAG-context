@@ -67,6 +67,8 @@ What happens to the translation depends on its state:
 
 Passages that are already translated are never retranslated by a notes rebuild. A rebuild can be paused and resumed from the same tab.
 
+When you translate and polish, each passage is polished right after it is translated, with the notes as they are at that point. If the notes learn something important later in the book, **Rebuild and polish** on the finished translation polishes it again with the corrected notes.
+
 ## The notes library
 
 The **Story notes** page lists every notes file. Open one to read or edit it, or create, rename, duplicate and delete notes.

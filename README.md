@@ -25,7 +25,7 @@ Keep the terminal running. Closing the browser tab doesn't stop a translation. S
 
 1. **Connect a model.** Open **Settings → Model connections**. A *Local Ollama* connection is always there. For a cloud service, click **Add a connection**, choose the service, paste your API key and click **Test connection**, which lists the available models. For LM Studio, llama.cpp, vLLM and similar servers, choose *OpenAI-compatible* and enter the server address.
 2. **Start a translation.** Click **New translation**, drop one or more files, pick the target language and a model, and choose how story notes should work. The summary on the right estimates the number of requests, the time and the cost before you start.
-3. **Follow it.** **Translations** lists running, queued and finished work. Each translation's page shows live progress, every passage side by side with its source, the story notes, and a log. Download the result from there.
+3. **Review it as it goes.** **Translations** lists running, queued and finished work. A translation's **Review** tab shows every finished passage next to its source while the rest is still translating: read at your own pace, mark passages as checked, flag ones to come back to, and fix the story notes from any passage. Download the result from there.
 
 The interface is in English and Korean; switch with the language button at the bottom of the sidebar.
 
@@ -33,7 +33,7 @@ The interface is in English and Korean; switch with the language button at the b
 
 | Feature | What it does |
 |---|---|
-| Translate, or polish | Translate a book, polish an existing translation, or translate and then polish in a second pass. |
+| Translate, or polish | Translate a book, polish an existing translation, or translate and polish: each passage is polished right after it is translated, so you can watch both happen and compare a passage before and after polishing. |
 | Formatting | EPUB and DOCX keep their formatting, or you can simplify it so far fewer passages fail. SRT timings are kept. An optional bilingual output puts the original under each paragraph. |
 | [Story notes](docs/STORY_NOTES.md) | Notes the model builds and updates while translating. Start from an earlier volume's notes, view the notes as of any passage, and correct them mid-book. |
 | Style guides | Your own instructions for translating and for polishing, such as keeping honorifics or how friends talk to each other. |

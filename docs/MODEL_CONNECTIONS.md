@@ -85,7 +85,7 @@ Every translation, comparison column and model change has a **Reasoning** settin
 
 The model picker shows a price per million input and output tokens when it is known: from the model list for OpenRouter, Poe and Neuralwatt, and from a bundled price table for other services. Local models show *on this computer* and cost nothing.
 
-Before you start a translation, the summary counts the requests from the book's actual passages, plus story-notes updates and the polish pass if you chose one, and estimates the cost from the price. The time estimate comes from your earlier translations with the same connection and model, so a fresh install shows *Time unknown* until you have one (a run on **Compare models** doesn't count).
+Before you start a translation, the summary counts the requests from the book's actual passages, plus story-notes updates and one polish request per passage if you chose to polish, and estimates the cost from the price. The time estimate comes from your earlier translations with the same connection and model, so a fresh install shows *Time unknown* until you have one (a run on **Compare models** doesn't count).
 
 ## How jobs use connections
 
