@@ -108,7 +108,6 @@ class CheckpointManager:
             return
 
         # Always preserve uploaded files for web interface
-        # For CLI, only preserve if explicitly needed
         job_upload_dir = self.uploads_dir / translation_id
         job_upload_dir.mkdir(parents=True, exist_ok=True)
 

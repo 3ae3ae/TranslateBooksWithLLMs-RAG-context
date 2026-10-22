@@ -2,7 +2,6 @@
 Centralized configuration class
 """
 import os
-import sys
 import logging
 from pathlib import Path
 from typing import Optional
@@ -21,9 +20,7 @@ if _debug_mode:
 # Get config directory (current working directory)
 _config_dir = Path.cwd()
 
-# Check if .env file exists and provide helpful guidance
 _env_file = _config_dir / '.env'
-_env_example = _config_dir / '.env.example'
 _env_exists = _env_file.exists()
 _cwd = Path.cwd()
 
@@ -32,16 +29,11 @@ if _debug_mode:
     _config_logger.debug(f"📁 Looking for .env at: {_env_file.absolute()}")
     _config_logger.debug(f"📁 .env exists: {_env_exists}")
 
-# Whether the .env file is missing. The actual "no .env" warning is emitted
-# later by warn_env_config_missing(), which the entrypoints call AFTER they
-# have resolved their effective settings — so the warning shows the real CLI
-# arguments (provider, endpoint, model) instead of import-time defaults (#187).
 _project_root = Path(__file__).parent.parent.resolve()
 NOVEL_CONTEXTS_DIR = _project_root / 'TranslateBook_Data' / 'Novel_Contexts'
 CUSTOM_INSTRUCTIONS_DIR = _project_root / 'TranslateBook_Data' / 'Custom_Instructions'
 DATA_DIR = _project_root / 'data'
 UPLOADS_DIR = DATA_DIR / 'uploads'
-ENV_FILE_MISSING = not _env_exists
 
 # Load .env file if it exists
 _dotenv_result = load_dotenv(_env_file)
@@ -183,60 +175,6 @@ def resolve_parallel_workers(provider: Optional[str], requested: Optional[int] =
         requested = 1
     return max(1, min(MAX_PARALLEL_TRANSLATIONS, requested))
 
-
-def warn_env_config_missing(provider=None, api_endpoint=None, model=None, port=None):
-    """Warn that no .env was found, listing the settings actually in effect.
-
-    Entrypoints call this after resolving their effective configuration (CLI
-    args for translate.py, config defaults for the web server), so the box
-    reflects what the run will really use instead of hardcoded defaults (#187).
-
-    No-op when a .env exists.
-    """
-    if not ENV_FILE_MISSING:
-        return
-
-    provider = LLM_PROVIDER if provider is None else provider
-    api_endpoint = API_ENDPOINT if api_endpoint is None else api_endpoint
-    model = DEFAULT_MODEL if model is None else model
-    port = PORT if port is None else port
-
-    print("\n" + "=" * 70)
-    print("⚠️  WARNING: .env configuration file not found")
-    print("=" * 70)
-    print("\nThe application will run with the settings below, but you may want to")
-    print("save them to a .env file for your specific setup.\n")
-
-    if _env_example.exists():
-        print("📋 QUICK SETUP:")
-        print("   1. Create a concise config: uv run python -m src.utils.env_helper create")
-        print("   2. Edit .env to match your configuration")
-        print("   3. Read .env.example only when you need the full reference")
-        print("   4. Restart the application\n")
-    else:
-        print("📋 MANUAL SETUP:")
-        print(f"   1. Create a .env file in: {Path.cwd()}")
-        print("   2. Add your configuration (see documentation)")
-        print("   3. Restart the application\n")
-
-    print("🔧 SETTINGS BEING USED:")
-    print(f"   • API Endpoint: {api_endpoint}")
-    print(f"   • LLM Provider: {provider}")
-    print(f"   • Model: {model}")
-    print(f"   • Port: {port}")
-    print("\n💡 TIP: These settings are not persisted. Create a .env file to")
-    print("   keep them across runs.\n")
-    print("=" * 70)
-    print("Press Ctrl+C to stop and configure, or wait 5 seconds to continue...")
-    print("=" * 70 + "\n")
-
-    # Give user time to read and react
-    import time
-    try:
-        time.sleep(5)
-    except KeyboardInterrupt:
-        print("\n\n⏹️  Startup cancelled by user. Please configure .env and try again.\n")
-        sys.exit(0)
 
 # =============================================================================
 # THINKING MODEL CONFIGURATION
