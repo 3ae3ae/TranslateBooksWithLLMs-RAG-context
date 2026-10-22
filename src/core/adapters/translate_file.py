@@ -215,6 +215,7 @@ async def translate_file(
             mistral_api_key=mistral_api_key,
             deepseek_api_key=deepseek_api_key,
             poe_api_key=poe_api_key,
+            nim_api_key=nim_api_key,
             log_callback=log_callback,
             connection=connection,
         )
@@ -289,6 +290,7 @@ async def translate_file(
         'mistral_api_key': mistral_api_key,
         'deepseek_api_key': deepseek_api_key,
         'poe_api_key': poe_api_key,
+        'nim_api_key': nim_api_key,
         'prompt_options': prompt_options,
         'connection': connection,
         'context_window': context_window,
