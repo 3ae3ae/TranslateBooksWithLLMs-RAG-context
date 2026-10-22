@@ -293,9 +293,7 @@ Use this context for narrative consistency: character identity, proven gender,
 aliases, relationships, addressing, and discovered terminology hints.
 Treat stated character genders as binding continuity facts. Do not reinterpret
 or change a character's gender from a title, role, old body, disguise,
-relationship label, or model prior.
-If this context conflicts with `# GLOSSARY - REQUIRED TRANSLATIONS`, the
-required glossary wins."""
+relationship label, or model prior."""
     if refinement:
         guidance += """
 
@@ -325,7 +323,6 @@ def generate_translation_prompt(
     has_placeholders: bool = True,
     prompt_options: dict = None,
     placeholder_format: Optional[Tuple[str, str]] = None,
-    glossary_block: str = "",
 ) -> PromptPair:
     """
     Generate the translation prompt with all contextual elements.
@@ -458,9 +455,6 @@ For consistency and natural flow, here's what came immediately before:
 
 """
 
-    # Glossary block lives in the user prompt: it changes per chunk, so
-    # keeping it out of the system prompt lets the system prompt stay
-    # stable and cacheable across chunks.
     dialogue_section = _build_dialogue_attribution_section(prompt_options)
     novel_context_section = _build_novel_context_section(
         prompt_options,
@@ -477,11 +471,10 @@ For consistency and natural flow, here's what came immediately before:
     )
     if novel_context_section:
         novel_context_section = f"{novel_context_section}\n\n"
-    glossary_section = f"{glossary_block}\n" if glossary_block and glossary_block.strip() else ""
     if dialogue_section:
         dialogue_section = f"{dialogue_section}\n\n"
 
-    user_prompt = f"""{previous_translation_block_text}{novel_context_section}{glossary_section}{dialogue_section}# TEXT TO TRANSLATE
+    user_prompt = f"""{previous_translation_block_text}{novel_context_section}{dialogue_section}# TEXT TO TRANSLATE
 
 {INPUT_TAG_IN}
 {main_content}
@@ -503,101 +496,6 @@ Provide your translation now:"""
 # GLOSSARY: NER EXTRACTION PROMPT (Phase 2)
 # ============================================================================
 
-NER_TAG_IN = "<NER_JSON>"
-NER_TAG_OUT = "</NER_JSON>"
-
-
-def generate_ner_extraction_prompt(
-    text: str,
-    source_language: str = "Chinese",
-    target_language: str = "English",
-    related_glossary_terms: Optional[Dict[str, str]] = None,
-) -> PromptPair:
-    """
-    Build a prompt that asks the LLM to extract recurring proper-noun entities
-    (characters, locations, organizations/sects, items) from a sample of source
-    text, along with a suggested target-language translation for each.
-
-    Output is wrapped in <NER_JSON>...</NER_JSON> with a strict schema. The
-    parser is permissive (handles markdown fences, missing tags, partial JSON).
-    """
-    vietnamese_skill_guidance = ""
-    if (target_language or "").strip().casefold() in {
-        "vietnamese",
-        "tiếng việt",
-        "tieng viet",
-        "vi",
-    }:
-        vietnamese_skill_guidance = """
-8. For English named skills, abilities, techniques, spells, combat moves, weapons, artifacts, and equipment, prefer concise Sino-Vietnamese literary target renderings when natural for Vietnamese fantasy or game prose. Preserve English only for brands, code labels, UI/system keys, or terms that clearly should remain untranslated."""
-
-    system_prompt = f"""You are a literary entity extractor. Your job is to read a passage written in {source_language} and identify recurring proper nouns that a translator would want to keep consistent across an entire book.
-
-# CATEGORIES (use exactly these labels)
-
-- "character"     — named persons (李凡, Li Fan, Captain Ahab)
-- "location"      — places, regions, buildings (青玄宗大殿, Mount Tai)
-- "organization"  — sects, schools, clans, factions, companies (青玄宗, Heavenly Sword Gate)
-- "item"          — named artifacts, weapons, treasures, techniques (混沌珠, Excalibur)
-- "title"         — honorifics or named ranks tied to a person (Elder, 长老, Master)
-- "other"         — anything else worth keeping consistent (events, magical formulas)
-
-# RULES
-
-1. Extract ONLY proper nouns or named concepts that look likely to recur. Skip generic words.
-2. Do NOT translate common nouns or descriptive phrases — only named entities.
-3. For each entity, propose ONE canonical {target_language} translation. Use the standard romanization or the most natural literary rendering. Keep the proposal concise.
-4. Deduplicate: if the same entity appears multiple times in the passage, list it once.
-5. If you are unsure about an entry, omit it rather than guessing.
-6. Preserve the original {source_language} form exactly as it appears in the text (no extra spaces, no normalization).
-7. If the related existing glossary contains part of a longer candidate, reuse the established target for that part when it is semantically the same. Prefer a longer existing glossary entry over composing a new one from shorter parts.
-{vietnamese_skill_guidance}
-
-# OUTPUT FORMAT
-
-Return ONLY a JSON array wrapped between {NER_TAG_IN} and {NER_TAG_OUT}. No prose, no explanations.
-
-Each array element MUST be an object with these keys:
-  - "source"   (string, required) — the entity in {source_language}
-  - "target"   (string, required) — the proposed {target_language} translation
-  - "category" (string, required) — one of the labels listed above
-
-Example:
-{NER_TAG_IN}
-[
-  {{"source": "李凡", "target": "Li Fan", "category": "character"}},
-  {{"source": "青玄宗", "target": "Qingxuan Sect", "category": "organization"}}
-]
-{NER_TAG_OUT}
-
-If no entities are found, return an empty array: {NER_TAG_IN}[]{NER_TAG_OUT}.
-
-Do NOT wrap the JSON in markdown code fences. Do NOT add commentary before or after the tags."""
-
-    related_glossary_block = ""
-    if related_glossary_terms:
-        related_lines = [
-            "# RELATED EXISTING GLOSSARY",
-            "",
-            "Use these existing translations as consistency hints for overlapping names or compound terms. Do not repeat an entry that is already complete; suggest only genuinely new longer terms or missing related entities.",
-            "",
-        ]
-        for source, target in related_glossary_terms.items():
-            related_lines.append(f"  - {source} -> {target}")
-        related_glossary_block = "\n".join(related_lines) + "\n\n"
-
-    user_prompt = f"""# SOURCE TEXT ({source_language})
-
-{related_glossary_block}
-{INPUT_TAG_IN}
-{text}
-{INPUT_TAG_OUT}
-
-Extract the recurring named entities now. Output the JSON array between {NER_TAG_IN} and {NER_TAG_OUT}, nothing else."""
-
-    return PromptPair(system=system_prompt.strip(), user=user_prompt.strip())
-
-
 def generate_refinement_prompt(
     draft_translation: str,
     context_before: str = "",
@@ -610,7 +508,6 @@ def generate_refinement_prompt(
     prompt_options: dict = None,
     placeholder_format: Optional[Tuple[str, str]] = None,
     additional_instructions: str = "",
-    glossary_block: str = "",
 ) -> PromptPair:
     """
     Generate a refinement prompt to polish a draft translation.
@@ -754,8 +651,6 @@ For consistency and natural flow, here's what came immediately before:
 """
 
     dialogue_section = _build_dialogue_attribution_section(prompt_options)
-    # Glossary block injected here (per-chunk dynamic) so the system prompt
-    # stays cacheable across chunks.
     novel_context_section = _build_novel_context_section(
         prompt_options,
         reference_text="\n".join(
@@ -772,11 +667,10 @@ For consistency and natural flow, here's what came immediately before:
     )
     if novel_context_section:
         novel_context_section = f"{novel_context_section}\n\n"
-    glossary_section = f"{glossary_block}\n" if glossary_block and glossary_block.strip() else ""
     if dialogue_section:
         dialogue_section = f"{dialogue_section}\n\n"
 
-    user_prompt = f"""{previous_context_block}{novel_context_section}{glossary_section}{dialogue_section}# DRAFT TO REFINE
+    user_prompt = f"""{previous_context_block}{novel_context_section}{dialogue_section}# DRAFT TO REFINE
 
 The following is a rough {target_language} translation that needs significant improvement.
 Rewrite it with elegant, literary-quality {target_language} prose:
@@ -804,7 +698,6 @@ def generate_subtitle_refinement_block_prompt(
     translate_tag_in: str = TRANSLATE_TAG_IN,
     translate_tag_out: str = TRANSLATE_TAG_OUT,
     additional_instructions: str = "",
-    glossary_block: str = "",
     prompt_options: dict = None,
 ) -> PromptPair:
     """
@@ -820,7 +713,6 @@ def generate_subtitle_refinement_block_prompt(
         translate_tag_in: Opening tag for refinement output
         translate_tag_out: Closing tag for refinement output
         additional_instructions: Extra refinement guidance
-        glossary_block: Optional glossary block
         prompt_options: Optional dict with prompt customization options
 
     Returns:
@@ -930,11 +822,10 @@ For continuity and consistency, here's the previous refined block:
     )
     if novel_context_section:
         novel_context_section = f"{novel_context_section}\n\n"
-    glossary_section = f"{glossary_block}\n" if glossary_block and glossary_block.strip() else ""
     if dialogue_section:
         dialogue_section = f"{dialogue_section}\n\n"
 
-    user_prompt = f"""{previous_refined_block_text}{novel_context_section}{glossary_section}{dialogue_section}# SUBTITLES TO REFINE
+    user_prompt = f"""{previous_refined_block_text}{novel_context_section}{dialogue_section}# SUBTITLES TO REFINE
 
 {INPUT_TAG_IN}
 {formatted_subtitles_text}
@@ -961,7 +852,6 @@ def generate_subtitle_block_prompt(
     translate_tag_in: str = TRANSLATE_TAG_IN,
     translate_tag_out: str = TRANSLATE_TAG_OUT,
     custom_instructions: str = "",
-    glossary_block: str = "",
     prompt_options: dict = None,
 ) -> PromptPair:
     """
@@ -975,7 +865,6 @@ def generate_subtitle_block_prompt(
         translate_tag_in: Opening tag for translation output
         translate_tag_out: Closing tag for translation output
         custom_instructions: Additional custom translation instructions
-        glossary_block: Optional glossary block
         prompt_options: Optional dict with prompt customization options
 
     Returns:
@@ -1073,7 +962,7 @@ For continuity and consistency, here's the previous subtitle block:
     formatted_subtitles_text = "\n".join(formatted_subtitles)
 
     dialogue_section = _build_dialogue_attribution_section(prompt_options)
-    # Novel context and glossary blocks live in the user prompt because they
+    # Novel context blocks live in the user prompt because they
     # vary per chunk/block.
     novel_context_section = _build_novel_context_section(
         prompt_options,
@@ -1088,11 +977,10 @@ For continuity and consistency, here's the previous subtitle block:
     )
     if novel_context_section:
         novel_context_section = f"{novel_context_section}\n\n"
-    glossary_section = f"{glossary_block}\n" if glossary_block and glossary_block.strip() else ""
     if dialogue_section:
         dialogue_section = f"{dialogue_section}\n\n"
 
-    user_prompt = f"""{previous_translation_block_text}{novel_context_section}{glossary_section}{dialogue_section}# SUBTITLES TO TRANSLATE
+    user_prompt = f"""{previous_translation_block_text}{novel_context_section}{dialogue_section}# SUBTITLES TO TRANSLATE
 
 {INPUT_TAG_IN}
 {formatted_subtitles_text}
@@ -1124,7 +1012,6 @@ def generate_post_processing_prompt(
     has_placeholders: bool = True,
     prompt_options: dict = None,
     placeholder_format: Optional[Tuple[str, str]] = None,
-    glossary_block: str = "",
 ) -> PromptPair:
     """
     Alias for generate_refinement_prompt with parameter name mapping.
@@ -1155,5 +1042,4 @@ def generate_post_processing_prompt(
         prompt_options=prompt_options,
         placeholder_format=placeholder_format,
         additional_instructions=additional_instructions,
-        glossary_block=glossary_block,
     )

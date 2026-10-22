@@ -122,32 +122,27 @@ def build_configs(body, state_manager, output_dir):
     if not isinstance(notes_input, dict):
         raise ValueError('notes must be an object')
     notes = {key: defaults.get('notes_' + key, fallback) for key, fallback in (
-        ('mode', 'build'), ('update_interval', 1), ('prompt_max_tokens', 1800), ('source_memory_chars', 6000), ('consolidation_interval', 5), ('accept_gender_corrections', True))}
-    notes.update(keep_updating=True, series=False)
+        ('mode', 'build'), ('prompt_max_tokens', 1800), ('source_memory_chars', 6000), ('consolidation_interval', 5), ('accept_gender_corrections', True))}
+    notes.update(series=False)
     notes.update(notes_input)
+    notes.update(keep_updating=task == 'translate', update_interval=1)
+    if task == 'polish' and 'mode' not in notes_input:
+        notes['mode'] = 'copy' if notes.get('source') else 'off'
     if notes['mode'] not in ('build', 'copy', 'off'):
         raise ValueError('Invalid notes mode')
-    for key in ('keep_updating', 'series', 'accept_gender_corrections'):
+    if task == 'translate' and notes['mode'] == 'off':
+        raise ValueError('Translation requires notes.mode to be build or copy')
+    for key in ('series', 'accept_gender_corrections'):
         if not isinstance(notes[key], bool):
             raise ValueError(f'notes.{key} must be a boolean')
-    for key in ('update_interval', 'prompt_max_tokens', 'source_memory_chars', 'consolidation_interval'):
-        _integer(notes[key], f'notes.{key}', 1 if key == 'update_interval' else 0, 10000 if key in ('update_interval', 'consolidation_interval') else 1000000)
+    for key in ('prompt_max_tokens', 'source_memory_chars', 'consolidation_interval'):
+        _integer(notes[key], f'notes.{key}', 0, 10000 if key == 'consolidation_interval' else 1000000)
     if task == 'polish' and notes['mode'] == 'build':
-        if 'mode' in notes_input:
-            raise ValueError('Polish supports existing read-only notes or notes off')
-        notes['mode'] = 'off'
-    if task == 'polish':
-        notes['keep_updating'] = False
+        raise ValueError('Polish supports existing read-only notes or notes off')
     if notes['mode'] == 'copy' and not notes.get('source'):
         raise ValueError('notes.source is required for copy')
     tokens = _integer(data.get('passage_tokens', 450), 'passage_tokens', 50)
     lines = _integer(data.get('srt_lines_per_block', 10), 'srt_lines_per_block', maximum=10000)
-    glossary = None
-    if data.get('glossary_id') is not None:
-        glossary_id = _integer(data['glossary_id'], 'glossary_id')
-        glossary = state_manager.get_glossary_store().get_glossary(glossary_id)
-        if glossary is None:
-            raise ValueError('Glossary not found')
     style = data.get('style')
     style_text = None
     if style:
@@ -191,8 +186,6 @@ def build_configs(body, state_manager, output_dir):
         if not PathValidator.validate_filename(output)[0] or output in ('.', '..'):
             raise ValueError('Invalid output filename')
         file_notes = copy.deepcopy(notes)
-        if file_type == 'srt' and 'mode' not in notes_input:
-            file_notes['mode'] = 'off'
         prompt = {
             'text_cleanup': data.get('ocr_cleanup', False), 'plain_text_mode': data.get('simplify_formatting', False),
             'bilingual': data.get('bilingual', False), 'chapter_mode': data.get('chapter_mode', False),
@@ -208,8 +201,6 @@ def build_configs(body, state_manager, output_dir):
                 prompt['custom_instructions'] = style_text['translation']
             if style_text.get('refinement'):
                 prompt['refinement_instructions'] = style_text['refinement']
-        if glossary:
-            prompt.update(glossary_id=glossary.id, glossary_terms=glossary.terms_dict, glossary_name=glossary.name)
         config = {
             **sanitize_config_secrets(connection),
             'connection': sanitize_config_secrets(connection), 'reasoning': reasoning,
@@ -218,14 +209,14 @@ def build_configs(body, state_manager, output_dir):
             'file_path': str(path), 'input_filename': name, 'file_type': file_type,
             'source_language': source, 'target_language': data['target_language'], 'output_filename': output,
             'output_filename_pattern': pattern, 'notes': file_notes, 'notes_file': None,
-            'series_id': series_id if file_notes['mode'] != 'off' else None, 'glossary_id': data.get('glossary_id'),
-            'glossary_snapshot': glossary.terms_dict if glossary else {}, 'style': style, 'style_text': style_text,
+            'series_id': series_id if file_notes['mode'] != 'off' else None,
+            'style': style, 'style_text': style_text,
             'prompt_options': prompt, 'max_tokens_per_chunk': tokens, 'passage_tokens': tokens,
             'srt_lines_per_block': lines, 'soft_limit_ratio': SOFT_LIMIT_RATIO,
             'unit_validation_retries': UNIT_VALIDATION_RETRIES,
             'context_window': OLLAMA_NUM_CTX,
             'auto_adjust_context': connection['local'] and connection['connection_type'] == 'ollama',
-            'bilingual_output': data.get('bilingual', False), 'parallel_workers': 1 if connection['local'] else connection['parallel_requests'],
+            'bilingual_output': data.get('bilingual', False), 'parallel_workers': 1,
             'auto_pause_on_rate_limit': connection['rate_limit_behavior'] == 'pause',
             'retry_delay': connection.get('retry_delay', 2), 'status_reason': None,
             'ocr_cleanup': data.get('ocr_cleanup', False), 'simplify_formatting': data.get('simplify_formatting', False),
@@ -361,7 +352,7 @@ def create_jobs_blueprint(state_manager, output_dir, socketio=None):
                 except ConnectionNotFound:
                     return jsonify(error='Connection removed — choose a model', status_reason='connection_removed'), 400
                 safe = sanitize_config_secrets(resolved)
-                config.update(safe, connection=safe, reasoning=body.get('reasoning', config.get('reasoning', 'off')), parallel_workers=1 if safe['local'] else safe['parallel_requests'], auto_pause_on_rate_limit=safe['rate_limit_behavior'] == 'pause')
+                config.update(safe, connection=safe, reasoning=body.get('reasoning', config.get('reasoning', 'off')), parallel_workers=1, auto_pause_on_rate_limit=safe['rate_limit_behavior'] == 'pause')
             if config.get('_context_resync', {}).get('status') == 'paused':
                 from flask import current_app
                 runner.db.update_job_config(tid, config)

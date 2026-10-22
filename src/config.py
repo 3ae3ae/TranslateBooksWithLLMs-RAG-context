@@ -62,14 +62,6 @@ _RELOADABLE_ENV_SETTINGS = (
     ('NIM_MODEL',           'NIM_MODEL',           'meta/llama-3.1-8b-instruct'),
     ('OUTPUT_FILENAME_PATTERN', 'OUTPUT_FILENAME_PATTERN', '{originalName} ({targetLang}).{ext}'),
     ('DISABLE_AUTO_PAUSE',   'DISABLE_AUTO_PAUSE',   'false'),
-    ('NOTIFY_WEBHOOK_URL',     'NOTIFY_WEBHOOK_URL',     ''),
-    ('NOTIFY_WEBHOOK_METHOD',  'NOTIFY_WEBHOOK_METHOD',  'POST'),
-    ('NOTIFY_WEBHOOK_HEADERS', 'NOTIFY_WEBHOOK_HEADERS', ''),
-    ('NOTIFY_WEBHOOK_PAYLOAD', 'NOTIFY_WEBHOOK_PAYLOAD', ''),
-    ('NOTIFY_ON_SUCCESS',      'NOTIFY_ON_SUCCESS',      'true'),
-    ('NOTIFY_ON_FAILURE',      'NOTIFY_ON_FAILURE',      'true'),
-    ('NOTIFY_ON_INTERRUPTION', 'NOTIFY_ON_INTERRUPTION', 'false'),
-    ('NOTIFY_TIMEOUT_SECONDS', 'NOTIFY_TIMEOUT_SECONDS', '5'),
     ('PARALLEL_TRANSLATIONS', 'PARALLEL_TRANSLATIONS', '1'),
     ('MAX_TOKENS_PER_CHUNK', 'MAX_TOKENS_PER_CHUNK', '450'),
     # Novel context prompt rendering. The full context file remains durable;
@@ -92,10 +84,8 @@ _RELOADABLE_ENV_SETTINGS = (
 
 
 _BOOL_ATTRS = {
-    'NOTIFY_ON_SUCCESS', 'NOTIFY_ON_FAILURE', 'NOTIFY_ON_INTERRUPTION',
     'BYPASS_CONTEXT_GATING'
 }
-_NOTIFY_INT_ATTRS = {'NOTIFY_TIMEOUT_SECONDS'}
 _INT_ATTRS = {
     'PARALLEL_TRANSLATIONS',
     'MAX_TOKENS_PER_CHUNK',
@@ -112,7 +102,7 @@ def _apply_reloadable_env_settings():
         raw = os.getenv(env_var, default)
         if attr in _BOOL_ATTRS:
             g[attr] = str(raw).strip().lower() == 'true'
-        elif attr in _NOTIFY_INT_ATTRS or attr in _INT_ATTRS:
+        elif attr in _INT_ATTRS:
             try:
                 g[attr] = int(raw)
             except (TypeError, ValueError):
@@ -307,15 +297,6 @@ OUTPUT_DIR = str(Path(os.getenv('OUTPUT_DIR', 'translated_files')).expanduser().
 # Output filename pattern
 # Placeholders: {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext}
 # OUTPUT_FILENAME_PATTERN is loaded via _apply_reloadable_env_settings()
-
-# =============================================================================
-# WEBHOOK NOTIFICATIONS
-# =============================================================================
-# Send an HTTP request to an arbitrary webhook (gotify, ntfy, Discord, Slack,
-# Healthchecks, custom curl-like endpoint) when a translation reaches a
-# terminal state. Disabled by default; set NOTIFY_WEBHOOK_URL to enable.
-#
-# notifier.py reads them with `import src.config as cfg; cfg.NOTIFY_*`.
 
 # Debug mode (reload after .env is loaded)
 DEBUG_MODE = os.getenv('DEBUG_MODE', 'false').lower() == 'true'

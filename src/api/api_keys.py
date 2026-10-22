@@ -6,10 +6,6 @@ sends the ``__USE_ENV__`` sentinel instead (see ``ApiKeyUtils.getValue`` in
 ``api-key-utils.js``). Every endpoint that accepts a per-request key must turn
 that sentinel — and any empty value — back into the configured key.
 
-This logic was previously copy-pasted into four blueprints
-(translation/sample/config/glossary). Diverging copies caused issue #200:
-the glossary NER endpoint forwarded the literal ``__USE_ENV__`` to Gemini,
-which rejected it as an invalid key. Keep the single source of truth here.
 """
 import os
 

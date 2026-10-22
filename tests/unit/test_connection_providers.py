@@ -23,7 +23,7 @@ def connection(kind, model="test-model", reasoning="off", **fields):
                 llm_api_endpoint="https://custom.test/chat", api_key="sk-test-xxxx", model=model,
                 reasoning_effort=reasoning, connection_id="test", connection_name="Test", connection_type=kind,
                 local=False, request_timeout=47, max_attempts=1, temperature=None,
-                parallel_requests=4, rate_limit_behavior="retry", rate_limit_retry_seconds=60, **fields)
+                rate_limit_behavior="retry", rate_limit_retry_seconds=60, **fields)
 
 
 def success(kind):

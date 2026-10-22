@@ -234,7 +234,7 @@ async def translate_paragraphs_plain(
             offset to completed_chunks).
         context_manager: AdaptiveContextManager (Ollama)
         check_interruption_callback: returns True to abort
-        prompt_options: prompt customization (text_cleanup, glossary, etc.)
+        prompt_options: prompt customization (text_cleanup, story notes, etc.)
         parallel_workers: number of chunks translated concurrently (already
             resolved against the provider by the caller). When 1, behavior is
             identical to the legacy sequential loop, including previous-chunk

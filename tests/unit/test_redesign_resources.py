@@ -17,7 +17,7 @@ from src.api.blueprints.notes_routes import create_notes_blueprint
 from src.api.blueprints.preferences_routes import create_preferences_blueprint
 from src.api.blueprints.styles_routes import create_styles_blueprint
 from src.core.pricing import job_estimator
-from src.utils import custom_instructions as styles, notes_store as notes, notifier, preferences
+from src.utils import custom_instructions as styles, notes_store as notes, preferences
 
 
 @pytest.fixture
@@ -27,8 +27,6 @@ def resources(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "NOVEL_CONTEXTS_DIR", runtime / "Novel_Contexts")
     monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
     monkeypatch.setattr(config, "OUTPUT_DIR", str(tmp_path / "output"))
-    for attr in ("NOTIFY_WEBHOOK_URL", "NOTIFY_WEBHOOK_HEADERS", "NOTIFY_WEBHOOK_PAYLOAD"):
-        monkeypatch.setattr(config, attr, "")
     connection = dict(connection_id="test", llm_provider="openai", model="test-model", reasoning_effort="off", connection_type="openai", local=False, request_timeout=30, api_key="", llm_api_endpoint="https://example.test/v1/chat/completions")
     connections = ModuleType("src.core.llm.connections")
     connections.ConnectionNotFound = type("ConnectionNotFound", (ValueError,), {})
@@ -73,33 +71,17 @@ def test_preferences_seed_schema_permissions_and_connection_authority(resources,
     connections.set_default.assert_not_called()
 
 
-def test_preferences_validation_is_atomic_and_masks_secrets(resources):
+def test_preferences_validation_is_atomic(resources):
     client, _ = resources
     before = client.get("/api/preferences").get_json()["values"]
     result = client.patch("/api/preferences", json={"passage_tokens": 2, "bilingual": 1, "notes_update_interval": 0, "task": "other", "unknown": True})
     assert result.status_code == 400
     assert set(result.get_json()["error"]["details"]) == {"passage_tokens", "bilingual", "notes_update_interval", "task", "unknown"}
     assert client.get("/api/preferences").get_json()["values"] == before
-    patch = {"notifications": {"url": "https://example.test/YOUR_API_KEY_HERE", "headers": {"X-Key": "YOUR_API_KEY_HERE"}, "enabled": True}}
-    result = client.patch("/api/preferences", json=patch)
-    assert result.status_code == 200
-    public = result.get_json()["values"]["notifications"]
-    assert public["url"] == {"set": True, "hint": "…/HERE"}
-    assert public["headers"] == {"set": True, "hint": ""}
-    assert "YOUR_API_KEY_HERE" not in result.get_data(as_text=True)
-    result = client.patch("/api/preferences", json={"notifications": {"url": None, "headers": None}, "passage_tokens": None})
-    assert result.status_code == 200
-    assert preferences.get_preferences()["notifications"]["headers"] == patch["notifications"]["headers"]
-    assert stat.S_IMODE(preferences.preferences_path().stat().st_mode) == 0o600
 
 
 @pytest.mark.parametrize("patch", [
-    {"notifications": {"headers": {"X-Key": {"set": True}}}},
-    {"notifications": {"headers": {"X-Key": "bad\nheader"}}},
-    {"notifications": {"url": {"set": True}}},
-    {"notifications": {"events": ["other"]}},
-    {"notifications": {"timeout_seconds": 121}},
-    {"notifications": {"payload": "not json"}},
+    {"notes_mode": "off"},
     {"price_overrides": {"test:model": {"input_per_m": -1, "output_per_m": 1}}},
     {"price_overrides": {"test:model": {"input_per_m": True, "output_per_m": 1}}},
 ])
@@ -112,7 +94,8 @@ def test_remember_defaults_copies_job_fields(resources):
     preferences.remember_job_defaults({"connection_id": "other", "model": "model", "reasoning": "low", "bilingual": True, "notes": {"mode": "copy", "update_interval": 3}, "files": []})
     values = preferences.get_preferences()
     assert (values["default_connection_id"], values["default_model"], values["default_reasoning"]) == ("other", "model", "low")
-    assert values["notes_mode"] == "copy" and values["notes_update_interval"] == 3
+    assert values["notes_mode"] == "copy"
+    assert "notes_update_interval" not in values
     assert values["bilingual"] is True
     connections.set_default.assert_called_with("other", "model")
 
@@ -237,7 +220,6 @@ def test_compare_snapshots_resources_and_changes_revision(resources, monkeypatch
     path = uploads / "book.txt"
     path.write_text("This is sample source.")
     monkeypatch.setattr(sample, "_load_source_units", lambda *a, **kw: [{"main_content": "First."}, {"main_content": "Middle."}, {"main_content": "Last."}])
-    monkeypatch.setattr(sample, "_load_column_glossary", lambda gid: {"terms_dict": {"Alice": "앨리스"}, "target_language": "Korean", "term_metadata": {}} if gid else None)
     styles.save_style("noir", {"translation": "First style"}, create=True)
     notes.create_notes("book.txt")
     payload = dict(file_path=str(path), file_type="txt", source_language="English", target_language="Korean", mode="refine", defer_dispatch=True, notes="book.txt", glossary_id=1, columns=[{"connection_id": "test", "model": "test-model", "reasoning": "off", "style": "noir"}])
@@ -263,16 +245,16 @@ def test_estimate_requests_pricing_and_real_chunker(resources):
     uploads.mkdir(parents=True)
     path = uploads / "book.txt"
     path.write_text("\n\n".join(["A passage about Alice. " * 15] * 10))
-    payload = dict(files=[{"file_path": str(path), "input_filename": "book.txt"}], connection_id="test", model="test-model", passage_tokens=100, polish_after=True, notes={"mode": "build", "update_interval": 2, "consolidation_interval": 2, "prompt_max_tokens": 100, "source_memory_chars": 0})
+    payload = dict(files=[{"file_path": str(path), "input_filename": "book.txt"}], connection_id="test", model="test-model", passage_tokens=100, polish_after=True, notes={"mode": "build", "keep_updating": False, "update_interval": "ignored", "consolidation_interval": 2, "prompt_max_tokens": 100, "source_memory_chars": 0})
     seed_job("history", "completed", {"connection_id": "test", "model": "test-model", "stats": {"requests": 10, "elapsed_seconds": 50}})
     result = client.post("/api/estimate", json=payload)
     assert result.status_code == 200
     value = result.get_json()
     from src.api.blueprints.sample_routes import _load_source_units
     passages = len(_load_source_units(str(path), "txt", passage_tokens=100))
-    updates = (passages + 1) // 2
+    updates = passages
     assert value["passages"] == passages
-    consolidations = sum(i % 2 == 0 or i == passages for i in range(1, passages + 1, 2))
+    consolidations = sum(i % 2 == 0 or i == passages for i in range(1, passages + 1))
     assert value["requests"] == passages * 2 + updates + consolidations
     assert value["time_min_s"] == round(value["requests"] * 5 * 0.8)
     assert value["time_max_s"] == round(value["requests"] * 5 * 1.2)
@@ -295,7 +277,7 @@ def test_estimate_srt_lines_read_only_notes_and_billing(resources, local, kind, 
     path.write_text("\n\n".join(f"{i}\n00:00:01,000 --> 00:00:02,000\nHello Alice." for i in range(1, 6)))
     connections.resolve_for_pipeline.side_effect = lambda *a: dict(connection_id="test", model="unknown", llm_provider="openai", local=local, connection_type=kind)
     connections.list_models.return_value = []
-    payload = dict(files=[{"file_path": str(path)}], connection_id="test", model="unknown", srt_lines_per_block=2, notes={"mode": "copy", "keep_updating": False})
+    payload = dict(files=[{"file_path": str(path)}], connection_id="test", model="unknown", task="polish", srt_lines_per_block=2, notes={"mode": "copy", "keep_updating": False})
     value = client.post("/api/estimate", json=payload).get_json()
     assert value["passages"] == value["requests"] == 3
     assert value["billing"] == billing and value["time_source"] == "unknown"
@@ -331,65 +313,21 @@ def test_estimate_rich_formats_use_pipeline_chunkers(resources, tmp_path, sample
     assert all(unit["main_content"] for unit in epub_units)
 
 
-def test_notifier_legacy_fallback_new_events_and_secret_safe_logs(resources, monkeypatch, caplog):
-    monkeypatch.setattr(config, "NOTIFY_WEBHOOK_URL", "https://example.test/YOUR_API_KEY_HERE")
-    monkeypatch.setattr(config, "NOTIFY_ON_INTERRUPTION", True)
-    request = Mock(return_value=Mock(raise_for_status=Mock()))
-    monkeypatch.setattr(notifier.requests, "request", request)
-    assert notifier.notify("system_paused", {"file": "book.txt"})
-    preferences.patch_preferences({"notifications": {"enabled": True, "url": "https://example.test/YOUR_API_KEY_HERE", "headers": {"X-Key": "YOUR_API_KEY_HERE"}, "events": ["system_paused", "queue_finished"]}})
-    assert notifier.notify("queue_finished", {})
-    assert not notifier.notify("success", {})
-    request.side_effect = requests.ConnectionError("https://example.test/YOUR_API_KEY_HERE")
-    assert not notifier.notify("system_paused", {})
-    assert "YOUR_API_KEY_HERE" not in caplog.text
-    assert not notifier.notify("queue_finished", {"duration_seconds": "invalid"})
+def test_preferences_ignore_removed_saved_keys(resources):
+    client, _ = resources
+    preferences._atomic_write({"notifications": {"enabled": True}, "unknown": True, "bilingual": True})
+    result = client.get("/api/preferences")
+    assert result.status_code == 200
+    assert result.json["values"]["bilingual"] is True
+    assert "notifications" not in result.json["values"]
+    assert "unknown" not in result.json["values"]
 
 
-def test_notification_test_route_uses_preferences_and_new_events(resources, monkeypatch):
+def test_notification_test_route_is_removed(resources):
     from src.api.blueprints.config_routes import create_config_blueprint
-    app = Flask("notification-test")
+    app = Flask("removed-notifications")
     app.register_blueprint(create_config_blueprint())
-    client = app.test_client()
-    monkeypatch.setattr(notifier.requests, "request", Mock(return_value=Mock(raise_for_status=Mock())))
-    assert client.post("/api/notifications/test", json={"event": "system_paused"}).status_code == 400
-    preferences.patch_preferences({"notifications": {"url": "https://example.test/YOUR_API_KEY_HERE", "enabled": True, "events": ["system_paused", "queue_finished"]}})
-    for event in ("system_paused", "queue_finished"):
-        response = client.post("/api/notifications/test", json={"event": event})
-        assert response.status_code == 200 and response.get_json()["success"] is True
-    assert client.post("/api/notifications/test", json={"event": "success"}).status_code == 400
-    assert client.post("/api/notifications/test", json={"event": "unknown"}).status_code == 400
-
-
-@pytest.fixture
-def glossary_client(resources, tmp_path):
-    from src.api.blueprints.glossary_routes import create_glossary_blueprint
-    from src.core.glossary.store import GlossaryStore
-    store = GlossaryStore(db_path=str(tmp_path / "glossaries.db"))
-    app = Flask("glossary")
-    app.register_blueprint(create_glossary_blueprint(store))
-    try:
-        yield app.test_client(), store
-    finally:
-        store.close_all()
-
-
-def test_glossary_import_merges_by_default_and_replaces_explicitly(glossary_client):
-    from src.core.glossary.models import GlossaryTerm
-    client, store = glossary_client
-    glossary = store.create_glossary(name="book", source_language="English", target_language="Korean")
-    store.add_term(glossary.id, GlossaryTerm(source_term="Alice", translated_term="앨리스"))
-    url = f"/api/glossaries/{glossary.id}/import"
-    result = client.post(url, json={"terms": [{"source": "Bob", "target": "밥"}, {"source": "Alice", "target": "existing wins"}]})
-    assert result.status_code == 200 and result.get_json()["imported"] == 1
-    assert store.get_glossary(glossary.id).terms_dict == {"Alice": "앨리스", "Bob": "밥"}
-    assert client.post(url + "?mode=replace", json={"terms": [{"source": "Bob", "target": "new"}]}).status_code == 200
-    assert store.get_glossary(glossary.id).terms_dict == {"Bob": "new"}
-    assert client.post(url, json={"mode": "invalid", "terms": []}).status_code == 400
-    summary = client.get("/api/glossaries").get_json()
-    assert set(summary) == {"glossaries", "count"}
-    assert set(summary["glossaries"][0]) == {"id", "name", "source_lang", "target_lang", "created_at", "updated_at", "term_count"}
-    assert summary["glossaries"][0]["term_count"] == 1
+    assert app.test_client().post("/api/notifications/test").status_code == 404
 
 
 def test_folder_routes_use_runtime_paths(resources, monkeypatch):
@@ -411,37 +349,46 @@ def test_folder_routes_use_runtime_paths(resources, monkeypatch):
     assert client.post("/api/folders/unknown/open").status_code == 404
 
 
-@pytest.mark.parametrize("multipart", [False, True])
-def test_glossary_suggest_existing_upload_with_connection(resources, glossary_client, monkeypatch, multipart):
-    from src.api.blueprints import glossary_routes
-    from src.core.llm import factory
-    client, store = glossary_client
-    glossary = store.create_glossary(name="book", source_language="English", target_language="Korean")
+def test_old_notes_preferences_fall_back_to_build(resources):
+    client, _ = resources
+    preferences._atomic_write({"notes_mode": "off", "notes_update_interval": 9})
+    result = client.get("/api/preferences").json
+    assert result["values"]["notes_mode"] == "build"
+    assert result["schema"]["notes_mode"]["choices"] == ["build", "copy"]
+    assert "notes_update_interval" not in result["values"]
+    assert "notes_update_interval" not in result["schema"]
+
+
+def test_remember_polish_without_notes_keeps_translation_notes_default(resources):
+    preferences.remember_job_defaults({"task": "polish", "notes": {"mode": "off"}})
+    assert preferences.get_preferences()["notes_mode"] == "build"
+    assert preferences.get_preferences()["task"] == "polish"
+
+
+@pytest.mark.parametrize("task,mode,message", [
+    ("translate", "off", "Translation requires notes.mode to be build or copy"),
+    ("polish", "build", "Polish supports existing read-only notes or notes off"),
+])
+def test_estimate_rejects_unsupported_notes_modes(resources, task, mode, message):
+    response = resources[0].post("/api/estimate", json={"files": [{"file_path": "unused"}], "task": task, "notes": {"mode": mode}})
+    assert response.status_code == 400
+    assert response.json["error"]["message"] == message
+
+
+@pytest.mark.parametrize("mode", [None, "copy"])
+def test_estimate_srt_translation_updates_notes_for_every_passage(resources, mode):
+    client, _ = resources
     uploads = Path(config.OUTPUT_DIR) / "uploads"
     uploads.mkdir(parents=True)
-    path = uploads / "book.txt"
-    path.write_text("Alice is an explorer. " * 100)
-    provider = Mock()
-
-    async def close():
-        pass
-
-    async def suggest(**kwargs):
-        assert kwargs["text"].startswith("Alice")
-        return [{"source": "Alice", "target": "앨리스", "category": "character"}], []
-
-    provider.close = close
-    create = Mock(return_value=provider)
-    monkeypatch.setattr(factory, "create_llm_provider", create)
-    monkeypatch.setattr(glossary_routes, "ner_suggest_terms", suggest)
-    payload = dict(file_path=str(path), connection_id="test", model="test-model", reasoning="low")
-    kwargs = {"data": payload, "content_type": "multipart/form-data"} if multipart else {"json": payload}
-    response = client.post(f"/api/glossaries/{glossary.id}/suggest-terms", **kwargs)
+    path = uploads / "subtitles.srt"
+    path.write_text("\n\n".join(f"{i}\n00:00:01,000 --> 00:00:02,000\nHello Alice." for i in range(1, 6)))
+    note_options = {"keep_updating": False, "update_interval": None, "consolidation_interval": 2}
+    if mode:
+        notes.create_notes("existing.txt")
+        note_options.update(mode=mode, source="existing.txt")
+    response = client.post("/api/estimate", json={"files": [{"file_path": str(path)}], "srt_lines_per_block": 2, "notes": note_options})
     assert response.status_code == 200
-    value = response.get_json()
-    assert value["candidates"] == [{"source": "Alice", "target": "앨리스", "category": "character", "already_in_glossary": False}]
-    assert value["sample_source"] == "uploaded_file" and value["sample_filename"] == "book.txt"
-    assert create.call_args.kwargs["connection"]["reasoning_effort"] == "low"
-    payload["file_path"] = str(uploads / ".." / ".." / "outside.txt")
-    kwargs = {"data": payload, "content_type": "multipart/form-data"} if multipart else {"json": payload}
-    assert client.post(f"/api/glossaries/{glossary.id}/suggest-terms", **kwargs).status_code == 403
+    file = response.json["per_file"][0]
+    assert file["passages"] == file["notes_updates"] == 3
+    assert file["consolidation_calls"] == 2
+    assert file["requests"] == 8

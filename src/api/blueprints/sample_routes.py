@@ -27,8 +27,6 @@ from src.config import (
     OLLAMA_NUM_CTX,
     REQUEST_TIMEOUT, SRT_LINES_PER_BLOCK,
 )
-from src.core.glossary import build_glossary_block, filter_glossary
-from src.core.glossary.models import GlossaryConfig
 from src.core.llm.factory import create_llm_provider
 from src.core.pricing.pricing_data import get_default_pricing
 from src.core.sampling import cap_chunk_text, sample_range, select_sample_indices
@@ -379,7 +377,6 @@ async def _run_cell_translate(
     source_language: str,
     target_language: str,
     prompt_options: Dict[str, Any],
-    glossary_block: str = "",
     state: "SampleStateManager",
     socketio,
 ) -> Optional[str]:
@@ -393,7 +390,6 @@ async def _run_cell_translate(
         target_language=target_language,
         has_placeholders=False,
         prompt_options=prompt_options,
-        glossary_block=glossary_block,
     )
     return await _execute_cell(
         sample_id=sample_id, row=row, col=col, phase="translate",
@@ -412,7 +408,6 @@ async def _run_cell_refine(
     column: Dict[str, Any],
     target_language: str,
     prompt_options: Dict[str, Any],
-    glossary_block: str = "",
     state: "SampleStateManager",
     socketio,
 ) -> None:
@@ -425,7 +420,6 @@ async def _run_cell_refine(
         target_language=target_language,
         has_placeholders=False,
         prompt_options=prompt_options,
-        glossary_block=glossary_block,
         # A preset's refinement section reaches the refine prompt via
         # `additional_instructions` (prompt_options alone isn't read for it).
         additional_instructions=(prompt_options.get("refinement_instructions") or ""),
@@ -494,50 +488,6 @@ def _column_prompt_options(base_options: Dict[str, Any], column: Dict[str, Any])
     return opts
 
 
-def _load_column_glossary(glossary_id: Any) -> Optional[Dict[str, Any]]:
-    """Load a glossary by id into {terms_dict, term_metadata, target_language},
-    or None when there's no/invalid glossary. Best-effort: any failure (missing
-    id, store error, empty glossary) yields None so the column runs without one.
-    """
-    if not glossary_id:
-        return None
-    try:
-        from src.api.translation_state import get_glossary_store  # lazy: avoid cycle
-        glossary = get_glossary_store().get_glossary(int(glossary_id))
-    except Exception as exc:
-        logger.warning("sample: failed to load glossary %r: %s", glossary_id, exc)
-        return None
-    if not glossary or not glossary.terms:
-        return None
-    return {
-        "terms_dict": glossary.terms_dict,
-        "term_metadata": {
-            term.source_term: {"category": term.category or ""}
-            for term in glossary.terms if term.source_term
-        },
-        "target_language": glossary.target_language or "",
-    }
-
-
-def _glossary_block_for(glossary_data: Optional[Dict[str, Any]], text: str) -> str:
-    """Build the per-cell glossary block: filter the glossary to terms present
-    in this cell's source text, then format. Returns '' when nothing matches."""
-    if not glossary_data:
-        return ""
-    try:
-        filtered, _capped = filter_glossary(text, glossary_data["terms_dict"], GlossaryConfig())
-        if not filtered:
-            return ""
-        return build_glossary_block(
-            filtered_terms=filtered,
-            target_language=glossary_data["target_language"],
-            term_metadata=glossary_data["term_metadata"],
-        )
-    except Exception as exc:
-        logger.warning("sample: failed to build glossary block: %s", exc)
-        return ""
-
-
 async def _run_sample_async(
     *,
     sample_id: str,
@@ -560,11 +510,7 @@ async def _run_sample_async(
     skip = skip_cells or set()
     sem = asyncio.Semaphore(min(SAMPLE_CONCURRENCY_CAP, max(1, len(items) * len(columns))))
 
-    # Resolve each column's custom-instruction preset and glossary once, so every
-    # cell of that column reuses them (the glossary block is still filtered per
-    # cell against that cell's source text).
     column_options = [_column_prompt_options(prompt_options, c) for c in columns]
-    column_glossaries = [c["_glossary"] if "_glossary" in c else _load_column_glossary(c.get("glossary_id")) for c in columns]
 
     async def cell_task(row: int, col: int):
         async with sem:
@@ -575,7 +521,6 @@ async def _run_sample_async(
             item = items[row]
             column = columns[col]
             cell_options = column_options[col]
-            glossary_block = _glossary_block_for(column_glossaries[col], item["source_text"])
             if mode == "refine":
                 # Treat the source extract as the draft to refine.
                 await _run_cell_refine(
@@ -583,7 +528,6 @@ async def _run_sample_async(
                     draft_text=item["source_text"], item=item, column=column,
                     target_language=target_language,
                     prompt_options=cell_options,
-                    glossary_block=glossary_block,
                     state=state, socketio=socketio,
                 )
                 return
@@ -593,7 +537,6 @@ async def _run_sample_async(
                 item=item, column=column,
                 source_language=source_language, target_language=target_language,
                 prompt_options=cell_options,
-                glossary_block=glossary_block,
                 state=state, socketio=socketio,
             )
 
@@ -603,7 +546,6 @@ async def _run_sample_async(
                     draft_text=draft, item=item, column=column,
                     target_language=target_language,
                     prompt_options=cell_options,
-                    glossary_block=glossary_block,
                     state=state, socketio=socketio,
                 )
 
@@ -639,7 +581,7 @@ def _spawn_sample_thread(coro_factory):
             # response behind `async for line in response.aiter_lines()` in the
             # LLM providers) before closing the loop. Without this, their cleanup
             # tasks are destroyed mid-flight and asyncio logs
-            # "Task was destroyed but it is pending!". Mirrors glossary_routes.
+            # "Task was destroyed but it is pending!".
             try:
                 loop.run_until_complete(loop.shutdown_asyncgens())
             except Exception:
@@ -948,7 +890,6 @@ def create_sample_blueprint(sample_state_manager, socketio=None, output_dir=".")
                 "api_endpoint": raw.get("api_endpoint") or raw.get("endpoint"),
                 "custom_instruction_file": raw.get("custom_instruction_file") or "",
                 "style": raw.get("style") or "",
-                "glossary_id": data.get("glossary_id", raw.get("glossary_id")),
             }
             if raw.get("connection_id"):
                 from src.core.llm.connections import resolve_for_pipeline, ConnectionNotFound
@@ -963,10 +904,9 @@ def create_sample_blueprint(sample_state_manager, socketio=None, output_dir=".")
                 column["_prompt_options"] = _column_prompt_options(prompt_options, column)
             except ValueError:
                 return jsonify(error={"code": "validation_error", "message": "Invalid style name"}), 400
-            column["_glossary"] = _load_column_glossary(column["glossary_id"])
             revision = {
                 "column": _public_column(column), "options": column["_prompt_options"],
-                "glossary": column["_glossary"], "mode": mode,
+                "mode": mode,
                 "source_language": source_language, "target_language": target_language,
             }
             column["cache_key"] = hashlib.sha256(json.dumps(revision, sort_keys=True, ensure_ascii=False).encode()).hexdigest()

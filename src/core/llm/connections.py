@@ -33,7 +33,7 @@ _TYPES = {
     "poe": ("Poe", "https://api.poe.com/v1", True, "best_effort"),
     "nim": ("NVIDIA NIM", "https://integrate.api.nvidia.com/v1", True, "best_effort"),
 }
-_KNOBS = ("parallel_requests", "request_timeout", "max_attempts", "rate_limit_behavior",
+_KNOBS = ("request_timeout", "max_attempts", "rate_limit_behavior",
           "rate_limit_retry_seconds", "temperature")
 _FIELDS = {"name", "type", "base_url", "api_keys", "default_model", "local", *_KNOBS}
 
@@ -98,9 +98,13 @@ def _is_local(base_url):
 
 
 def _normalize(fields, previous=None):
-    if not isinstance(fields, dict) or fields.keys() - _FIELDS:
+    if not isinstance(fields, dict):
+        raise ValueError("Unknown connection fields")
+    fields = {key: value for key, value in fields.items() if key != "parallel_requests"}
+    if fields.keys() - _FIELDS:
         raise ValueError("Unknown connection fields")
     connection = dict(previous or {})
+    connection.pop("parallel_requests", None)
     connection.update(fields)
     kind = connection.get("type")
     if not isinstance(kind, str) or kind not in _TYPES:
@@ -114,7 +118,7 @@ def _normalize(fields, previous=None):
         local = _is_local(base)
     if not isinstance(local, bool):
         raise ValueError("local must be a boolean")
-    defaults = dict(parallel_requests=1 if local else 4, request_timeout=900 if local else 300,
+    defaults = dict(request_timeout=900 if local else 300,
                     max_attempts=2, rate_limit_behavior="retry", rate_limit_retry_seconds=60,
                     temperature=None, default_model="", api_keys=[])
     connection = {**defaults, **connection, "base_url": base, "resolved": resolved,
@@ -129,7 +133,7 @@ def _normalize(fields, previous=None):
     if not isinstance(keys, list) or any(not isinstance(key, str) or "\r" in key or "\n" in key for key in keys):
         raise ValueError("api_keys must be a list of strings without line breaks")
     connection["api_keys"] = list(dict.fromkeys(key.strip() for key in keys if key.strip()))
-    for key in ("parallel_requests", "request_timeout", "max_attempts", "rate_limit_retry_seconds"):
+    for key in ("request_timeout", "max_attempts", "rate_limit_retry_seconds"):
         value = connection[key]
         if type(value) is not int or value < 1:
             raise ValueError(f"{key} must be a positive integer")
@@ -201,6 +205,8 @@ def _read():
             raise ValueError
     except (ValueError, KeyError, TypeError):
         raise ValueError("connections.json is invalid; restore it before editing connections") from None
+    for connection in data["connections"]:
+        connection.pop("parallel_requests", None)
     return data
 
 

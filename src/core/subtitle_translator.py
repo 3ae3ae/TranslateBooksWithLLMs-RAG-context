@@ -16,7 +16,6 @@ from src.config import (
 # block sizing is now purely fixed-count (SRT_LINES_PER_BLOCK) for both
 # translate and refine, so the legacy char cap is unused.
 _NO_CHAR_CAP = 10 ** 12
-from .translator import _build_chunk_glossary_block
 
 
 async def refine_subtitle_translations(
@@ -76,8 +75,6 @@ async def refine_subtitle_translations(
     refined_translations: Dict[int, str] = {}
     completed_count = 0
     failed_count = 0
-    # Transient per-job state (e.g. glossary cap warning dedupe) — never persisted.
-    runtime_state: dict = {}
 
     if log_callback:
         log_callback("srt_refinement_info", f"Refining {total_subtitles} subtitles...")
@@ -185,17 +182,13 @@ async def refine_subtitle_translations(
             local_subtitle_tuples.append((local_idx, translations[g_idx]))
             local_to_global[local_idx] = g_idx
 
-        block_text_for_glossary = "\n".join(text for _, text in local_subtitle_tuples)
-        glossary_block = _build_chunk_glossary_block(
-            block_text_for_glossary, prompt_options, log_callback=log_callback,
-            runtime_state=runtime_state,
-        )
+        block_text = "\n".join(text for _, text in local_subtitle_tuples)
 
         block_refined: Dict[int, str] = {}
         expected_local_indices = list(range(len(local_subtitle_tuples)))
         
         context_content = await context_tracker.next_context(
-            text=block_text_for_glossary,
+            text=block_text,
             llm_client=llm_client,
             model_name=model_name,
             target_language=target_language,
@@ -242,7 +235,6 @@ async def refine_subtitle_translations(
                     previous_refined_block=previous_refined_block,
                     target_language=target_language,
                     additional_instructions=extra_instructions,
-                    glossary_block=glossary_block,
                     prompt_options=local_prompt_options,
                 )
 

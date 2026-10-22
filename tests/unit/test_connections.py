@@ -123,7 +123,7 @@ def test_rejects_credentials_and_invalid_urls(url):
 def test_locality_and_type_defaults(connection_store, host, expected):
     connection = add_connection(base_url=f"http://{host}:8000")
     assert connection["local"] is expected
-    assert connection["parallel_requests"] == (1 if expected else 4)
+    assert "parallel_requests" not in connection
     assert connection["request_timeout"] == (900 if expected else 300)
     assert connection["max_attempts"] == 2
     assert connection["rate_limit_behavior"] == "retry"
@@ -132,7 +132,7 @@ def test_locality_and_type_defaults(connection_store, host, expected):
 
 
 def test_explicit_locality_persists_and_knobs_are_resolved(connection_store):
-    created = add_connection(local=False, parallel_requests=3, request_timeout=45, max_attempts=5,
+    created = add_connection(local=False, request_timeout=45, max_attempts=5,
                              rate_limit_behavior="pause", rate_limit_retry_seconds=12, temperature=0.7)
     updated = store.update_connection(created["id"], {"base_url": "http://other.local:8000"})
     assert updated["local"] is False
@@ -140,11 +140,11 @@ def test_explicit_locality_persists_and_knobs_are_resolved(connection_store):
     assert result == dict(llm_provider="openai", llm_api_endpoint="http://other.local:8000/v1/chat/completions",
                          api_key="", model="chosen-model", reasoning_effort="high", connection_id=created["id"],
                          connection_type="openai_compatible", connection_name="Test server", local=False,
-                         parallel_requests=3, request_timeout=45, max_attempts=5,
+                         request_timeout=45, max_attempts=5,
                          rate_limit_behavior="pause", rate_limit_retry_seconds=12, temperature=0.7)
 
 
-@pytest.mark.parametrize("fields", [{"local": "false"}, {"parallel_requests": 0},
+@pytest.mark.parametrize("fields", [{"local": "false"},
     {"request_timeout": True}, {"max_attempts": -1}, {"rate_limit_behavior": "unknown"},
     {"rate_limit_retry_seconds": 0}, {"temperature": float("nan")}, {"temperature": True},
     {"temperature": 3}, {"api_keys": "sk-test-xxxx"}, {"api_keys": [1]}, {"api_keys": ["line\nbreak"]},
@@ -152,6 +152,27 @@ def test_explicit_locality_persists_and_knobs_are_resolved(connection_store):
 def test_validates_draft_fields(connection_store, fields):
     with pytest.raises(ValueError):
         add_connection(**fields)
+
+
+@pytest.mark.parametrize("value", [0, 20, "ignored", None, {"old": True}])
+def test_removed_parallel_requests_is_ignored_in_requests(connection_store, value):
+    created = add_connection(parallel_requests=value)
+    assert "parallel_requests" not in created
+    updated = store.update_connection(created["id"], {"parallel_requests": value})
+    assert "parallel_requests" not in updated
+    assert "parallel_requests" not in store.resolve_for_pipeline(created["id"], "test-model")
+    assert all("parallel_requests" not in item for item in json.loads(connection_store.read_text())["connections"])
+
+
+def test_removed_parallel_requests_is_ignored_in_saved_connections(connection_store):
+    data = json.loads(connection_store.read_text())
+    data["connections"][0]["parallel_requests"] = "ignored"
+    store._write(data)
+    assert "parallel_requests" not in store.get_connection("local-ollama")
+    assert all("parallel_requests" not in item for item in store.list_connections())
+    assert "parallel_requests" not in store.resolve_for_pipeline("local-ollama", "local-model")
+    store.update_connection("local-ollama", {"name": "Renamed"})
+    assert "parallel_requests" not in json.loads(connection_store.read_text())["connections"][0]
 
 
 def test_resolve_and_factory_never_fall_back_to_env(connection_store, monkeypatch):

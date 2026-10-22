@@ -30,13 +30,11 @@ SCHEMA = {
     "target_language": _field("string", ""),
     "task": _field("string", "translate", choices=["translate", "polish"]),
     "polish_after": _field("boolean", False),
-    "notes_mode": _field("string", "build", choices=["build", "copy", "off"]),
-    "notes_update_interval": _field("integer", 1, min=1, max=10000),
+    "notes_mode": _field("string", "build", choices=["build", "copy"]),
     "notes_prompt_max_tokens": _field("integer", 1800, min=0, max=1000000),
     "notes_source_memory_chars": _field("integer", 6000, min=0, max=1000000),
     "notes_consolidation_interval": _field("integer", 5, min=0, max=10000),
     "notes_accept_gender_corrections": _field("boolean", True),
-    "glossary_id": _field("integer", None, min=1),
     "style": _field("string", ""),
     "simplify_formatting": _field("boolean", False),
     "bilingual": _field("boolean", False),
@@ -46,19 +44,8 @@ SCHEMA = {
     "srt_lines_per_block": _field("integer", 10, min=1, max=10000),
     "output_filename_pattern": _field("string", "{originalName} ({targetLang}).{ext}"),
     "price_overrides": _field("object", {}),
-    "notifications": _field("object", {}),
     "book_font": _field("string", "sans", choices=["sans", "serif"]),
 }
-NOTIFICATION_SCHEMA = {
-    "enabled": _field("boolean", False),
-    "url": _field("string", "", secret=True),
-    "method": _field("string", "POST", choices=["GET", "POST", "PUT", "PATCH"]),
-    "headers": _field("object", {}, secret=True),
-    "payload": _field("string", ""),
-    "events": _field("array", ["success", "failure", "system_paused", "queue_finished"]),
-    "timeout_seconds": _field("integer", 5, min=1, max=120),
-}
-SCHEMA["notifications"]["properties"] = NOTIFICATION_SCHEMA
 
 
 # The default connection and model are owned by the connections store; preferences
@@ -80,7 +67,7 @@ def _seed():
     env_keys = {
         "source_language": "DEFAULT_SOURCE_LANGUAGE", "target_language": "DEFAULT_TARGET_LANGUAGE",
         "passage_tokens": "MAX_TOKENS_PER_CHUNK", "srt_lines_per_block": "SRT_LINES_PER_BLOCK",
-        "output_filename_pattern": "OUTPUT_FILENAME_PATTERN", "notes_update_interval": "NOVEL_CONTEXT_UPDATE_INTERVAL",
+        "output_filename_pattern": "OUTPUT_FILENAME_PATTERN",
         "notes_prompt_max_tokens": "NOVEL_CONTEXT_PROMPT_MAX_TOKENS", "notes_source_memory_chars": "NOVEL_CONTEXT_SOURCE_MEMORY_CHARS",
         "notes_consolidation_interval": "NOVEL_CONTEXT_CONSOLIDATION_INTERVAL", "notes_accept_gender_corrections": "BYPASS_CONTEXT_GATING",
     }
@@ -89,20 +76,6 @@ def _seed():
         if _validate(value, SCHEMA[key]) is None:
             values[key] = value
     values.update(_connection_defaults())
-    notifications = {k: copy.deepcopy(v["default"]) for k, v in NOTIFICATION_SCHEMA.items()}
-    notifications.update({
-        "enabled": bool(config.NOTIFY_WEBHOOK_URL), "url": config.NOTIFY_WEBHOOK_URL,
-        "method": config.NOTIFY_WEBHOOK_METHOD, "payload": config.NOTIFY_WEBHOOK_PAYLOAD,
-        "timeout_seconds": max(1, min(120, config.NOTIFY_TIMEOUT_SECONDS)),
-        "events": [event for event, flag in [("success", config.NOTIFY_ON_SUCCESS), ("failure", config.NOTIFY_ON_FAILURE), ("interruption", config.NOTIFY_ON_INTERRUPTION), ("system_paused", config.NOTIFY_ON_INTERRUPTION), ("queue_finished", config.NOTIFY_ON_SUCCESS)] if flag],
-    })
-    try:
-        headers = json.loads(config.NOTIFY_WEBHOOK_HEADERS or "{}")
-        if isinstance(headers, dict) and all(isinstance(v, str) for v in headers.values()):
-            notifications["headers"] = headers
-    except (ValueError, TypeError):
-        pass
-    values["notifications"] = notifications
     return values
 
 
@@ -137,8 +110,9 @@ def get_preferences() -> dict:
             values = _seed()
             _atomic_write(values)
         defaults = {k: copy.deepcopy(v["default"]) for k, v in SCHEMA.items()}
-        defaults.update(values)
-        defaults["notifications"] = {**{k: copy.deepcopy(v["default"]) for k, v in NOTIFICATION_SCHEMA.items()}, **defaults["notifications"]}
+        defaults.update({k: v for k, v in values.items() if k in SCHEMA})
+        if defaults["notes_mode"] == "off":
+            defaults["notes_mode"] = "build"
         defaults.update(_connection_defaults())
         return defaults
 
@@ -176,31 +150,6 @@ def patch_preferences(patch):
             if error:
                 errors[key] = error
                 continue
-            if key == "notifications":
-                for subkey, subvalue in value.items():
-                    name = "notifications." + subkey
-                    if subkey not in NOTIFICATION_SCHEMA:
-                        errors[name] = "Unknown preference"
-                        continue
-                    if subvalue is None:
-                        continue
-                    error = _validate(subvalue, NOTIFICATION_SCHEMA[subkey])
-                    if not error and subkey == "headers" and not all(isinstance(k, str) and isinstance(v, str) and "\n" not in k + v and "\r" not in k + v for k, v in subvalue.items()):
-                        error = "Expected string header values without newlines"
-                    if not error and subkey == "events" and any(e not in ["success", "failure", "interruption", "system_paused", "queue_finished"] for e in subvalue):
-                        error = "Unknown event"
-                    if not error and subkey == "url" and subvalue and not subvalue.startswith(("http://", "https://")):
-                        error = "Expected HTTP or HTTPS URL"
-                    if not error and subkey == "payload" and subvalue:
-                        try:
-                            json.loads(subvalue)
-                        except ValueError:
-                            error = "Expected JSON template"
-                    if error:
-                        errors[name] = error
-                    else:
-                        values[key][subkey] = subvalue
-                continue
             if key == "price_overrides":
                 for name, prices in value.items():
                     if not isinstance(prices, dict) or set(prices) != {"input_per_m", "output_per_m"} or any(type(p) not in (int, float) or not math.isfinite(p) or p < 0 for p in prices.values()):
@@ -223,20 +172,12 @@ def patch_preferences(patch):
         return values
 
 
-def public_preferences(values):
-    values = copy.deepcopy(values)
-    for key in ("url", "headers"):
-        secret = values["notifications"][key]
-        values["notifications"][key] = {"set": bool(secret), "hint": "…/" + secret[-4:] if key == "url" and secret else ""}
-    return values
-
-
 def remember_job_defaults(job_request: dict) -> None:
-    patch = {key: job_request[key] for key in SCHEMA if key in job_request and key not in ("notifications", "price_overrides")}
+    patch = {key: job_request[key] for key in SCHEMA if key in job_request and key != "price_overrides"}
     for source, target in [("connection_id", "default_connection_id"), ("model", "default_model"), ("reasoning", "default_reasoning")]:
         if source in job_request:
             patch[target] = job_request[source]
     for key, value in (job_request.get("notes") or {}).items():
-        if "notes_" + key in SCHEMA:
+        if "notes_" + key in SCHEMA and not (key == "mode" and value == "off"):
             patch["notes_" + key] = value
     patch_preferences(patch)

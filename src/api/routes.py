@@ -17,7 +17,6 @@ from .blueprints import (
     create_translation_blueprint,
     create_file_blueprint,
     create_security_blueprint,
-    create_glossary_blueprint,
     create_sample_blueprint,
     create_preferences_blueprint,
     create_notes_blueprint,
@@ -57,12 +56,6 @@ def configure_routes(app, state_manager, output_dir, start_translation_job, sock
     # Register security and upload routes
     security_bp = create_security_blueprint(output_dir)
     app.register_blueprint(security_bp)
-
-    # Register glossary management routes
-    # Reuse the process-wide GlossaryStore so we don't multiply SQLite
-    # connections across the blueprint and the translation handler.
-    glossary_bp = create_glossary_blueprint(store=state_manager.get_glossary_store())
-    app.register_blueprint(glossary_bp)
 
     # Register Sample & Compare routes (ephemeral, in-memory).
     # The sample state manager is owned by this blueprint — sample runs are
