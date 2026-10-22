@@ -11,6 +11,7 @@ from src.config import (
 from src.prompts.prompts import generate_translation_prompt, generate_refinement_prompt
 from .llm_client import default_client, create_llm_client, LLMResponse
 from .llm import ContextOverflowError, RepetitionLoopError, RateLimitError
+from .llm.retry import retry_llm_operation
 from .post_processor import clean_translated_text
 from .context_optimizer import (
     AdaptiveContextManager,
@@ -194,6 +195,9 @@ async def _make_llm_request_with_adaptive_context(
                         "Try a different model.")
                 return None, main_content, last_response
 
+            if not full_raw_response.replace(TRANSLATE_TAG_IN, '').replace(TRANSLATE_TAG_OUT, '').strip():
+                return None, main_content, last_response
+
             # Check if we should retry with larger context (adaptive strategy)
             if context_manager and llm_response.was_truncated:
                 if context_manager.should_retry_with_larger_context(
@@ -353,6 +357,7 @@ async def _make_llm_request_with_adaptive_context(
 
 # Legacy wrapper for backward compatibility
 
+@retry_llm_operation()
 async def generate_translation_request(main_content, context_before, context_after, previous_translation_context,
                                        source_language="English", target_language="Chinese", model=DEFAULT_MODEL,
                                        llm_client=None, log_callback=None, has_placeholders=False,
@@ -415,6 +420,7 @@ async def generate_translation_request(main_content, context_before, context_aft
 
 
 
+@retry_llm_operation(lambda result: bool(result and result[0] and result[0].strip()))
 async def _make_refinement_request(
     draft_translation: str,
     context_before: str,
@@ -530,6 +536,8 @@ async def _make_refinement_request(
                     continue  # Retry with larger context
 
             full_raw_response = llm_response.content
+            if not full_raw_response or not full_raw_response.replace(TRANSLATE_TAG_IN, '').replace(TRANSLATE_TAG_OUT, '').strip():
+                return None, llm_response
 
             # Log the response
             if log_callback:

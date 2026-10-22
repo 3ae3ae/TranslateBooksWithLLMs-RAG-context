@@ -2,6 +2,7 @@
 Subtitle-specific translation module
 """
 import time
+from src.core.llm.retry import retry_operation
 from typing import Any, List, Dict, Optional, Tuple
 from tqdm.auto import tqdm
 
@@ -142,8 +143,6 @@ async def refine_subtitle_translations(
             refined_translations[g_idx] = text
             completed_count += 1
 
-    max_block_attempts = 2  # initial attempt + 1 retry with reinforced reminder
-
     saved_rows = {}
     if checkpoint_manager and translation_id and not (prompt_options or {}).get('_refine_after'):
         saved_rows = {row['chunk_index']: row for row in checkpoint_manager.db.get_chunks(translation_id)}
@@ -214,9 +213,13 @@ async def refine_subtitle_translations(
         else:
             local_prompt_options.pop("dialogue_attribution", None)
 
-        for attempt in range(max_block_attempts):
+        attempt = -1
+
+        async def refine_block():
+            nonlocal attempt
+            attempt += 1
             if check_interruption_callback and check_interruption_callback():
-                break
+                return False
 
             # On retry, reinforce the reminder with the exact missing indices.
             extra_instructions = post_processing_instructions or ''
@@ -276,7 +279,7 @@ async def refine_subtitle_translations(
 
                 # All subtitles recovered? stop retrying.
                 if len(block_refined) == len(group):
-                    break
+                    return True
 
             except Exception as e:
                 # Re-raise RateLimitError to trigger auto-pause
@@ -286,6 +289,13 @@ async def refine_subtitle_translations(
                 if log_callback:
                     log_callback("srt_refinement_error",
                                  f"Block {block_idx + 1} attempt {attempt + 1}: {e}")
+
+            return False
+
+        await retry_operation(
+            llm_client, refine_block, log_callback=log_callback,
+            check_interruption_callback=check_interruption_callback,
+        )
 
         # Apply refined where available, keep original draft otherwise.
         # No per-subtitle fallback: small models corrupt single-subtitle calls

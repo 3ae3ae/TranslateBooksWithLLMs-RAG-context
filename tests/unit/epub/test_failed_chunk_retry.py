@@ -144,7 +144,8 @@ async def test_failed_xhtml_chunk_context_survives_and_retries(
     attempts = {}
     context_updates = {}
 
-    async def fake_translate(**kwargs):
+    @xhtml_translator.retry_llm_operation(lambda result: result.succeeded)
+    async def fake_translate(llm_client, **kwargs):
         index = int(kwargs["chunk_text"].rsplit("-", 1)[1])
         attempts[index] = attempts.get(index, 0) + 1
         if index == 1 and attempts[index] == 1:

@@ -36,6 +36,10 @@ class LLMClient:
         if not self._provider:
             self._provider = create_llm_provider(self.provider_type, **self.provider_kwargs)
         return self._provider
+
+    @property
+    def max_attempts(self):
+        return self._get_provider().max_attempts
     
     @property
     def context_window(self) -> int:

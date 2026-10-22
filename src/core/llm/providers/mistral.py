@@ -19,7 +19,7 @@ import json
 from ..base import LLMProvider, LLMResponse
 from ..thinking.parameters import reasoning_parameters, drop_rejected_parameters
 from src import config
-from ..exceptions import ContextOverflowError
+from ..exceptions import ContextOverflowError, RateLimitError
 from ..rate_limit_handler import handle_rate_limit, is_retryable_http_status
 
 
@@ -230,6 +230,8 @@ class MistralProvider(LLMProvider):
         attempt = 0
         rate_limit_events = 0
         while attempt < self.max_attempts:
+            if not self._take_request_attempt():
+                return None
             current_key = await self._key_pool.acquire() if self._key_pool else None
             headers = {
                 **({"Authorization": f"Bearer {current_key}"} if current_key else {}),
@@ -243,10 +245,6 @@ class MistralProvider(LLMProvider):
                     json=payload,
                     timeout=timeout
                 )
-
-                # Handle specific error codes
-                if response.status_code == 401:
-                    raise ValueError("Invalid Mistral API key")
 
                 if response.status_code == 429 and self._key_pool:
                     rate_limit_events += 1
@@ -321,8 +319,6 @@ class MistralProvider(LLMProvider):
                 if any(keyword in error_message.lower() for keyword in context_overflow_keywords):
                     raise ContextOverflowError(f"Mistral context overflow: {error_message}")
 
-                # Client errors (404 model, 401 key, 402 credits, 400) won't
-                # recover on retry — fail fast.
                 if not is_retryable_http_status(e.response.status_code):
                     return None
 
@@ -340,6 +336,8 @@ class MistralProvider(LLMProvider):
                     continue
                 return None
 
+            except RateLimitError:
+                raise
             except Exception as e:
                 print(f"Mistral API Unknown Error (attempt {attempt + 1}/{self.max_attempts}): {e}")
                 attempt += 1

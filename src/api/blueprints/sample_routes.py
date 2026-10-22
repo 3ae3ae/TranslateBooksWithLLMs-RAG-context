@@ -28,6 +28,7 @@ from src.config import (
     REQUEST_TIMEOUT, SRT_LINES_PER_BLOCK,
 )
 from src.core.llm.factory import create_llm_provider
+from src.core.llm.retry import retry_operation
 from src.core.pricing.pricing_data import get_default_pricing
 from src.core.sampling import cap_chunk_text, sample_range, select_sample_indices
 from src.api.api_keys import provider_env_var as _provider_env_var
@@ -295,14 +296,18 @@ async def _execute_cell(
     provider = None
     try:
         provider = _instantiate_provider(column)
-        response = await provider.generate(
-            prompt=prompt_pair.user,
-            system_prompt=prompt_pair.system,
-            timeout=column.get("_connection", {}).get("request_timeout", REQUEST_TIMEOUT),
+        response = await retry_operation(
+            provider,
+            lambda: provider.generate(
+                prompt=prompt_pair.user,
+                system_prompt=prompt_pair.system,
+                timeout=column.get("_connection", {}).get("request_timeout", REQUEST_TIMEOUT),
+            ),
+            succeeded=lambda value: bool(value and value.content and value.content.strip()),
         )
         latency_ms = int((time.perf_counter() - started) * 1000)
 
-        if response is None or not response.content:
+        if response is None or not response.content or not response.content.strip():
             _emit_cell(
                 socketio, state, sample_id, row, col, phase,
                 status="error",

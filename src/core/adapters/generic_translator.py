@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .format_adapter import FormatAdapter
 from src.core.llm_client import LLMClient
+from src.core.llm.retry import retry_operation
 from src.utils.unified_logger import get_logger
 
 logger = get_logger(__name__)
@@ -234,7 +235,7 @@ class GenericTranslator:
             )
 
             # 6. Translate each unit (sequentially, or with continuous concurrency)
-            from src.config import resolve_parallel_workers as legacy_workers, UNIT_VALIDATION_RETRIES
+            from src.config import resolve_parallel_workers as legacy_workers
             connection = llm_kwargs.get('connection')
 
             def resolve_parallel_workers(provider, workers):
@@ -399,7 +400,6 @@ class GenericTranslator:
 
             workers = resolve_parallel_workers(llm_provider, parallel_workers)
             sequential = workers == 1
-            max_validation_attempts = 1 + max(0, self.adapter.config.get('unit_validation_retries') if self.adapter.config.get('unit_validation_retries') is not None else UNIT_VALIDATION_RETRIES)
 
             last_context = ""
             failed_count = 0
@@ -412,10 +412,8 @@ class GenericTranslator:
                 """Translate one unit. Reads last_context only in sequential mode
                 (parallel runs have no stable 'previous translation').
 
-                Results failing adapter validation (e.g. SRT [N] markers
-                dropped by the LLM) are retried with a reinforced prompt up
-                to max_validation_attempts; after exhaustion the best-effort
-                content is returned wrapped in _ValidationFailed."""
+                Validation and transport failures share one in-place request
+                budget. Invalid output keeps its valid parts after exhaustion."""
                 unit = units[i]
                 if workflow:
                     draft = workflow.draft(i, unit.content)
@@ -528,7 +526,12 @@ class GenericTranslator:
                         'novel_context': decode_context_snapshot(unit.metadata['context_snapshot'], '')[0],
                         'dialogue_attribution': unit.metadata.get('dialogue_attribution')}
 
-                for attempt in range(max_validation_attempts):
+                attempt = 0
+                last_invalid = None
+
+                async def translate_draft():
+                    nonlocal attempt, attempt_options, last_invalid
+                    attempt += 1
                     same_previous_chapter = (
                         i > 0
                         and units[i - 1].metadata.get("chapter_index")
@@ -560,22 +563,18 @@ class GenericTranslator:
 
                     # API failure / empty result: existing failure semantics.
                     if not result:
-                        return result
+                        return last_invalid
 
                     feedback = self.adapter.validate_unit_translation(
                         unit.unit_id, result
                     )
                     if feedback is None:
-                        if workflow:
-                            _commit_context(i, unit)
-                            text, _ = await workflow.finish(i, unit.content, result, unit.metadata, kind=self.adapter.format_name)
-                            return text
                         return result
 
                     if log_callback:
                         log_callback("unit_validation_failed",
                             f"Unit {i+1}/{total_units}: {feedback} "
-                            f"(attempt {attempt+1}/{max_validation_attempts})")
+                            f"(attempt {attempt})")
 
                     reinforced = (
                         f"CRITICAL: Your previous response was structurally "
@@ -592,12 +591,23 @@ class GenericTranslator:
                         ),
                     }
 
-                if log_callback:
-                    log_callback("unit_validation_exhausted",
-                        f"Unit {i+1}/{total_units} still incomplete after "
-                        f"{max_validation_attempts} attempts — keeping valid "
-                        f"parts and marking the unit failed")
-                return _ValidationFailed(result)
+                    last_invalid = _ValidationFailed(result)
+                    return last_invalid
+
+                result = await retry_operation(
+                    llm_client, translate_draft,
+                    succeeded=lambda value: bool(value) and not isinstance(value, _ValidationFailed),
+                    log_callback=log_callback,
+                    check_interruption_callback=check_interruption_callback,
+                )
+                if isinstance(result, _ValidationFailed) and log_callback:
+                    log_callback('unit_validation_exhausted',
+                        f'Unit {i+1}/{total_units}: request budget exhausted; keeping valid parts')
+                if workflow and result and not isinstance(result, _ValidationFailed):
+                    _commit_context(i, unit)
+                    text, _ = await workflow.finish(i, unit.content, result, unit.metadata, kind=self.adapter.format_name)
+                    return text
+                return result
 
             async def _save_partial_and_pause(at_index):
                 if log_callback:
@@ -757,84 +767,6 @@ class GenericTranslator:
                     and (remaining > 0 or workflow)):
                 await _save_partial_and_pause(next_index)
                 return False
-
-            if failed_indices:
-                retry_targets = sorted(failed_indices)
-                if log_callback:
-                    log_callback(
-                        "failed_unit_retry_start",
-                        f"Retrying {len(retry_targets)} failed unit(s) before final output...",
-                    )
-                for i in retry_targets:
-                    if check_interruption_callback and check_interruption_callback():
-                        await _save_partial_and_pause(i)
-                        return False
-
-                    unit = units[i]
-                    result = await _translate_unit(i, analyze_context=False)
-
-                    if isinstance(result, RateLimitError):
-                        raise result
-                    if isinstance(result, Exception):
-                        if log_callback:
-                            log_callback(
-                                "unit_error",
-                                f"Retry failed for unit {i+1}/{total_units}: {str(result)}",
-                            )
-                        _record_failure(i, unit)
-                        continue
-
-                    if isinstance(result, _ValidationFailed):
-                        await self.adapter.save_unit_translation(
-                            unit.unit_id, result.content
-                        )
-                        _record_failure(i, unit)
-                        continue
-
-                    translated_content = result
-                    if not translated_content:
-                        _record_failure(i, unit)
-                        continue
-
-                    save_success = await self.adapter.save_unit_translation(
-                        unit.unit_id, translated_content
-                    )
-                    if not save_success:
-                        if log_callback:
-                            log_callback(
-                                "save_failed",
-                                f"Failed to save retry translation for unit {unit.unit_id}",
-                            )
-                        _record_failure(i, unit)
-                        continue
-
-                    _commit_context(i, unit)
-                    if not workflow or unit.metadata.get('polish_status') == 'done':
-                        failed_indices.discard(i)
-                    failed_count = len(failed_indices)
-                    counted_indices.add(i)
-                    completed_count = len(counted_indices)
-                    self.checkpoint_manager.save_checkpoint(
-                        translation_id=self.translation_id,
-                        chunk_index=i,
-                        original_text=unit.content,
-                        translated_text=translated_content,
-                        chunk_data=unit.metadata,
-                        total_chunks=total_units,
-                        completed_chunks=completed_count,
-                        failed_chunks=failed_count,
-                    )
-                    if stats_callback:
-                        stats_callback({
-                            'total_chunks': total_units,
-                            'completed_chunks': completed_count,
-                            'failed_chunks': failed_count
-                        })
-                    if log_callback:
-                        log_callback(
-                            "failed_unit_retry_success",
-                            f"Failed unit {i+1}/{total_units} translated successfully on retry.",
-                        )
 
             # 7. Reconstruct output file
             if log_callback:

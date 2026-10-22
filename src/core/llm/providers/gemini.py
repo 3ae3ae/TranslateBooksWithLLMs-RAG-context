@@ -198,6 +198,8 @@ class GeminiProvider(LLMProvider):
         attempt = 0
         rate_limit_events = 0
         while attempt < self.max_attempts:
+            if not self._take_request_attempt():
+                return None
             current_key = await self._key_pool.acquire() if self._key_pool else None
             headers = {
                 "Content-Type": "application/json",
@@ -299,8 +301,6 @@ class GeminiProvider(LLMProvider):
                     if any(keyword in error_message.lower() for keyword in context_overflow_keywords):
                         raise ContextOverflowError(f"Gemini context overflow: {error_message}")
 
-                    # Client errors (404 model retired, 400/401/403) won't recover
-                    # on retry — fail fast instead of hammering the API 3x.
                     if not is_retryable_http_status(e.response.status_code):
                         return None
 

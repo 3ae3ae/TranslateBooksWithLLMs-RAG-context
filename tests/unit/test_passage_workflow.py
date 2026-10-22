@@ -1,6 +1,7 @@
 """Offline coverage of durable translation and polish at source boundaries."""
 import re
 import zipfile
+from itertools import groupby
 
 import pytest
 from docx import Document
@@ -10,6 +11,7 @@ from src.config import TRANSLATE_TAG_IN, TRANSLATE_TAG_OUT
 from src.core.adapters.translate_file import translate_file
 from src.core.common.passage_workflow import PassageWorkflow, is_polished
 from src.core.llm.base import LLMResponse
+from src import config
 from src.core.llm.exceptions import RateLimitError
 from tests.characterization import fake_llm, fixtures
 from tests.characterization.recorder import _checkpoint_manager
@@ -147,6 +149,43 @@ async def test_failed_polish_keeps_draft_retry_never_retranslates(tmp_path, prov
     control['fail_polish'] = False
     assert await translate_file(**kwargs)
     assert [call[0] for call in calls] == ['P'] * len(rows)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('fmt,options', [('txt', {}), ('srt', {}), ('epub', {}),
+    ('epub', {'plain_text_mode': True}), ('docx', {}), ('docx', {'plain_text_mode': True})])
+@pytest.mark.parametrize('stage', ['T', 'P'])
+@pytest.mark.parametrize('failure', ['empty', 'invalid', 'persistent'])
+async def test_stage_exhausts_budget_before_next_passage(tmp_path, provider, monkeypatch, fmt, options, stage, failure):
+    calls, _ = provider
+    monkeypatch.setattr(config, 'MAX_TRANSLATION_ATTEMPTS', 3)
+    generate = fake_llm.FakeEchoProvider.generate
+    previous = None
+    attempt = 0
+
+    async def failing(self, *args, **kwargs):
+        nonlocal previous, attempt
+        response = await generate(self, *args, **kwargs)
+        current = calls[-1][:2]
+        attempt = attempt + 1 if current == previous else 1
+        previous = current
+        if current[0] == stage and (failure == 'persistent' or attempt < 3):
+            return LLMResponse(content=f'{TRANSLATE_TAG_IN}{TRANSLATE_TAG_OUT}') if failure == 'invalid' else None
+        return response
+
+    monkeypatch.setattr(fake_llm.FakeEchoProvider, 'generate', failing)
+    manager, _, kwargs = setup_job(tmp_path, fmt, **options)
+    assert await translate_file(**kwargs) is (failure != 'persistent')
+    groups = [(key, len(list(group))) for key, group in groupby(call[:2] for call in calls)]
+    rows = manager.db.get_chunks('job')
+    assert len(groups) == len(rows) * (1 if failure == 'persistent' and stage == 'T' else 2)
+    assert all(count == (3 if key[0] == stage else 1) for key, count in groups)
+    if failure == 'persistent':
+        assert all(row['status'] != 'completed' for row in rows)
+        if stage == 'P':
+            assert all(row['translated_text'] == row['chunk_data']['draft_text'] for row in rows)
+    else:
+        assert all(is_polished(row) for row in rows)
 
 
 @pytest.mark.asyncio

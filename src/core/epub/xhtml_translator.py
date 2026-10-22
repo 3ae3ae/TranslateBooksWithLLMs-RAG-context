@@ -36,6 +36,7 @@ LEVEL 3 - Translation (PlaceholderManager):
     → Restored: "[id5]Bonjour[id6]" (global indices)
 """
 import re
+from src.core.llm.retry import retry_llm_operation, retry_operation
 import copy as _copy
 from html.entities import html5 as _HTML5_ENTITIES
 from typing import List, Dict, Any, Optional, Callable, Tuple
@@ -193,6 +194,7 @@ def _should_hide_structured_refinement_placeholders(
     return STRUCTURED_REFINEMENT_HIDE_PLACEHOLDERS
 
 
+@retry_llm_operation(lambda result: bool(result and result.succeeded))
 async def translate_chunk_with_fallback(
     chunk_text: str,
     local_tag_map: Dict[str, str],
@@ -364,6 +366,9 @@ async def translate_chunk_with_fallback(
                 _log_error(log_callback, "phase2_validation_failed", "✗ Phase 2 validation failed")
 
         except Exception as e:
+            from src.core.llm.exceptions import RateLimitError
+            if isinstance(e, RateLimitError):
+                raise
             _log_error(log_callback, "phase2_error", f"✗ Phase 2 error: {str(e)}")
 
     # ==========================================================================
@@ -1128,84 +1133,6 @@ async def _translate_all_chunks_with_checkpoint(
         _save_state(next_index)
         return translated_chunks, stats, True  # was_interrupted=True
 
-    if failed_indices:
-        retry_targets = sorted(failed_indices)
-        if log_callback:
-            log_callback(
-                "failed_chunk_retry_start",
-                f"Retrying {len(retry_targets)} failed XHTML chunk(s) before final output...",
-            )
-        for i in retry_targets:
-            if check_interruption_callback and check_interruption_callback():
-                if log_callback:
-                    log_callback(
-                        "xhtml_translation_interrupted",
-                        f"⏸️ Translation interrupted before retrying chunk {i + 1}/{len(chunks)}",
-                    )
-                _save_state(len(translated_chunks))
-                return translated_chunks, stats, True
-
-            result = await _translate_one(i, analyze_context=False)
-            if isinstance(result, RateLimitError):
-                if checkpoint_manager and translation_id and file_href and translated_chunks:
-                    _save_state(len(translated_chunks))
-                raise result
-            if isinstance(result, Exception):
-                if log_callback:
-                    log_callback(
-                        "xhtml_chunk_retry_failed",
-                        f"Retry failed for chunk {i + 1}/{len(chunks)}: {result}",
-                    )
-                continue
-
-            succeeded = getattr(result, "succeeded", True)
-            translated_text = str(result)
-            if i < len(translated_chunks):
-                translated_chunks[i] = translated_text
-            elif i == len(translated_chunks):
-                translated_chunks.append(translated_text)
-            else:
-                raise RuntimeError(
-                    f"Cannot commit non-contiguous XHTML retry chunk {i}; "
-                    f"translated prefix length is {len(translated_chunks)}"
-                )
-
-            if succeeded:
-                failed_indices.discard(i)
-                if log_callback:
-                    log_callback(
-                        "failed_chunk_retry_success",
-                        f"Failed XHTML chunk {i + 1}/{len(chunks)} translated successfully on retry.",
-                    )
-            else:
-                failed_indices.add(i)
-            stats.failed_chunks = len(failed_indices)
-            stats.processed_chunks = len(translated_chunks)
-
-            ctx_snapshot, dialogue_attribution, chunk_data = _context_data_for_save(i)
-            chunks[i]['context_snapshot'] = ctx_snapshot
-            chunks[i]['dialogue_attribution'] = dialogue_attribution
-
-            if checkpoint_manager and translation_id and hasattr(checkpoint_manager, 'db'):
-                global_chunk_idx = _global_chunk_index(i)
-                if chunk_data.get('context_snapshot'):
-                    checkpoint_context_data_by_global_index[global_chunk_idx] = (
-                        dict(chunk_data)
-                    )
-                checkpoint_manager.db.save_chunk(
-                    translation_id=translation_id,
-                    chunk_index=global_chunk_idx,
-                    original_text=chunks[i]['text'],
-                    translated_text=translated_text,
-                    chunk_data=chunk_data,
-                    status='completed' if succeeded else 'failed'
-                )
-            if stats_callback:
-                stats_callback(stats.to_dict())
-
-        if failed_indices:
-            _save_state(len(translated_chunks))
-
     return translated_chunks, stats, False  # was_interrupted=False
 
 
@@ -1403,42 +1330,6 @@ async def _translate_all_chunks(
         # Report stats after completing each chunk
         if stats_callback:
             stats_callback(stats.to_dict())
-
-    if failed_indices:
-        retry_targets = sorted(failed_indices)
-        if log_callback:
-            log_callback(
-                "failed_chunk_retry_start",
-                f"Retrying {len(retry_targets)} failed XHTML chunk(s) before final output...",
-            )
-        for i in retry_targets:
-            translated = await translate_chunk_with_fallback(
-                chunk_text=chunks[i]['text'],
-                local_tag_map=chunks[i]['local_tag_map'],
-                global_indices=chunks[i]['global_indices'],
-                source_language=source_language,
-                target_language=target_language,
-                model_name=model_name,
-                llm_client=llm_client,
-                stats=stats,
-                log_callback=log_callback,
-                max_retries=max_retries,
-                context_manager=context_manager,
-                placeholder_format=placeholder_format,
-                prompt_options=prompt_options
-            )
-            if i < len(translated_chunks):
-                translated_chunks[i] = str(translated)
-            if getattr(translated, "succeeded", True):
-                failed_indices.discard(i)
-                stats.failed_chunks = len(failed_indices)
-                if log_callback:
-                    log_callback(
-                        "failed_chunk_retry_success",
-                        f"Failed XHTML chunk {i + 1}/{len(chunks)} translated successfully on retry.",
-                    )
-            if stats_callback:
-                stats_callback(stats.to_dict())
 
     return translated_chunks, stats
 
@@ -2057,99 +1948,110 @@ async def _refine_epub_chunks(
             prompt_options=local_prompt_options
         )
 
-        # Make refinement request
-        refinement_succeeded = False
-        try:
-            # Log the refinement request (like translation does)
-            if log_callback:
-                log_callback("refinement_request", "Sending refinement request to LLM", data={
-                    'type': 'refinement_request',
-                    'system_prompt': prompt_pair.system,
-                    'user_prompt': prompt_pair.user,
-                    'model': model_name
-                })
+        refined_value = translated_text
 
-            # Set context from manager if available
-            if context_manager and hasattr(llm_client, 'context_window'):
-                new_ctx = context_manager.get_context_size()
-                if llm_client.context_window != new_ctx:
-                    llm_client.context_window = new_ctx
+        async def refine_once():
+            nonlocal refined_value
+            refinement_succeeded = False
+            try:
+                # Log the refinement request (like translation does)
+                if log_callback:
+                    log_callback("refinement_request", "Sending refinement request to LLM", data={
+                        'type': 'refinement_request',
+                        'system_prompt': prompt_pair.system,
+                        'user_prompt': prompt_pair.user,
+                        'model': model_name
+                    })
 
-            import time
-            start_time = time.time()
-            llm_response = await llm_client.make_request(
-                prompt_pair.user, model_name, system_prompt=prompt_pair.system
-            )
-            execution_time = time.time() - start_time
+                # Set context from manager if available
+                if context_manager and hasattr(llm_client, 'context_window'):
+                    new_ctx = context_manager.get_context_size()
+                    if llm_client.context_window != new_ctx:
+                        llm_client.context_window = new_ctx
 
-            # Log the response (like translation does)
-            if log_callback and llm_response:
-                log_callback("refinement_response", "Refinement response received", data={
-                    'type': 'refinement_response',
-                    'response': llm_response.content,
-                    'execution_time': execution_time,
-                    'model': model_name,
-                    'tokens': {
-                        'prompt': llm_response.prompt_tokens,
-                        'completion': llm_response.completion_tokens,
-                        'total': llm_response.context_used,
-                        'limit': llm_response.context_limit
-                    }
-                })
+                import time
+                start_time = time.time()
+                llm_response = await llm_client.make_request(
+                    prompt_pair.user, model_name, system_prompt=prompt_pair.system
+                )
+                execution_time = time.time() - start_time
 
-            if llm_response and llm_response.content:
-                # Extract refined text
-                refined_text = llm_client.extract_translation(llm_response.content)
+                # Log the response (like translation does)
+                if log_callback and llm_response:
+                    log_callback("refinement_response", "Refinement response received", data={
+                        'type': 'refinement_response',
+                        'response': llm_response.content,
+                        'execution_time': execution_time,
+                        'model': model_name,
+                        'tokens': {
+                            'prompt': llm_response.prompt_tokens,
+                            'completion': llm_response.completion_tokens,
+                            'total': llm_response.context_used,
+                            'limit': llm_response.context_limit
+                        }
+                    })
 
-                if refined_text:
-                    if hide_refinement_placeholders:
-                        from .token_alignment_fallback import TokenAlignmentFallback
-                        refined_plain_text = _remove_placeholders_by_format(
-                            refined_text,
-                            placeholder_format,
-                        )
-                        refined_text = TokenAlignmentFallback().align_and_insert_placeholders(
-                            text_for_refinement,
-                            refined_plain_text,
-                            local_placeholders,
-                        )
+                if llm_response and llm_response.content:
+                    # Extract refined text
+                    refined_text = llm_client.extract_translation(llm_response.content)
 
-                    # CRITICAL: Validate placeholders before accepting refinement
-                    # refined_text should have LOCAL indices (0, 1, 2...) matching local_tag_map
-                    if local_tag_map and not validate_placeholders(refined_text, local_tag_map):
-                        _log_error(log_callback, "epub_refinement_placeholder_corruption",
-                                    f"Chunk {idx + 1}/{total_chunks}: refinement corrupted placeholders, using original translation")
-                        refined_chunks.append(translated_text)
+                    if refined_text:
+                        if hide_refinement_placeholders:
+                            from .token_alignment_fallback import TokenAlignmentFallback
+                            refined_plain_text = _remove_placeholders_by_format(
+                                refined_text,
+                                placeholder_format,
+                            )
+                            refined_text = TokenAlignmentFallback().align_and_insert_placeholders(
+                                text_for_refinement,
+                                refined_plain_text,
+                                local_placeholders,
+                            )
+
+                        # CRITICAL: Validate placeholders before accepting refinement
+                        # refined_text should have LOCAL indices (0, 1, 2...) matching local_tag_map
+                        if local_tag_map and not validate_placeholders(refined_text, local_tag_map):
+                            _log_error(log_callback, "epub_refinement_placeholder_corruption",
+                                        f"Chunk {idx + 1}/{total_chunks}: refinement corrupted placeholders, using original translation")
+                            refined_value = translated_text
+                        else:
+                            # Validation passed! Now convert LOCAL indices back to GLOBAL indices
+                            refined_with_global_indices = _restore_local_placeholders_to_global(
+                                refined_text,
+                                global_indices,
+                                placeholder_format,
+                            )
+
+                            refined_value = refined_with_global_indices
+                            refinement_succeeded = True
+                            if log_callback:
+                                log_callback("epub_chunk_refined", f"Chunk {idx + 1}/{total_chunks} refined successfully")
                     else:
-                        # Validation passed! Now convert LOCAL indices back to GLOBAL indices
-                        refined_with_global_indices = _restore_local_placeholders_to_global(
-                            refined_text,
-                            global_indices,
-                            placeholder_format,
-                        )
-
-                        refined_chunks.append(refined_with_global_indices)
-                        refinement_succeeded = True
+                        # Fallback to original translation if extraction fails
+                        refined_value = translated_text
                         if log_callback:
-                            log_callback("epub_chunk_refined", f"Chunk {idx + 1}/{total_chunks} refined successfully")
+                            log_callback("epub_refinement_fallback", f"Chunk {idx + 1}/{total_chunks}: using original translation")
                 else:
-                    # Fallback to original translation if extraction fails
-                    refined_chunks.append(translated_text)
-                    if log_callback:
-                        log_callback("epub_refinement_fallback", f"Chunk {idx + 1}/{total_chunks}: using original translation")
-            else:
-                # Fallback to original translation if request fails
-                refined_chunks.append(translated_text)
-                _log_error(log_callback, "epub_refinement_failed", f"Chunk {idx + 1}/{total_chunks}: refinement failed, using original")
+                    # Fallback to original translation if request fails
+                    refined_value = translated_text
+                    _log_error(log_callback, "epub_refinement_failed", f"Chunk {idx + 1}/{total_chunks}: refinement failed, using original")
 
-        except Exception as e:
-            # Re-raise RateLimitError to trigger auto-pause
-            from src.core.llm.exceptions import RateLimitError as _RLE
-            if isinstance(e, _RLE):
-                raise
-            # Fallback to original translation on error
-            refined_chunks.append(translated_text)
-            _log_error(log_callback, "epub_refinement_error", f"Chunk {idx + 1}/{total_chunks}: error during refinement: {e}")
+            except Exception as e:
+                # Re-raise RateLimitError to trigger auto-pause
+                from src.core.llm.exceptions import RateLimitError as _RLE
+                if isinstance(e, _RLE):
+                    raise
+                # Fallback to original translation on error
+                refined_value = translated_text
+                _log_error(log_callback, "epub_refinement_error", f"Chunk {idx + 1}/{total_chunks}: error during refinement: {e}")
+
+            return refinement_succeeded
+
+        refinement_succeeded = await retry_operation(
+            llm_client, refine_once, log_callback=log_callback,
+            check_interruption_callback=check_interruption_callback,
+        )
+        refined_chunks.append(refined_value)
 
         if result_callback:
             result_callback(checkpoint_offset + idx, refined_chunks[-1], refinement_succeeded)

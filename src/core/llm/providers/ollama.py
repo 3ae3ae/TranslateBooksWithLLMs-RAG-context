@@ -306,6 +306,8 @@ class OllamaProvider(LLMProvider):
         attempt = 0
         rate_limit_events = 0
         while attempt < self.max_attempts:
+            if not self._take_request_attempt():
+                return None
             headers = await self._headers()
             try:
                 # Use streaming to monitor tokens in real-time

@@ -14,6 +14,7 @@ from src.config import TRANSLATE_TAG_IN, TRANSLATE_TAG_OUT
 from src import config
 from src.core.llm.utils.extraction import TranslationExtractor
 from src.core.llm.key_pool import KeyPool
+from src.core.llm.retry import take_request_attempt
 
 
 def normalize_api_keys(raw: Optional[Union[str, Iterable[str]]]) -> List[str]:
@@ -49,6 +50,8 @@ class LLMResponse:
 
 class LLMProvider(ABC):
     """Abstract base class for LLM providers"""
+
+    _take_request_attempt = staticmethod(take_request_attempt)
 
     def __init__(
         self,

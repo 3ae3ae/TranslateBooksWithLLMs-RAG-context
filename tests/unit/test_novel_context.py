@@ -4514,6 +4514,7 @@ async def test_plain_text_retry_preserves_failed_chunk_context_snapshot(
 ):
     from unittest.mock import MagicMock
     from src.core.common import plain_text_pipeline
+    from src.core.llm.retry import retry_llm_operation
     import src.config
 
     attempts = {}
@@ -4528,7 +4529,8 @@ async def test_plain_text_retry_preserves_failed_chunk_context_snapshot(
         lines.append(f"- seen {source_chunk}")
         return "# GLOBAL LORE", "\n".join(lines), []
 
-    async def fake_translate(*, main_content, **kwargs):
+    @retry_llm_operation()
+    async def fake_translate(*, main_content, llm_client, **kwargs):
         attempts[main_content] = attempts.get(main_content, 0) + 1
         if main_content == "source-1" and attempts[main_content] == 1:
             return None

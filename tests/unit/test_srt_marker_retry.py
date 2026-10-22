@@ -128,7 +128,7 @@ async def test_missing_marker_retries_then_succeeds(tmp_path, cm, monkeypatch):
 async def test_persistent_missing_marker_marks_unit_failed(
     tmp_path, cm, monkeypatch
 ):
-    monkeypatch.setattr(config_module, "UNIT_VALIDATION_RETRIES", 2)
+    monkeypatch.setattr(config_module, "MAX_TRANSLATION_ATTEMPTS", 3)
     calls = []
     logs = []
     _patch_llm(monkeypatch, [MISSING_LAST], calls)
@@ -136,7 +136,7 @@ async def test_persistent_missing_marker_marks_unit_failed(
     success, output_file = await _run(tmp_path, cm, logs)
 
     assert success is False
-    assert len(calls) == 6  # initial validation attempts + deferred retry pass
+    assert len(calls) == 3
     assert any(t == "unit_validation_exhausted" for t, _ in logs)
 
     # The job is partial and the unit is recorded failed, hence retryable.

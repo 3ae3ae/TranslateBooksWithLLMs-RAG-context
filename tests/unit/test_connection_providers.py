@@ -8,6 +8,8 @@ import pytest
 
 from src.core.llm.factory import create_llm_provider, create_llm_client as factory_client
 from src.core.llm.key_pool import KeyPool
+from src.core.llm.retry import retry_operation
+from src.core.llm.exceptions import RateLimitError
 from src.core.llm_client import LLMClient, create_llm_client
 
 
@@ -42,6 +44,69 @@ async def generate_with_http(connection_config, handler, *, context_window=2048,
     provider._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     try:
         return provider, await provider.generate("Translate", system_prompt="Instructions", timeout=timeout)
+    finally:
+        await provider.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', ['openai', 'gemini', 'deepseek', 'mistral', 'openrouter', 'poe', 'ollama_cloud'])
+@pytest.mark.parametrize('status', [400, 401, 402, 403, 404])
+async def test_passage_budget_retries_http_errors_except_auth_and_billing(monkeypatch, kind, status):
+    monkeypatch.setattr('asyncio.sleep', AsyncMock())
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(status, json={'error': 'offline failure'})
+
+    provider = create_llm_provider(connection=connection(kind) | {'max_attempts': 3})
+    provider._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    try:
+        assert await retry_operation(provider, lambda: provider.generate('Translate')) is None
+        assert len(requests) == (1 if status in (401, 402, 403) else 3)
+    finally:
+        await provider.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', ['openai', 'gemini', 'deepseek', 'mistral', 'openrouter', 'poe', 'ollama_cloud'])
+async def test_validation_and_transport_share_one_budget(monkeypatch, kind):
+    monkeypatch.setattr('asyncio.sleep', AsyncMock())
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(500) if len(requests) == 1 else success(kind)
+
+    provider = create_llm_provider(connection=connection(kind) | {'max_attempts': 3})
+    provider._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    try:
+        response = await retry_operation(
+            provider, lambda: provider.generate('Translate'),
+            succeeded=lambda result: len(requests) == 3 and result is not None,
+        )
+        assert response is not None
+        assert len(requests) == 3
+    finally:
+        await provider.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', ['openai', 'gemini', 'deepseek', 'mistral', 'openrouter', 'poe', 'ollama_cloud'])
+async def test_exhausted_rate_limit_budget_still_pauses(monkeypatch, kind):
+    monkeypatch.setattr('asyncio.sleep', AsyncMock())
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(429, headers={'Retry-After': '1'})
+
+    provider = create_llm_provider(connection=connection(kind) | {'max_attempts': 3})
+    provider._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    try:
+        with pytest.raises(RateLimitError):
+            await retry_operation(provider, lambda: provider.generate('Translate'))
+        assert len(requests) == 3
     finally:
         await provider.close()
 

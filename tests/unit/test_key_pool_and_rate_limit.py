@@ -163,10 +163,13 @@ class TestComputeWaitTime:
 # ---------------------------------------------------------------------------
 
 class TestIsRetryableHttpStatus:
-    def test_client_errors_fail_fast(self):
-        # 4xx (except 429) are caused by the request and won't recover on retry.
-        for code in (400, 401, 402, 403, 404, 410, 422):
+    def test_authentication_and_billing_errors_fail_fast(self):
+        for code in (401, 402, 403):
             assert is_retryable_http_status(code) is False, code
+
+    def test_other_client_errors_are_retryable(self):
+        for code in (400, 404, 410, 422):
+            assert is_retryable_http_status(code) is True, code
 
     def test_rate_limit_is_retryable(self):
         assert is_retryable_http_status(429) is True

@@ -252,6 +252,8 @@ class OpenRouterProvider(LLMProvider):
         attempt = 0
         rate_limit_events = 0
         while attempt < self.max_attempts:
+            if not self._take_request_attempt():
+                return None
             current_key = await self._key_pool.acquire() if self._key_pool else None
             headers = {
                 **({"Authorization": f"Bearer {current_key}"} if current_key else {}),
@@ -363,8 +365,6 @@ class OpenRouterProvider(LLMProvider):
                 if any(keyword in error_message.lower() for keyword in context_overflow_keywords):
                     raise ContextOverflowError(f"OpenRouter context overflow: {error_message}")
 
-                # Client errors (404 model, 401 key, 402 credits, 400) won't
-                # recover on retry — fail fast instead of retrying 3x.
                 if not is_retryable_http_status(e.response.status_code):
                     return None
 

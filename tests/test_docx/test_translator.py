@@ -203,6 +203,7 @@ class TestTranslateDocxFile:
     async def test_translate_max_retries(self, simple_docx_path, temp_dir, mock_llm_provider):
         """Test max_retries parameter is passed through."""
         output_path = os.path.join(temp_dir, 'translated_retries.docx')
+        mock_llm_provider.max_attempts = 4  # Three structured attempts plus alignment fallback.
 
         result = await translate_docx_file(
             input_filepath=simple_docx_path,
@@ -215,6 +216,7 @@ class TestTranslateDocxFile:
         )
 
         assert result['success'] is True
+        assert mock_llm_provider.call_count == 4
 
     @pytest.mark.asyncio
     async def test_translate_custom_chunk_size(self, simple_docx_path, temp_dir, mock_llm_provider):

@@ -21,7 +21,7 @@ import json
 from ..base import LLMProvider, LLMResponse
 from ..thinking.parameters import reasoning_parameters, drop_rejected_parameters
 from src import config
-from ..exceptions import ContextOverflowError
+from ..exceptions import ContextOverflowError, RateLimitError
 from ..rate_limit_handler import handle_rate_limit, is_retryable_http_status
 
 
@@ -361,6 +361,8 @@ class PoeProvider(LLMProvider):
         attempt = 0
         rate_limit_events = 0
         while attempt < self.max_attempts:
+            if not self._take_request_attempt():
+                return None
             current_key = await self._key_pool.acquire() if self._key_pool else None
             headers = {
                 **({"Authorization": f"Bearer {current_key}"} if current_key else {}),
@@ -377,11 +379,13 @@ class PoeProvider(LLMProvider):
 
                 # Handle specific error codes
                 if response.status_code == 401:
+                    is_retryable_http_status(401)
                     print(f"❌ Poe: Invalid API key!")
                     print(f"   Get your API key at: https://poe.com/api_key")
                     return None
 
                 if response.status_code == 402:
+                    is_retryable_http_status(402)
                     print(f"❌ Poe: Insufficient points/credits!")
                     print(f"   Check your subscription at: https://poe.com/subscribe")
                     return None
@@ -469,8 +473,6 @@ class PoeProvider(LLMProvider):
                 if any(keyword in error_message.lower() for keyword in context_overflow_keywords):
                     raise ContextOverflowError(f"Poe context overflow: {error_message}")
 
-                # Client errors (404 bot, 401 key, 402 credits, 400) won't
-                # recover on retry — fail fast.
                 if not is_retryable_http_status(e.response.status_code):
                     return None
 
@@ -488,6 +490,8 @@ class PoeProvider(LLMProvider):
                     continue
                 return None
 
+            except RateLimitError:
+                raise
             except Exception as e:
                 print(f"Poe API Unknown Error (attempt {attempt + 1}/{self.max_attempts}): {e}")
                 attempt += 1

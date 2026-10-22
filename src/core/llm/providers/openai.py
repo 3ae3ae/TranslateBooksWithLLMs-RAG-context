@@ -123,6 +123,8 @@ class OpenAICompatibleProvider(LLMProvider):
         attempt = 0
         rate_limit_events = 0
         while attempt < self.max_attempts:
+            if not self._take_request_attempt():
+                return None
             current_key = await self._key_pool.acquire() if self._key_pool else None
             headers = {"Content-Type": "application/json"}
             if current_key:
@@ -276,9 +278,6 @@ class OpenAICompatibleProvider(LLMProvider):
                     if error_body:
                         print(f"{YELLOW}   Response: {error_body[:200]}...{RESET}")
 
-                # Client errors (404 wrong path/model, 401/403 auth, 400) won't
-                # recover on retry — fail fast. 429 stays retryable (handled above
-                # when a key pool exists, otherwise retried with backoff).
                 if (e.response is not None
                         and not is_retryable_http_status(e.response.status_code)):
                     return None

@@ -26,21 +26,15 @@ from typing import Callable, Mapping, Optional
 
 from .exceptions import RateLimitError
 from .key_pool import KeyPool
+from .retry import check_rate_limit_budget, stop_request_retries
 
 
 def is_retryable_http_status(status_code: int) -> bool:
-    """Whether an HTTP status is worth retrying with the same request.
-
-    Client errors (4xx) are caused by the request itself and won't succeed on a
-    retry: 404 (model retired/unknown), 400 (bad request), 401/403 (auth), 402
-    (billing). Retrying them only wastes time and floods the log. The one
-    exception is 429 (rate limit), handled separately via handle_rate_limit().
-
-    Server errors (5xx) and anything else are treated as transient and retryable.
-    """
-    if status_code == 429:
-        return True
-    return not (400 <= status_code < 500)
+    """Only authentication, authorization and billing errors fail immediately."""
+    if status_code in (401, 402, 403):
+        stop_request_retries()
+        return False
+    return True
 
 
 def compute_wait_time(headers: Mapping[str, str], attempt: int) -> int:
@@ -127,6 +121,10 @@ async def handle_rate_limit(
     """
     wait_time = compute_wait_time(response_headers, rate_limit_events - 1)
     await pool.mark_throttled(failed_key, time.monotonic() + wait_time)
+    check_rate_limit_budget(RateLimitError(
+        f'{pool.provider_name} rate limit persisted', retry_after=wait_time,
+        provider=pool.provider_name,
+    ))
 
     provider = pool.provider_name
     failed_idx = pool.index_of(failed_key)

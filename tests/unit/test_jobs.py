@@ -485,7 +485,7 @@ async def test_polish_parallel_bilingual_checkpoint_resume(jobs, monkeypatch, fi
     failed_rows = [row for row in rows if row['status'] == 'failed']
     previous_calls = calls
     assert await refine_file(**kwargs)
-    assert calls == previous_calls + len(failed_rows)
+    assert calls == previous_calls + len(failed_rows) * client.max_attempts
     assert factory.call_args.kwargs['connection']['request_timeout'] == 17
 
 
