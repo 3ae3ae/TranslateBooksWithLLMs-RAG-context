@@ -334,7 +334,7 @@ def test_notes_sections_dry_run_is_read_only(jobs, monkeypatch):
     for index in range(3):
         jobs.db.save_chunk(tid, index, 'source', 'translation', {'context_snapshot':compress_dynamic_state(text)})
     sections = [{'key':'relationships', 'title':'Relationships', 'scope':'story', 'editable':True, 'body':'friends'}]
-    import src.utils.notes_store as notes
+    notes = sys.modules['src.utils.notes_store']  # the stub installed by the jobs fixture
     monkeypatch.setattr(notes, 'parse_sections', lambda _: sections, raising=False)
     monkeypatch.setattr(notes, 'serialize_sections', lambda _: text, raising=False)
     monkeypatch.setattr(notes, 'normalize_sections', lambda value: (value, ['duplicate']), raising=False)

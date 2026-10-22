@@ -8,6 +8,13 @@ import requests
 from src.utils import notifier
 
 
+@pytest.fixture(autouse=True)
+def no_saved_preferences(tmp_path, monkeypatch):
+    """These tests exercise the legacy env-based config, so hide any saved preferences."""
+    from src.utils import preferences
+    monkeypatch.setattr(preferences, "preferences_path", lambda: tmp_path / "settings.json")
+
+
 @pytest.fixture
 def cfg():
     """Patch config attributes used by the notifier."""
