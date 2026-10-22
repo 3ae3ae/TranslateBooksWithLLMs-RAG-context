@@ -10,7 +10,6 @@
   "appearance.theme_dark": "어둡게",
   "appearance.theme_light": "밝게",
   "appearance.theme_system": "시스템 설정",
-
   "common.add": "추가",
   "common.back": "뒤로",
   "common.cancel": "취소",
@@ -45,10 +44,8 @@
   "common.select_all": "전체 선택",
   "common.uploading": "올리는 중…",
   "common.yes": "예",
-
   "errors.action_failed": "문제가 생겼어요",
   "errors.download_failed": "내려받지 못했어요",
-
   "nav.compare": "모델 비교",
   "nav.glossaries": "용어집",
   "nav.new": "새 번역",
@@ -56,7 +53,6 @@
   "nav.settings": "설정",
   "nav.styles": "번역 지침",
   "nav.translations": "번역 목록",
-
   "shell.back_home": "번역 목록으로",
   "shell.main_nav": "메인",
   "shell.model_status_title": "기본 모델 — 모델 연결 열기",
@@ -65,7 +61,6 @@
   "shell.open_menu": "메뉴 열기",
   "shell.set_up_model": "모델 연결을 설정하세요",
   "shell.sidebar": "탐색",
-
   "lang.auto": "자동 감지",
   "lang.name.ar": "아랍어",
   "lang.name.de": "독일어",
@@ -87,7 +82,6 @@
   "lang.name.vi": "베트남어",
   "lang.name.zh": "중국어(간체)",
   "lang.name.zh_hant": "중국어(번체)",
-
   "model.choose": "모델 선택",
   "model.local": "이 컴퓨터",
   "model.no_connections": "먼저 모델 연결을 추가하세요",
@@ -97,7 +91,6 @@
   "model.price_per_m": "100만 토큰당 {{input}} / {{output}}",
   "model.search": "모델 검색",
   "model.use_typed": "“{{name}}” 사용",
-
   "reasoning.label": "추론 강도",
   "reasoning.off": "끔",
   "reasoning.low": "낮음",
@@ -107,7 +100,6 @@
   "reasoning.on": "켬",
   "reasoning.help": "모델이 답하기 전에 얼마나 생각할지예요. 번역에는 거의 필요 없고, 높일수록 느려지고 비용이 늘어요.",
   "reasoning.best_effort": "일부 모델에서는 이 설정이 무시될 수 있어요.",
-
   "translations.title": "번역 목록",
   "translations.search": "파일 이름으로 검색",
   "translations.open_output": "결과 폴더 열기",
@@ -124,7 +116,6 @@
   "translations.empty.step1": "책이나 자막 파일 추가",
   "translations.empty.step2": "언어와 모델 고르기",
   "translations.empty.step3": "시작 — 백그라운드에서 계속 진행돼요",
-
   "job.progress_label": "진행률",
   "job.eta": "약 {{time}} 남음",
   "job.units": "{{total}}개 구간 중 {{done}}개",
@@ -264,7 +255,6 @@
   "job.log.follow": "새 줄 따라가기",
   "job.log.copied": "로그를 복사했어요",
   "job.log.empty": "아직 내용이 없어요.",
-
   "new.title": "새 번역",
   "new.subtitle": "여기서 고른 설정은 번역 작업에 함께 저장돼요. 나중에 다른 곳에서 설정을 바꿔도 이 작업에는 영향이 없어요.",
   "new.connect.title": "시작하려면 모델을 연결하세요",
@@ -320,8 +310,7 @@
   "new.notes.keep_updating": "계속 갱신하기",
   "new.notes.interval": "갱신 주기",
   "new.notes.interval_suffix": "구간마다",
-  "new.notes.cost_every": "구간마다 요청 약 1회 추가 · 요청은 한 번에 하나씩 처리돼요",
-  "new.notes.cost_every_n": "{{n}}구간마다 요청 약 1회 추가 · 요청은 한 번에 하나씩 처리돼요",
+  "new.notes.cost": "갱신할 때마다 요청이 1회 늘고, 요청은 한 번에 하나씩 처리돼요.",
   "new.notes.multi": "파일이 여러 개일 때",
   "new.notes.separate": "파일마다 따로",
   "new.notes.series": "한 시리즈의 여러 권",
@@ -405,7 +394,6 @@
   "new.toast.queued_behind": "대기열에 넣었어요 — 지금 번역이 끝나면 시작해요",
   "new.toast.queued_many": "번역 {{count}}건을 대기열에 넣었어요",
   "new.toast.start_failed": "번역을 시작하지 못했어요",
-
   "compare.title": "모델 비교",
   "compare.subtitle": "책의 일부 발췌로 여러 모델을 돌려 보고 품질, 속도, 가격을 비교해요.",
   "compare.setup": "책과 언어",
@@ -448,7 +436,6 @@
   "compare.fallback": "대체 처리",
   "compare.warning.warning_small_document": "문서가 짧아서 {{requested}}개 대신 {{count}}개만 발췌했어요.",
   "compare.warning.warning_lang_autodetected": "원문 언어를 {{lang}}(으)로 감지했어요 (확신도 {{confidence}}%).",
-
   "connection.add": "연결 추가",
   "connection.add_title": "모델 연결 추가",
   "connection.add_desc": "번역을 어디서 실행할까요?",
@@ -532,7 +519,6 @@
   "connection.type_desc.deepseek": "DeepSeek API 키로 DeepSeek 모델을 써요.",
   "connection.type_desc.poe": "Poe API 키로 Poe의 봇을 써요.",
   "connection.type_desc.nim": "NVIDIA build.nvidia.com에서 호스팅하는 모델이에요.",
-
   "settings.title": "설정",
   "settings.tab.connections": "모델 연결",
   "settings.tab.notifications": "알림",
@@ -566,7 +552,6 @@
   "settings.notify.test": "테스트 보내기",
   "settings.notify.test_sent": "테스트 알림을 보냈어요",
   "settings.notify.test_failed": "테스트 알림을 보내지 못했어요",
-
   "glossary.title": "용어집",
   "glossary.subtitle": "이름과 용어의 고정 번역이에요. 일치하는 용어는 항상 지켜지고, 작품 노트보다 우선해요.",
   "glossary.new": "새 용어집",
@@ -653,7 +638,6 @@
   "glossary.extract.added_other": "용어 {{n}}개를 추가했어요",
   "glossary.extract.already": "이미 용어집에 있음",
   "glossary.extract.same": "원문과 같음",
-
   "notes.title": "작품 노트",
   "notes.subtitle": "책마다 모델이 알고 있는 인물과 세계관 정보예요.",
   "notes.explain": "번역 작업마다 노트의 복사본을 따로 써요. 그래서 여기서 노트를 고치면 앞으로 시작하는 번역에만 반영돼요. 진행 중인 번역의 노트를 고치려면 그 번역을 열고 작품 노트 탭에서 고치세요.",
@@ -701,7 +685,6 @@
   "notes.preview.more": "…외 {{count}}줄",
   "notes.preview.normalized": "정리하면 이 섹션들은 이렇게 저장돼요:",
   "notes.preview.clean": "바뀌거나 빠지는 내용이 없어요.",
-
   "styles.title": "번역 지침",
   "styles.subtitle": "모델에게 주는 추가 지시예요. 말투, 존칭, 이름, 서식 등.",
   "styles.new": "새 번역 지침",

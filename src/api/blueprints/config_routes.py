@@ -91,6 +91,14 @@ def create_config_blueprint(server_session_id=None):
             api_token=API_TOKEN,
         )
 
+    @bp.after_app_request
+    def revalidate_app_modules(response):
+        # ES modules are imported without version suffixes; make browsers
+        # revalidate them (cheap 304s) so an updated app is never half-stale.
+        if request.path.startswith(('/static/app/', '/static/vendor/')):
+            response.headers['Cache-Control'] = 'no-cache'
+        return response
+
     @bp.route('/next')
     def serve_next_interface():
         """Serve the redesigned app shell (all UI is rendered client-side)."""

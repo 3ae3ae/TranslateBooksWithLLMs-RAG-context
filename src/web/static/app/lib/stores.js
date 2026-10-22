@@ -80,10 +80,16 @@ export const preferences = signal(null);
 export const preferencesSchema = signal({});
 
 export async function loadPreferences() {
-  const r = await preferencesApi.get();
-  preferences.value = r.values;
-  preferencesSchema.value = r.schema || {};
-  return r.values;
+  try {
+    const r = await preferencesApi.get();
+    preferences.value = r.values;
+    preferencesSchema.value = r.schema || {};
+  } catch (e) {
+    // Forms still work with built-in defaults when defaults can't be read.
+    if (!preferences.value) preferences.value = {};
+    throw e;
+  }
+  return preferences.value;
 }
 
 export async function savePreferences(patchValues) {

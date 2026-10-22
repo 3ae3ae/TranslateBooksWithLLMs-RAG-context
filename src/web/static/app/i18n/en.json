@@ -10,7 +10,6 @@
   "appearance.theme_dark": "Dark",
   "appearance.theme_light": "Light",
   "appearance.theme_system": "System",
-
   "common.add": "Add",
   "common.back": "Back",
   "common.cancel": "Cancel",
@@ -45,10 +44,8 @@
   "common.select_all": "Select all",
   "common.uploading": "Uploading…",
   "common.yes": "Yes",
-
   "errors.action_failed": "Something went wrong",
   "errors.download_failed": "Download failed",
-
   "nav.compare": "Compare models",
   "nav.glossaries": "Glossaries",
   "nav.new": "New translation",
@@ -56,7 +53,6 @@
   "nav.settings": "Settings",
   "nav.styles": "Style guides",
   "nav.translations": "Translations",
-
   "shell.back_home": "Back to translations",
   "shell.main_nav": "Main",
   "shell.model_status_title": "Default model — open model connections",
@@ -65,7 +61,6 @@
   "shell.open_menu": "Open menu",
   "shell.set_up_model": "Set up a model connection",
   "shell.sidebar": "Navigation",
-
   "lang.auto": "Detected",
   "lang.name.ar": "Arabic",
   "lang.name.de": "German",
@@ -87,7 +82,6 @@
   "lang.name.vi": "Vietnamese",
   "lang.name.zh": "Chinese (Simplified)",
   "lang.name.zh_hant": "Chinese (Traditional)",
-
   "model.choose": "Choose a model",
   "model.local": "on this computer",
   "model.no_connections": "Add a model connection first",
@@ -97,7 +91,6 @@
   "model.price_per_m": "{{input}} / {{output}} per 1M",
   "model.search": "Search models",
   "model.use_typed": "Use “{{name}}”",
-
   "reasoning.label": "Reasoning",
   "reasoning.off": "Off",
   "reasoning.low": "Low",
@@ -107,7 +100,6 @@
   "reasoning.on": "On",
   "reasoning.help": "How much the model thinks before answering. Translation rarely needs it; higher levels are slower and cost more.",
   "reasoning.best_effort": "This service may ignore this setting for some models.",
-
   "translations.title": "Translations",
   "translations.search": "Search by file name",
   "translations.open_output": "Open output folder",
@@ -124,7 +116,6 @@
   "translations.empty.step1": "Add a book or subtitle file",
   "translations.empty.step2": "Pick languages and a model",
   "translations.empty.step3": "Start — it keeps running in the background",
-
   "job.progress_label": "Progress",
   "job.eta": "about {{time}} left",
   "job.units": "{{done}} of {{total}} passages",
@@ -264,7 +255,6 @@
   "job.log.follow": "Follow new lines",
   "job.log.copied": "Log copied",
   "job.log.empty": "Nothing here yet.",
-
   "new.title": "New translation",
   "new.subtitle": "Everything you choose here is saved with the translation, so later changes elsewhere won’t affect it.",
   "new.connect.title": "Connect a model to start",
@@ -320,8 +310,7 @@
   "new.notes.keep_updating": "Keep updating them",
   "new.notes.interval": "Update every",
   "new.notes.interval_suffix": "passages",
-  "new.notes.cost_every": "≈1 extra request per passage · requests run one at a time",
-  "new.notes.cost_every_n": "≈1 extra request every {{n}} passages · requests run one at a time",
+  "new.notes.cost": "Each update is one extra request, and requests run one at a time.",
   "new.notes.multi": "With several files",
   "new.notes.separate": "Separate notes for each file",
   "new.notes.series": "Volumes of one series",
@@ -405,7 +394,6 @@
   "new.toast.queued_behind": "Queued — it starts after the current translation",
   "new.toast.queued_many": "Added {{count}} translations to the queue",
   "new.toast.start_failed": "Couldn’t start the translation",
-
   "compare.title": "Compare models",
   "compare.subtitle": "Try several models on a few excerpts from your book and compare quality, speed and price.",
   "compare.setup": "Book and languages",
@@ -448,7 +436,6 @@
   "compare.fallback": "Fallback",
   "compare.warning.warning_small_document": "The document is short: {{count}} excerpts instead of {{requested}}.",
   "compare.warning.warning_lang_autodetected": "Source language detected as {{lang}} ({{confidence}}% sure).",
-
   "connection.add": "Add a connection",
   "connection.add_title": "Add a model connection",
   "connection.add_desc": "Where should translations run?",
@@ -532,7 +519,6 @@
   "connection.type_desc.deepseek": "DeepSeek models with a DeepSeek API key.",
   "connection.type_desc.poe": "Bots on Poe with a Poe API key.",
   "connection.type_desc.nim": "Models hosted on NVIDIA build.nvidia.com.",
-
   "settings.title": "Settings",
   "settings.tab.connections": "Model connections",
   "settings.tab.notifications": "Notifications",
@@ -566,7 +552,6 @@
   "settings.notify.test": "Send a test",
   "settings.notify.test_sent": "Test notification sent",
   "settings.notify.test_failed": "The test notification failed",
-
   "glossary.title": "Glossaries",
   "glossary.subtitle": "Fixed translations for names and terms. Matching terms are always enforced and win over story notes.",
   "glossary.new": "New glossary",
@@ -653,7 +638,6 @@
   "glossary.extract.added_other": "Added {{n}} terms",
   "glossary.extract.already": "Already in the glossary",
   "glossary.extract.same": "Same as the original",
-
   "notes.title": "Story notes",
   "notes.subtitle": "What the model knows about each book’s characters and world.",
   "notes.explain": "Every translation works on its own copy of its notes, so editing a note here only affects translations you start later. To fix notes for a translation in progress, open it and use its Story notes tab.",
@@ -701,7 +685,6 @@
   "notes.preview.more": "…and {{count}} more",
   "notes.preview.normalized": "After tidying, these sections will read:",
   "notes.preview.clean": "Nothing will be changed or dropped.",
-
   "styles.title": "Style guides",
   "styles.subtitle": "Extra instructions for the model: tone, honorifics, names, formatting.",
   "styles.new": "New style guide",

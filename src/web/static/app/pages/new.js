@@ -327,7 +327,7 @@ export function NewTranslationPage() {
   const noteOptions = [{ value: '', label: t('new.notes.pick') }, ...((notesList.value || []).map((n) => ({ value: n.name, label: n.name })))];
 
   const interval = d.notes.interval || 1;
-  const notesCost = interval === 1 ? t('new.notes.cost_every') : t('new.notes.cost_every_n', { n: interval });
+  const notesCost = t('new.notes.cost');
 
   const chips = [];
   if (!polish && d.polishAfter) chips.push(t('new.chip.polish'));
@@ -444,21 +444,19 @@ export function NewTranslationPage() {
             <div class="field-grid">
               <${Field} label=${t('new.glossary.label')} htmlFor="glossary-select"
                 help=${glossaryMismatch ? null : t('new.glossary.help')}
-                error=${glossaryMismatch ? t('new.glossary.mismatch', { lang: selectedGlossary.target_lang }) : null}>
+                error=${glossaryMismatch ? t('new.glossary.mismatch', { lang: selectedGlossary.target_lang }) : null}
+                labelExtra=${html`<${Button} variant="link" class="small" disabled=${!d.files.some((f) => f.status === 'ready')}
+                  title=${d.files.some((f) => f.status === 'ready') ? undefined : t('new.reason.no_files')}
+                  onClick=${() => setDialog({ kind: 'extract' })}>${t('new.glossary.extract')}<//>`}>
                 <${Select} id="glossary-select" value=${d.glossaryId ? String(d.glossaryId) : ''} options=${glossaryOptions}
                   onChange=${(v) => update({ glossaryId: v ? Number(v) : null })} />
-                <div class="row row--wrap" style="--gap:12px">
-                  <${Button} variant="link" icon="sparkles" disabled=${!d.files.some((f) => f.status === 'ready')}
-                    onClick=${() => setDialog({ kind: 'extract' })}>${t('new.glossary.extract')}<//>
-                  <${Button} variant="link" href="#/glossaries">${t('new.glossary.manage')}<//>
-                </div>
               <//>
-              <${Field} label=${t('new.style.label')} htmlFor="style-select" help=${t('new.style.help')}>
+              <${Field} label=${t('new.style.label')} htmlFor="style-select" help=${t('new.style.help')}
+                labelExtra=${html`<span class="row" style="--gap:12px">
+                  ${d.style && html`<${Button} variant="link" class="small" href=${`#/styles/${encodeURIComponent(d.style)}`}>${t('common.edit')}<//>`}
+                  <${Button} variant="link" class="small" onClick=${() => setDialog({ kind: 'style' })}>${t('new.style.new')}<//>
+                </span>`}>
                 <${Select} id="style-select" value=${d.style} options=${styleOptions} onChange=${(v) => update({ style: v })} />
-                <div class="row row--wrap" style="--gap:12px">
-                  <${Button} variant="link" icon="plus" onClick=${() => setDialog({ kind: 'style' })}>${t('new.style.new')}<//>
-                  ${d.style && html`<${Button} variant="link" href=${`#/styles/${encodeURIComponent(d.style)}`}>${t('common.edit')}<//>`}
-                </div>
               <//>
             </div>
           </div>

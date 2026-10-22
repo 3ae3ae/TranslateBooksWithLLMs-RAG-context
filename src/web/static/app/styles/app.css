@@ -321,7 +321,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 0; }
 .checkbox input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
 
 /* segmented */
-.segmented { display: inline-flex; padding: 3px; gap: 2px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); }
+.segmented { display: inline-flex; align-self: flex-start; max-width: 100%; overflow-x: auto; padding: 3px; gap: 2px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); }
 .segmented__opt {
   display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px;
   border: 0; border-radius: 6px; background: transparent; color: var(--text-2); font-size: 13px; font-weight: 550;
