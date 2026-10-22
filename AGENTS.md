@@ -4,7 +4,7 @@ Instructions for coding agents working in this repo. `CLAUDE.md` imports this fi
 
 ## Python environment — uv only
 
-Dependencies are declared in `pyproject.toml` and pinned in `uv.lock` (commit both). Run everything through uv: `uv run translation_api.py` (web UI), `uv run translate.py ...` (CLI), `uv run pytest`. Change dependencies with `uv add` / `uv remove` (`uv add --dev` for test-only), not pip and not a requirements file.
+Dependencies are declared in `pyproject.toml` and pinned in `uv.lock` (commit both). Run everything through uv: `uv run translation_api.py` (the app) and `uv run pytest`. Change dependencies with `uv add` / `uv remove` (`uv add --dev` for test-only), not pip and not a requirements file.
 
 ## Code language
 
@@ -13,7 +13,7 @@ Code, identifiers, comments, and docstrings are in English, matching the existin
 ## Secrets
 
 - Never put an API key, token, password, or secret-bearing URL in a source file, test, script, comment, doc, or commit message, not even temporarily.
-- The web app stores model API keys and webhook secrets in `TranslateBook_Data/connections.json` and `settings.json` (git-ignored, mode 0600) and never returns them from the API. The CLI reads keys from `.env`. If a value is missing, ask or fail with a clear message; never invent one.
+- The web app stores model API keys and webhook secrets in `TranslateBook_Data/connections.json` and `settings.json` (git-ignored, mode 0600) and never returns them from the API. If a value is missing, ask or fail with a clear message; never invent one.
 - Real API keys may be set in your shell. Run tests and the app with a clean environment, `env -i PATH="$PATH" HOME="$HOME" uv run …`, so nothing reaches a paid service by accident, and never print environment variables.
 - Docs and tests use inert placeholders such as `YOUR_API_KEY_HERE` or `sk-xxxxxxxx`.
 - Before proposing a commit, check the diff for key-like literals (long base64/hex, `sk-`, `Bearer`, `ghp_`, `AKIA`, a non-empty `api_key`/`token`/`secret`) and alert the user if any appear.
@@ -36,4 +36,4 @@ The UI switches between English and Korean at runtime without a reload. Strings 
 
 ## Repo layout
 
-Entrypoints at the root are `translate.py` and `translation_api.py` only. Tests live in `tests/` (pytest); reusable helpers go in `scripts/`. Tests must not write to the real `data/` or `TranslateBook_Data/` folders; `tests/conftest.py` redirects uploads and story notes to a temporary folder. Root-level `check_*.py`, `test_*.py`, `debug_*.py`, `scratch_*.py`, and `tmp_*.py` are gitignored scratch files and are never committed.
+The only entrypoint at the root is `translation_api.py`; there is no command-line tool. Tests live in `tests/` (pytest); reusable helpers go in `scripts/`. Tests must not write to the real `data/` or `TranslateBook_Data/` folders; `tests/conftest.py` redirects uploads and story notes to a temporary folder. Root-level `check_*.py`, `test_*.py`, `debug_*.py`, `scratch_*.py`, and `tmp_*.py` are gitignored scratch files and are never committed.

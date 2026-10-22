@@ -77,7 +77,3 @@ The **Story notes** page lists every notes file. Open one to read or edit it, or
 Every translation works on its own copy, so editing notes in the library affects translations you start later, not ones already running. Notes that an unfinished translation is using are locked in the library; fix them from that translation's **Story notes** tab instead.
 
 The files are plain text in `TranslateBook_Data/Novel_Contexts/`.
-
-## From the command line
-
-`translate.py --novel-context my_notes.txt` reads notes from `TranslateBook_Data/Novel_Contexts/`, and `--auto-update-context` updates that file as it translates. See [CLI.md](CLI.md).

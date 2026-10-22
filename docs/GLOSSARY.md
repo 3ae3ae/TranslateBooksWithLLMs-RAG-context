@@ -70,10 +70,6 @@ Netherfield,네더필드,location
 
 **Export as CSV** and **Export as JSON** write the same formats, so an exported glossary imports back unchanged.
 
-## Command line
-
-`translate.py --glossary terms.csv` (or `.json`) applies a glossary file to a CLI translation. The CLI reads the file directly, not the glossaries in the app, so export one first if you want to use it there. CSV headers must be exactly `source` and `target` (plus optional `category`).
-
 ## Storage
 
 Glossaries live in `data/glossaries.db`. Export important ones as a backup.

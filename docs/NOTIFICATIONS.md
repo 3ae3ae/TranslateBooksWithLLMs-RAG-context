@@ -90,4 +90,4 @@ A notification that fails never affects the translation. The app logs only that 
 
 ## Settings from `.env`
 
-The `NOTIFY_*` variables in `.env` (`NOTIFY_WEBHOOK_URL`, `NOTIFY_WEBHOOK_METHOD`, `NOTIFY_WEBHOOK_HEADERS`, `NOTIFY_WEBHOOK_PAYLOAD`, `NOTIFY_ON_SUCCESS`, `NOTIFY_ON_FAILURE`, `NOTIFY_ON_INTERRUPTION`, `NOTIFY_TIMEOUT_SECONDS`) are copied into the settings once, when `settings.json` is first created. After that, the Settings page is the only source. The command-line tool also sends notifications using the same settings.
+The `NOTIFY_*` variables in `.env` (`NOTIFY_WEBHOOK_URL`, `NOTIFY_WEBHOOK_METHOD`, `NOTIFY_WEBHOOK_HEADERS`, `NOTIFY_WEBHOOK_PAYLOAD`, `NOTIFY_ON_SUCCESS`, `NOTIFY_ON_FAILURE`, `NOTIFY_ON_INTERRUPTION`, `NOTIFY_TIMEOUT_SECONDS`) are copied into the settings once, when `settings.json` is first created. After that, the Settings page is the only source.

@@ -77,16 +77,6 @@ If you used this project before and have API keys in a `.env` file, they are imp
 
 All of these are git-ignored. Back up `TranslateBook_Data/` and `data/` together. The two JSON files hold secrets: they are written readable by your user only, and should not be shared.
 
-## Command line
-
-`translate.py` translates a single file without the web app:
-
-```bash
-uv run translate.py -i book.epub -sl English -tl Korean -m qwen3:14b
-```
-
-The CLI reads its provider, model and keys from flags and `.env`, not from the web app's connections. See [docs/CLI.md](docs/CLI.md).
-
 ## Documentation
 
 | Guide | Covers |
@@ -95,7 +85,6 @@ The CLI reads its provider, model and keys from flags and `.env`, not from the w
 | [docs/STORY_NOTES.md](docs/STORY_NOTES.md) | How story notes work, the options, and fixing them mid-book |
 | [docs/GLOSSARY.md](docs/GLOSSARY.md) | Glossaries: matching rules, import and export, extracting terms from a book |
 | [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md) | Webhook notifications |
-| [docs/CLI.md](docs/CLI.md) | Command-line reference |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common problems and fixes |
 
 ## License
