@@ -71,7 +71,6 @@ _RELOADABLE_ENV_SETTINGS = (
     ('POE_MODEL',           'POE_MODEL',           'Claude-Sonnet-4'),
     ('NIM_API_KEY',         'NIM_API_KEY',         ''),
     ('NIM_MODEL',           'NIM_MODEL',           'meta/llama-3.1-8b-instruct'),
-    ('LITELLM_MODEL',       'LITELLM_MODEL',       ''),
     ('OUTPUT_FILENAME_PATTERN', 'OUTPUT_FILENAME_PATTERN', '{originalName} ({targetLang}).{ext}'),
     ('DISABLE_AUTO_PAUSE',   'DISABLE_AUTO_PAUSE',   'false'),
     # Webhook notifications — kept here so the web UI can change them at runtime
@@ -338,9 +337,6 @@ REPETITION_MIN_COUNT = int(os.getenv("REPETITION_MIN_COUNT", "10"))  # Min repet
 REPETITION_MIN_COUNT_THINKING = int(os.getenv("REPETITION_MIN_COUNT_THINKING", "15"))  # Min repetitions for thinking models (more lenient)
 REPETITION_MIN_COUNT_STREAMING = int(os.getenv("REPETITION_MIN_COUNT_STREAMING", "12"))  # Min repetitions during streaming (early detection)
 
-# Legacy settings (kept for compatibility)
-MIN_CHUNK_SIZE = int(os.getenv("MIN_CHUNK_SIZE", "5"))
-
 # Token-based chunking configuration
 # All file types use token-based chunking with tiktoken for consistent chunk sizes
 MAX_TOKENS_PER_CHUNK = int(os.getenv('MAX_TOKENS_PER_CHUNK', '450'))
@@ -480,8 +476,6 @@ PLACEHOLDER_PATTERN = r'\[id(\d+)\]'
 MAX_PLACEHOLDER_RETRIES = 0
 """Number of retry attempts when placeholder validation fails"""
 
-MAX_PLACEHOLDER_CORRECTION_ATTEMPTS = 0
-"""Number of LLM correction attempts before falling back to proportional insertion (0 = skip correction phase entirely)"""
 
 # =============================================================================
 # TOKEN ALIGNMENT FALLBACK CONFIGURATION (Phase 2)

@@ -1219,8 +1219,7 @@ async def _save_checkpoint(
             checkpoint_manager.db.update_job_progress(
                 translation_id=translation_id,
                 # Uniform convention: store the LAST COMPLETED file index
-                # (resume adds +1), matching TXT/SRT. load_checkpoint maps it
-                # back via the 'resume_index_semantics' marker.
+                # (resume adds +1), matching TXT/SRT.
                 current_chunk_index=file_idx,
                 total_chunks=total_chunks,
                 completed_chunks=completed_chunks,
