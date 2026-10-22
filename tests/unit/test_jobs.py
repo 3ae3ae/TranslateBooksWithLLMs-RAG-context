@@ -135,11 +135,38 @@ def test_restart_holds_queue_and_marks_running(jobs):
     assert not jobs.runner.run_next()
 
 
+def test_resume_lifts_restart_hold_but_not_user_pause(jobs):
+    tid = create(jobs)
+    jobs.db.update_job_progress(tid, status='running')
+    jobs.runner.restart_hold()
+    assert jobs.client.post(f'/api/jobs/{tid}/resume', json={}).status_code == 200
+    assert jobs.db.queue_state()['paused'] is False
+    jobs.runner.pause(tid)
+    jobs.runner.pause_queue(True)
+    assert jobs.client.post(f'/api/jobs/{tid}/resume', json={}).status_code == 200
+    assert jobs.db.queue_state()['paused'] is True
+
+
 @pytest.mark.parametrize('stored,expected', [('interrupted','paused'), ('error','failed'), ('rate_limited','paused'), ('partial','partial')])
 def test_status_mapping(jobs, stored, expected):
     tid = create(jobs)
     jobs.db.update_job_progress(tid, status=stored)
     assert job_summary(jobs.runner, jobs.db.get_job(tid))['status'] == expected
+
+
+def test_elapsed_and_eta_survive_resume(jobs):
+    tid = create(jobs)
+    config = jobs.db.get_job(tid)['config']
+    config['stats'] = {'elapsed_seconds': 60}
+    jobs.db.update_job_config(tid, config)
+    jobs.db.update_job_progress(tid, status='running')
+    # After a resume the pipeline's own timer and ETA restart from zero.
+    if jobs.state.get_translation(tid) is None:
+        jobs.state.create_translation(tid, config)
+    jobs.state.update_stats(tid, {'elapsed_seconds': 1, 'eta_seconds': 1, 'completed_chunks': 10, 'total_chunks': 20})
+    summary = job_summary(jobs.runner, jobs.db.get_job(tid))
+    assert summary['elapsed_seconds'] == 60
+    assert summary['eta_seconds'] == 60
 
 
 def test_series_waits_and_copies_notes_lazily(jobs):

@@ -43,9 +43,10 @@ def job_summary(runner, job):
         output = str(Path(runner.output_dir) / config['output_filename'])
     epub = stats.get('epub_accumulated_stats') or {}
     done, total = stats.get('completed_chunks', 0), stats.get('total_chunks', 0)
-    elapsed = stats.get('elapsed_seconds', stats.get('elapsed_time', 0))
+    # The runner keeps the total across pauses; the pipeline's own timer restarts on every resume.
+    elapsed = config.get('stats', {}).get('elapsed_seconds', stats.get('elapsed_time', 0))
     if runner.active == tid:
-        elapsed = stats.get('elapsed_seconds', 0) + max(0, time.time() - stats.get('start_time', time.time()))
+        elapsed += max(0, time.time() - live.get('stats', {}).get('start_time', time.time()))
     notes_rebuild = config.get('_context_resync')
     rebuild_indices = [row['chunk_index'] for row in runner.db.get_chunks(tid)] if notes_rebuild else []
     phase = 'context' if config.get('_pending_operation') == 'notes_rebuild' else stats.get('phase', stats.get('current_phase', 'translation'))
@@ -70,7 +71,7 @@ def job_summary(runner, job):
         'output_exists': bool(output and Path(output).is_file()), 'has_cover': bool(config.get('cover_path') and Path(config['cover_path']).is_file()),
         'cost_usd': stats.get('cost_usd', stats.get('openrouter_cost') or None),
         'requests': stats.get('requests', 0), 'elapsed_seconds': elapsed,
-        'eta_seconds': stats.get('eta_seconds', elapsed / done * max(0, total - done) if done and status == 'running' else None),
+        'eta_seconds': elapsed / done * max(0, total - done) if done and status == 'running' else None,
         'error': live.get('error') or config.get('error'), 'resume_at': config.get('resume_at'),
         'notes_name': config.get('notes_file'),
         'notes_rebuild': {'status': notes_rebuild.get('status'), 'done': sum(notes_rebuild.get('start_chunk_index', -1) < index <= notes_rebuild.get('last_processed_chunk', -1) for index in rebuild_indices), 'total': sum(index > notes_rebuild.get('start_chunk_index', -1) for index in rebuild_indices)} if notes_rebuild else None,
@@ -372,6 +373,9 @@ def create_jobs_blueprint(state_manager, output_dir, socketio=None):
                     return response
                 return jsonify(job=job_summary(runner, get_job(tid)))
             runner.enqueue(tid, config, next_up=True)
+            # Resuming is an explicit "run this", so it lifts the hold a restart put on the queue.
+            if runner.db.queue_state().get('reason') == 'restart':
+                runner.pause_queue(False)
         elif action == 'continue':
             if job['status'] != 'completed':
                 return jsonify(error='Only a completed job can accept new chapters'), 409
