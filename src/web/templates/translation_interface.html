@@ -6,12 +6,10 @@
     <title>Translate Books with LLMs</title>
     <link rel="icon" type="image/png" href="/static/TBL-Logo-alpha.png">
 
-    <!-- Initial locale + app version handed off by Flask so i18next boots
-         without an extra round-trip and JSON caches bust on app upgrades.
-         tojson escapes safely for a <script> context. -->
+    <!-- Initial locale handed off by Flask so i18next boots without an
+         extra round-trip. tojson escapes safely for a <script> context. -->
     <script>
         window.__INITIAL_LOCALE__ = {{ initial_locale|default('en')|tojson }};
-        window.__APP_VERSION__    = {{ app_version|default('dev')|tojson }};
 
         // Per-session API token (issue #210). The server gates every /api/
         // route and the Socket.IO handshake on it. Patch fetch() once, before
@@ -218,7 +216,7 @@
                     <img src="/static/TBL-Logo-alpha.png" alt="TBL Logo" style="width: 100%; height: 100%; object-fit: contain;">
                 </div>
                 <div class="logo-text">
-                    <h2>TBL <span class="app-version" id="appVersion" title="TBL v{{ app_version|default('dev') }}">v{{ app_version|default('dev') }}</span></h2>
+                    <h2>TBL</h2>
                     <p data-i18n="common:app_subtitle">Translate Books with LLMs</p>
                 </div>
             </div>
@@ -234,11 +232,6 @@
                     <span class="material-symbols-outlined header-lang-caret">expand_more</span>
                     <select id="uiLocaleSelect" class="header-lang-select" data-i18n-attr="aria-label:settings:ui_language_label" aria-label="Interface language">
                         <option value="en" data-short="EN">English</option>
-                        <option value="zh-CN" data-short="中">简体中文</option>
-                        <option value="es" data-short="ES">Español</option>
-                        <option value="fr" data-short="FR">Français</option>
-                        <option value="de" data-short="DE">Deutsch</option>
-                        <option value="ja" data-short="日">日本語</option>
                         <option value="ko" data-short="한">한국어</option>
                     </select>
                 </div>
@@ -247,37 +240,6 @@
                 </button>
             </div>
         </header>
-
-        <!-- Update notification banner (populated by update-checker.js) -->
-        <div id="updateBanner" class="update-banner hidden" role="status" aria-live="polite">
-            <div class="update-banner__text">
-                <strong data-i18n="common:update_available">Update available</strong>
-                <span id="updateBannerVersion"></span>
-                <a id="updateBannerLink" href="#" target="_blank" rel="noopener" data-i18n="common:update_release_notes" style="margin-left: 0.5rem;">Release notes</a>
-            </div>
-            <div class="update-banner__actions">
-                <button type="button" id="updateBannerInstallBtn" class="btn btn-primary">
-                    <span class="material-symbols-outlined" style="font-size: 1rem; vertical-align: middle;">download</span>
-                    <span data-i18n="common:update_now">Update now</span>
-                </button>
-                <button type="button" id="updateBannerCloseBtn" class="update-banner__close" data-i18n-attr="title:common:update_dismiss" title="Dismiss">
-                    <span class="material-symbols-outlined" style="font-size: 1.1rem;">close</span>
-                </button>
-            </div>
-        </div>
-
-        <!-- Update progress overlay (shown during git pull / uv sync / restart) -->
-        <div id="updateOverlay" class="update-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="updateOverlayTitle">
-            <div class="update-overlay__panel">
-                <h3 id="updateOverlayTitle" class="update-overlay__title" data-i18n="common:update_in_progress_title">Updating...</h3>
-                <p id="updateOverlayStep" class="update-overlay__step" data-i18n="common:update_starting">Starting update</p>
-                <div id="updateOverlayError" class="update-overlay__error" style="display: none;"></div>
-                <pre id="updateOverlayLog" class="update-overlay__log"></pre>
-                <div class="update-overlay__actions">
-                    <button type="button" id="updateOverlayCloseBtn" class="btn btn-secondary" data-i18n="common:update_close" style="display: none;">Close</button>
-                </div>
-            </div>
-        </div>
 
         <!-- Top-level Tab Navigation -->
         <div class="tab-nav" id="topTabNav" style="display: flex; gap: 8px; margin-bottom: 20px;">
@@ -594,7 +556,7 @@
                                 </button>
                                 <button id="btnCancelResync" class="btn btn-secondary" onclick="cancelContextEdit()" style="display: none; padding: 0.25rem 0.75rem; font-size: 0.85rem; align-items: center; gap: 0.25rem;">
                                     <span class="material-symbols-outlined" style="font-size: 1rem;">cancel</span>
-                                    <span data-i18n="translation:context_cancel_btn">Cancel</span>
+                                    <span data-i18n="common:cancel">Cancel</span>
                                 </button>
                                 <button id="btnSaveResync" class="btn btn-primary" onclick="saveContextResync()" style="display: none; padding: 0.25rem 0.75rem; font-size: 0.85rem; align-items: center; gap: 0.25rem;" disabled>
                                     <span class="material-symbols-outlined" style="font-size: 1rem;">save</span>
@@ -629,18 +591,6 @@
 
                 <!-- Completion cards (one per finished file, stacked until the user dismisses them) -->
                 <div id="completionCardsContainer"></div>
-
-                <!-- TTS Progress Section -->
-                <div id="ttsProgressSection" style="display: none; margin-top: 20px; padding: 15px; background: var(--success-light-bg); border: 1px solid var(--success-light); border-radius: 1.5rem;">
-                    <h3 style="margin: 0 0 10px 0; color: var(--success-light); display: flex; align-items: center; gap: 0.5rem;">
-                        <span class="material-symbols-outlined">volume_up</span>
-                        <span data-i18n="tts:progress_title">Audio Generation</span>
-                    </h3>
-                    <div class="progress-bar-container" style="margin-bottom: 10px;">
-                        <div class="progress-bar" id="ttsProgressBar" style="width: 0%; background: linear-gradient(90deg, var(--success-light), #22c55e);">0%</div>
-                    </div>
-                    <p id="ttsStatusText" data-i18n="tts:waiting" style="margin: 0; font-size: 0.875rem; color: var(--success-light);">Waiting to start...</p>
-                </div>
 
                 <!-- Activity Log (Collapsible) -->
                 <div class="prompt-options-toggle" onclick="toggleActivityLog()" style="margin-top: 30px;">
@@ -1197,7 +1147,6 @@
                     <p data-i18n-html="settings:notifications_intro" style="margin: 5px 0 15px 0; font-size: 0.875rem; color: var(--text-muted-light); line-height: 1.5;">
                         Get pinged on your phone, Discord channel, or any HTTP endpoint when a translation reaches a terminal state.
                         Useful for long-running jobs with local models. Compatible with <strong>ntfy</strong>, <strong>gotify</strong>, <strong>Discord</strong>, <strong>Slack</strong>, <strong>Healthchecks.io</strong>, or any custom webhook.
-                        See <a href="https://github.com/hydropix/TranslateBooksWithLLMs/blob/main/docs/NOTIFICATIONS.md" target="_blank" rel="noopener" style="color: var(--primary-light);">docs/NOTIFICATIONS.md</a> for the full reference.
                     </p>
 
                     <!-- Quick presets -->
@@ -1706,28 +1655,6 @@
         </div><!-- /#tab-glossaries -->
 
     </div>
-
-    <!-- Footer -->
-    <footer class="app-footer">
-        <div class="footer-links">
-            <a href="https://github.com/hydropix/TranslateBookWithLLM" target="_blank" rel="noopener noreferrer">
-                <span class="material-symbols-outlined">code</span>
-                <span data-i18n="common:footer_github">GitHub</span>
-            </a>
-            <a href="https://github.com/hydropix/TranslateBookWithLLM/issues/new" target="_blank" rel="noopener noreferrer" data-i18n-attr="title:common:footer_report_bug_title" title="Report a bug">
-                <span class="material-symbols-outlined">bug_report</span>
-                <span data-i18n="common:footer_report_bug">Report Bug</span>
-            </a>
-            <a href="https://github.com/hydropix/TranslateBookWithLLM/discussions/new?category=ideas" target="_blank" rel="noopener noreferrer" data-i18n-attr="title:common:footer_suggest_feature_title" title="Suggest a feature">
-                <span class="material-symbols-outlined">lightbulb</span>
-                <span data-i18n="common:footer_suggest_feature">Suggest Feature</span>
-            </a>
-            <a class="footer-kofi" href="https://ko-fi.com/Y1M021FYBG" target="_blank" rel="noopener noreferrer" data-i18n-attr="title:common:footer_kofi_title" title="Support this project on Ko-fi">
-                <span class="material-symbols-outlined">local_cafe</span>
-                <span data-i18n="common:footer_kofi">Support on Ko-fi</span>
-            </a>
-        </div>
-    </footer>
 
     <!-- NER auto-extract review modal (built lazily) -->
     <div id="ner-modal" class="modal-overlay hidden">

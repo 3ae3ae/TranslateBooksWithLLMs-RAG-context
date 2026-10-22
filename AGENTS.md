@@ -19,14 +19,14 @@ Code, identifiers, comments, and docstrings are in English, matching the existin
 
 ## Frontend i18n
 
-The web UI switches language at runtime. Strings live in `src/web/static/locales/<lang>/<namespace>.json` for `en`, `fr`, `es`, `de`, `zh-CN`, `ja`, `ko`; the machinery is in `src/web/static/js/i18n/i18n.js`.
+The web UI switches language at runtime. Strings live in `src/web/static/locales/<lang>/<namespace>.json` for `en` and `ko`; the machinery is in `src/web/static/js/i18n/i18n.js`.
 
 - Static HTML: mark text with `data-i18n="ns:key"`, `data-i18n-html`, `data-i18n-attr="placeholder:ns:key;title:ns:key"`, and `data-i18n-params`. `applyToDOM` re-applies these on every language change.
 - JS-rendered text: use `t('ns:key', params)` inside a render that re-runs on the `localeChanged` window event, or emit elements carrying `data-i18n*` attributes. Never cache a `t()` result at module load.
 - No raw human-readable literals in `textContent`, `innerHTML`, `title`, `placeholder`, `aria-label`, `alt`, `alert()`/`confirm()`, toasts, or `MessageLogger`.
-- A new key goes into all 7 locale files in the same change, English first, with the same `{{placeholder}}` tokens in every locale.
+- A new key goes into both locale files in the same change, English first, with the same `{{placeholder}}` tokens in both.
 - Before calling an i18n change done, switch the UI language and confirm the text updates without a reload.
 
 ## Repo layout
 
-Entrypoints at the root are `translate.py` and `translation_api.py` only. Tests live in `tests/` (pytest) and `tests/standalone/` (manual scripts); reusable helpers go in `scripts/`. Root-level `check_*.py`, `test_*.py`, `debug_*.py`, `scratch_*.py`, and `tmp_*.py` are gitignored scratch files and are never committed.
+Entrypoints at the root are `translate.py` and `translation_api.py` only. Tests live in `tests/` (pytest); reusable helpers go in `scripts/`. Root-level `check_*.py`, `test_*.py`, `debug_*.py`, `scratch_*.py`, and `tmp_*.py` are gitignored scratch files and are never committed.

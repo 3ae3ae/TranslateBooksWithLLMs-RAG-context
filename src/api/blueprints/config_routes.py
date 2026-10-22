@@ -14,7 +14,7 @@ from pathlib import Path
 # UI locales served by /static/locales/<code>/*.json. Keep in sync with the
 # SUPPORTED_LOCALES constant in src/web/static/js/i18n/i18n.js. The list is
 # small enough that duplication beats a separate config file for now.
-SUPPORTED_UI_LOCALES = ['en', 'fr', 'es', 'de', 'zh-CN', 'ja', 'ko']
+SUPPORTED_UI_LOCALES = ['en', 'ko']
 UI_LOCALE_COOKIE = 'ui_locale'
 UI_LOCALE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
 
@@ -250,13 +250,6 @@ def create_config_blueprint(server_session_id=None):
         }
 
         return jsonify(config_response)
-
-    @bp.route('/api/config/max-tokens', methods=['GET'])
-    def get_max_tokens():
-        """Get MAX_TOKENS_PER_CHUNK configuration value for UI preview height adjustment"""
-        return jsonify({
-            "max_tokens_per_chunk": _config.MAX_TOKENS_PER_CHUNK
-        })
 
     def _first_key(raw):
         """Pick the first usable key from a (possibly comma-separated) value.

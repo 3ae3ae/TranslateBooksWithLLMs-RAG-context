@@ -48,29 +48,6 @@ _tag_preservation = import_module_from_path(
 )
 
 
-@pytest.fixture
-def sample_html():
-    """Sample HTML for testing."""
-    return "<p>Hello <b>World</b></p>"
-
-
-@pytest.fixture
-def sample_tag_map():
-    """Sample tag map for testing."""
-    return {
-        "[[0]]": "<p>",
-        "[[1]]": "<b>",
-        "[[2]]": "</b>",
-        "[[3]]": "</p>"
-    }
-
-
-@pytest.fixture
-def sample_text_with_placeholders():
-    """Sample text with placeholders for testing."""
-    return "[[0]]Hello [[1]]World[[2]][[3]]"
-
-
 # ---------------------------------------------------------------------------
 # Translator's Sampler — canonical EPUB fixture
 # ---------------------------------------------------------------------------

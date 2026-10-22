@@ -206,6 +206,7 @@
   "quicktest_sampling": "Picking excerpts…",
   "quicktest_chip_glossary": "Glossary",
   "quicktest_chip_instructions": "Custom instructions",
+  "quicktest_chip_novel_context": "Novel context",
   "quicktest_cell_error": "Translation failed",
   "quicktest_error_no_file": "This file isn't ready yet — try again once it has finished uploading.",
   "quicktest_error_no_model": "No model selected. Pick a provider and model first.",
