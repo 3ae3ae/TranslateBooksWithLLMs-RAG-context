@@ -10,8 +10,8 @@ test('English number, percent, byte and duration outputs', () => {
     locale.value = 'en';
     assert.equal(formatNumber(1234.5), '1,234.5');
     assert.equal(formatPercent(0.125), '12.5%');
-    assert.equal(formatBytes(0), '0 byte');
-    assert.equal(formatBytes(1536), '1.5 kB');
+    assert.equal(formatBytes(0), '0 B');
+    assert.equal(formatBytes(1536), '1.5 KB');
     assert.equal(formatDuration(38.9), '38 s');
     assert.equal(formatDuration(2520), '42 min');
     assert.equal(formatDuration(3900), '1 h 5 min');
@@ -23,7 +23,7 @@ test('Korean formatting reads locale on each call', () => {
     locale.value = 'ko';
     assert.equal(formatNumber(1234.5), '1,234.5');
     assert.equal(formatPercent(0.125), '12.5%');
-    assert.equal(formatBytes(1536), '1.5kB');
+    assert.equal(formatBytes(568), '568 B');
     assert.equal(formatDuration(38), '38초');
     assert.equal(formatDuration(2520), '42분');
     assert.equal(formatDuration(3900), '1시간 5분');

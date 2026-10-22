@@ -7,11 +7,10 @@ export const formatPercent = (value, options = {}) =>
     formatNumber(value, { style: 'percent', maximumFractionDigits: 1, ...options });
 
 export function formatBytes(bytes) {
-    const units = ['byte', 'kilobyte', 'megabyte', 'gigabyte', 'terabyte', 'petabyte'];
+    // Plain symbols: Intl's Korean unit names render as "568byte".
+    const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
     const index = Math.min(units.length - 1, Math.max(0, Math.floor(Math.log2(Math.abs(bytes)) / 10) || 0));
-    return formatNumber(bytes / 1024 ** index, {
-        style: 'unit', unit: units[index], unitDisplay: 'short', maximumFractionDigits: index ? 1 : 0,
-    });
+    return `${formatNumber(bytes / 1024 ** index, { maximumFractionDigits: index ? 1 : 0 })} ${units[index]}`;
 }
 
 export function formatDuration(seconds) {
