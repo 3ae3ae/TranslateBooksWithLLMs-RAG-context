@@ -4,20 +4,22 @@ A web app that runs on your own computer and translates **EPUB, DOCX, TXT and SR
 
 It is built for long fiction. As it translates, it keeps **story notes** on characters, genders, nicknames, terms and how people address each other, and the model reads them before every passage, so chapter 40 still matches chapter 1. Style guides add your own instructions, and a queue runs whole series overnight.
 
-## Quick start
+## Install
 
 You need [uv](https://docs.astral.sh/uv/getting-started/installation/) and Git. uv installs a matching Python (3.11 or newer) if you don't have one.
 
 ```bash
-git clone https://github.com/3ae3ae/TranslateBooksWithLLMs-RAG-context.git
-cd TranslateBooksWithLLMs-RAG-context
-uv run translation_api.py
+uv tool install git+https://github.com/3ae3ae/TranslateBooksWithLLMs-RAG-context
+tbl
 ```
 
-The first run installs the dependencies pinned in `uv.lock`. The app then opens **http://127.0.0.1:5000** in your browser. It only listens on this computer.
+`tbl` starts the app and opens **http://127.0.0.1:5000** in your browser. It only listens on this computer, and you can run it from any folder.
 
-- Use another port: `PORT=8080 uv run translation_api.py`
-- Don't open a browser: `TBL_NO_BROWSER=1 uv run translation_api.py`
+- Use another port: `PORT=8080 tbl`
+- Don't open a browser: `TBL_NO_BROWSER=1 tbl`
+- Update: `uv tool upgrade translatebook`
+- Uninstall: `uv tool uninstall translatebook` (your data folder stays)
+- From a clone of this repository: `uv run tbl`
 
 Keep the terminal running. Closing the browser tab doesn't stop a translation. Stopping the server pauses it, and after the next start you continue it from the translation list.
 
@@ -59,20 +61,29 @@ The interface is in English and Korean; switch with the language button at the b
 
 A connection can hold several API keys and switches to the next one when a key hits its rate limit. See [docs/MODEL_CONNECTIONS.md](docs/MODEL_CONNECTIONS.md) for addresses, keys, reasoning, rate limits and costs.
 
-If you used this project before and have API keys in a `.env` file, they are imported into connections once, the first time the app starts.
+API keys already set in your environment (for example `OPENAI_API_KEY`), or in a `.env` in the data folder, are imported into connections once, the first time the app starts.
 
 ## Where your data lives
 
-| Path | Contents |
-|---|---|
-| `TranslateBook_Data/connections.json` | Model connections, **including API keys in plain text** |
-| `TranslateBook_Data/settings.json` | New-translation defaults |
-| `TranslateBook_Data/Novel_Contexts/` | Story notes, one `.txt` file each |
-| `TranslateBook_Data/Custom_Instructions/` | Style guides, one `.yaml` file each |
-| `data/jobs.db`, `data/uploads/`, `data/logs/` | Translation jobs, their source copies and passages, and logs |
-| `translated_files/` | Finished translations (change with `OUTPUT_DIR` in `.env`) |
+Everything the app keeps is in one folder:
 
-All of these are git-ignored. Back up `TranslateBook_Data/` and `data/` together. The two JSON files hold secrets: they are written readable by your user only, and should not be shared.
+- macOS: `~/Library/Application Support/TBL`
+- Linux: `~/.local/share/tbl` (or `$XDG_DATA_HOME/tbl`)
+- Windows: `%APPDATA%\TBL`
+
+Set `TBL_HOME` to use another folder, for example `TBL_HOME=~/Books/TBL tbl`.
+
+| In that folder | Contents |
+|---|---|
+| `connections.json` | Model connections, **including API keys in plain text** |
+| `settings.json` | New-translation defaults |
+| `notes/` | Story notes, one `.txt` file each |
+| `styles/` | Style guides, one `.yaml` file each |
+| `translations/` | Finished translations (**Open output folder** in the app opens it; change with `OUTPUT_DIR`) |
+| `data/` | Translation jobs, uploaded source files, passages and logs |
+| `.env` | Optional settings; see [`.env.example`](.env.example) |
+
+Back up the whole folder. `connections.json` holds your keys: it is readable by your user only and should not be shared.
 
 ## Documentation
 

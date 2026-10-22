@@ -95,7 +95,7 @@ If you delete a connection that a translation uses, that translation pauses unti
 
 ## Importing keys from `.env`
 
-The first time the app starts without `TranslateBook_Data/connections.json`, it creates connections from your `.env` file and environment:
+The first time the app starts without a `connections.json` in its data folder, it creates connections from the `.env` in that folder and from your environment:
 
 - Local Ollama from `OLLAMA_API_ENDPOINT` and `DEFAULT_MODEL`
 - One connection per service that has a key: `OPENAI_API_KEY`, `NEURALWATT_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, `MISTRAL_API_KEY`, `DEEPSEEK_API_KEY`, `POE_API_KEY`, `NIM_API_KEY`, and `OLLAMA_API_KEY` for Ollama Cloud. A comma-separated value becomes several keys. `<SERVICE>_API_ENDPOINT` and `<SERVICE>_MODEL` set the address and default model.

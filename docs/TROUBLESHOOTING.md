@@ -1,12 +1,12 @@
 # Troubleshooting
 
-When something goes wrong, the translation's **Log** tab usually says why. The same log is kept in `data/logs/<translation id>.jsonl`. For more detail in the terminal, add `DEBUG_MODE=true` to `.env` and restart.
+When something goes wrong, the translation's **Log** tab usually says why. The same log is kept in `data/logs/<translation id>.jsonl` inside the app's data folder (see the README). For more detail in the terminal, add `DEBUG_MODE=true` to the `.env` in that folder and restart.
 
 ## The app
 
-**Port 5000 is already in use.** Start on another port: `PORT=8080 uv run translation_api.py`, or put `PORT=8080` in `.env`.
+**Port 5000 is already in use.** Start on another port: `PORT=8080 tbl`, or put `PORT=8080` in the data folder's `.env`.
 
-**The app exits right after starting with a folder error.** It checks that it can write to the output folder (`translated_files/`, or `OUTPUT_DIR` in `.env`) and stops if it can't. Pick a folder you can write to; on Windows, Controlled Folder Access or antivirus software can block it.
+**The app exits right after starting with a folder error.** It checks that it can write to the output folder (`translations/` in the data folder, or `OUTPUT_DIR`) and stops if it can't. Pick a folder you can write to; on Windows, Controlled Folder Access or antivirus software can block it.
 
 **The page shows "Unauthorized" or stops updating.** The app makes a new access token each time it starts, and an open page reloads itself when it notices. If it doesn't, refresh the page.
 
@@ -57,4 +57,4 @@ When something goes wrong, the translation's **Log** tab usually says why. The s
 
 **Scanned PDFs or images.** The app doesn't read PDFs or images. Extract the text first; **Fix scan errors (OCR)** then fixes recognition errors and broken lines while translating.
 
-**Where is my translation?** In `translated_files/`, or the folder set with `OUTPUT_DIR`. **Open output folder** on the translation list opens it. An interrupted EPUB is saved with a `[partial]` prefix.
+**Where is my translation?** In `translations/` in the data folder, or the folder set with `OUTPUT_DIR`. **Open output folder** on the translation list opens it. An interrupted EPUB is saved with a `[partial]` prefix.

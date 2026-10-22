@@ -75,4 +75,4 @@ The **Story notes** page lists every notes file. Open one to read or edit it, or
 
 Every translation works on its own copy, so editing notes in the library affects translations you start later, not ones already running. Notes that an unfinished translation is using are locked in the library; fix them from that translation's **Story notes** tab instead.
 
-The files are plain text in `TranslateBook_Data/Novel_Contexts/`.
+The files are plain text in the `notes/` folder inside the app's data folder.
