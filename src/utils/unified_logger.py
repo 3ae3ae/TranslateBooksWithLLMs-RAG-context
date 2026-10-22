@@ -8,7 +8,6 @@ import json
 from datetime import datetime
 from typing import Optional, Dict, Any, Callable
 from enum import Enum
-from src.utils.telemetry import get_telemetry
 
 
 class LogLevel(Enum):
@@ -337,11 +336,6 @@ class UnifiedLogger:
         if level.value < self.min_level.value:
             return
 
-        # Add discrete watermark to DEBUG level logs
-        if level == LogLevel.DEBUG:
-            telemetry = get_telemetry()
-            message = telemetry.annotate_log(message, "DEBUG")
-        
         # Update chunk counter for LLM requests
         if log_type in (LogType.LLM_REQUEST, LogType.REFINEMENT_REQUEST) and self.translation_state['in_progress']:
             self.translation_state['current_chunk'] += 1

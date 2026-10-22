@@ -104,41 +104,11 @@ class LLMClient:
         provider = self._get_provider()
         return provider.extract_translation(response)
     
-    async def translate_text(self, prompt: str, model: Optional[str] = None) -> Optional[str]:
-        """
-        Complete translation workflow: request + extraction
-        
-        Args:
-            prompt: Translation prompt
-            model: Model to use
-            
-        Returns:
-            Extracted translation or None if failed
-        """
-        provider = self._get_provider()
-        
-        # Update model if specified
-        if model:
-            provider.model = model
-            
-        return await provider.translate_text(prompt)
-    
     async def close(self):
         """Close the HTTP client and clean up resources"""
         if self._provider:
             await self._provider.close()
             self._provider = None
-
-    def get_is_thinking_model(self) -> Optional[bool]:
-        """
-        Get the thinking model status from the provider (if available).
-
-        Returns:
-            True if model produces thinking output, False if not, None if unknown/not detected yet
-        """
-        if self._provider and hasattr(self._provider, '_is_thinking_model'):
-            return self._provider._is_thinking_model
-        return None
 
     async def detect_thinking_model(self) -> Optional[bool]:
         """

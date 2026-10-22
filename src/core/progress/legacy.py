@@ -8,16 +8,6 @@ merged dict here. This function turns it into a :class:`ProgressSnapshot` so a
 single canonical ``percent`` / ``phase`` is emitted alongside the legacy fields
 and displayed by the frontend verbatim.
 
-The percent math is intentionally behavior-preserving: it reproduces the
-frontend's historical bar logic byte-for-byte (including the
-``progress_percent`` passthrough for single-phase token-tracked runs), and it
-shares :func:`global_percent` with :class:`ProgressTracker` so the two never
-diverge. Replacing this bridge would mean having the engines drive a
-:class:`ProgressTracker` directly *and* relocating the quality-metrics fields
-(retries, fallbacks, placeholder errors…) that travel in the same stats dict
-and that the frontend consumes — a separate, larger refactor. Until then this
-bridge is the permanent production path; it is locked by the characterization
-goldens in ``tests/characterization/``.
 """
 
 from __future__ import annotations

@@ -8,7 +8,7 @@ the source language text with the target language translation.
 Covers 40+ languages based on global speaker populations.
 """
 
-from typing import Dict, Tuple
+from typing import Dict
 from .constants import TAG0, TAG1
 
 
@@ -266,21 +266,3 @@ def get_example_for_pair(source_lang: str, target_lang: str) -> Dict[str, str]:
         "correct": target_data["with_tags"],
         "wrong": target_data["without_tags"],
     }
-
-
-# Legacy compatibility: PLACEHOLDER_EXAMPLES dictionary
-# This is now generated dynamically but kept for backward compatibility
-def _build_placeholder_examples() -> Dict[Tuple[str, str], Dict[str, str]]:
-    """Build the legacy PLACEHOLDER_EXAMPLES dict for backward compatibility."""
-    examples = {}
-    languages = list(TRANSLATIONS.keys())
-
-    for source in languages:
-        for target in languages:
-            if source != target:
-                examples[(source, target)] = get_example_for_pair(source, target)
-
-    return examples
-
-
-PLACEHOLDER_EXAMPLES = _build_placeholder_examples()

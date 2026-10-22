@@ -16,7 +16,6 @@ from .constants import (
 )
 
 # Re-export example dictionaries
-from .placeholder_examples import PLACEHOLDER_EXAMPLES
 from .subtitle_examples import SUBTITLE_EXAMPLES
 from .output_examples import OUTPUT_FORMAT_EXAMPLES
 
@@ -26,8 +25,6 @@ from .helpers import (
     get_subtitle_example,
     get_output_format_example,
     build_placeholder_section,
-    has_example_for_pair,
-    ensure_example_ready,
 )
 
 __all__ = [
@@ -36,7 +33,6 @@ __all__ = [
     "TAG1",
     "TAG2",
     # Technical example dictionaries (fallback)
-    "PLACEHOLDER_EXAMPLES",
     "SUBTITLE_EXAMPLES",
     "OUTPUT_FORMAT_EXAMPLES",
     # Helper functions
@@ -44,6 +40,4 @@ __all__ = [
     "get_subtitle_example",
     "get_output_format_example",
     "build_placeholder_section",
-    "has_example_for_pair",
-    "ensure_example_ready",
 ]

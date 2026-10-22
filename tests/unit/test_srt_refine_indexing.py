@@ -64,19 +64,12 @@ def _build_srt(cues):
     return "\n".join(blocks)
 
 
-_ZERO_WIDTH = re.compile('[\u200b\u200c\u200d\u2060\ufeff]')
-
-
 def _parse_output(content):
     """Map start_time -> text for every cue of a generated SRT file.
-
-    Zero-width characters are stripped: reconstruct_srt may add invisible
-    normalization characters to the first cue, which are irrelevant to the
-    cue/text assignment under test.
     """
     processor = SRTProcessor()
     return {
-        sub["start_time"]: _ZERO_WIDTH.sub("", sub["text"])
+        sub["start_time"]: sub["text"]
         for sub in processor.parse_srt(content)
     }
 

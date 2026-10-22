@@ -25,7 +25,6 @@ from src.config import (
     PLACEHOLDER_SUFFIX,
     PLACEHOLDER_PATTERN,
     MAX_PLACEHOLDER_RETRIES,
-    MAX_PLACEHOLDER_CORRECTION_ATTEMPTS,
     create_placeholder,
     create_example_placeholder,
 )

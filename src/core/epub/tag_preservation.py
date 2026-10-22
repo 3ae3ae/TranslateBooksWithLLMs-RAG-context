@@ -7,7 +7,6 @@ replacing them with simple placeholders that LLMs won't modify.
 Key features:
 - Groups adjacent tags AND non-translatable content into single placeholders
 - Strict validation ensures placeholder integrity post-translation
-- Automatic mutation detection and correction
 """
 import re
 from typing import Dict, List, Tuple
@@ -338,48 +337,6 @@ class TagPreserver:
 
         return is_valid, missing_placeholders, mutated_placeholders
 
-    def validate_placeholders_strict(
-        self,
-        translated_text: str,
-        tag_map: Dict[str, str]
-    ) -> Tuple[bool, str]:
-        """
-        Strict validation of placeholders post-translation.
-
-        Validates:
-        1. Correct number of placeholders
-        2. Placeholders appear in sequential order (0, 1, 2, ...)
-
-        Deprecated: Use PlaceholderValidator.validate_strict() instead.
-
-        Args:
-            translated_text: Text with placeholders after translation
-            tag_map: Dictionary mapping placeholders to original tags
-
-        Returns:
-            Tuple of (is_valid, error_message)
-            - is_valid: True if validation passes
-            - error_message: Description of the validation failure (empty if valid)
-        """
-        # Use centralized PlaceholderValidator
-        return PlaceholderValidator.validate_strict(translated_text, tag_map)
-
-    def fix_mutated_placeholders(self, text: str, mutated_placeholders: List[Tuple[str, str]]) -> str:
-        """
-        Attempt to fix common placeholder mutations
-
-        Args:
-            text: Text with mutated placeholders
-            mutated_placeholders: List of (original, mutated) placeholder pairs
-
-        Returns:
-            Text with fixed placeholders
-        """
-        fixed_text = text
-        for original, mutated in mutated_placeholders:
-            fixed_text = fixed_text.replace(mutated, original)
-        return fixed_text
-
     def _get_detector(self):
         """Lazy-load the TechnicalContentDetector."""
         if self._detector is None:
@@ -524,4 +481,3 @@ class TagPreserver:
             return coverage_ratio > 0.8
 
         return False
-

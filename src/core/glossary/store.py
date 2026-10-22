@@ -432,22 +432,6 @@ class GlossaryStore:
             terms = self._fetch_terms(cursor, glossary_id)
             return _row_to_glossary(row, terms=terms)
 
-    def get_glossary_by_name(self, name: str) -> Optional[Glossary]:
-        """Return the glossary with its terms by unique name, or None."""
-        with self._lock:
-            conn = self._get_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT id, name, source_language, target_language, created_at, updated_at "
-                "FROM glossaries WHERE name = ?",
-                (name,),
-            )
-            row = cursor.fetchone()
-            if not row:
-                return None
-            terms = self._fetch_terms(cursor, row["id"])
-            return _row_to_glossary(row, terms=terms)
-
     def list_glossaries(self) -> List[Glossary]:
         """Return all glossaries without their terms (for index views)."""
         with self._lock:

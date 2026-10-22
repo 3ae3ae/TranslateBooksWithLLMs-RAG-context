@@ -246,8 +246,6 @@ class OpenRouterProvider(LLMProvider):
             headers = {
                 "Authorization": f"Bearer {current_key}",
                 "Content-Type": "application/json",
-                "HTTP-Referer": "https://github.com/hydropix/TranslateBookWithLLM",
-                "X-Title": "TranslateBookWithLLM",
             }
             try:
                 response = await client.post(

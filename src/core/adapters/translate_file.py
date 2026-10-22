@@ -301,28 +301,6 @@ async def translate_file(
     )
 
 
-def get_file_type_from_path(filepath: str) -> str:
-    """
-    Get the file type identifier from a file path.
-
-    Args:
-        filepath: Path to the file
-
-    Returns:
-        File type string: 'txt', 'srt', 'epub', or 'unknown'
-    """
-    _, ext = os.path.splitext(filepath.lower())
-
-    type_map = {
-        '.txt': 'txt',
-        '.srt': 'srt',
-        '.epub': 'epub',
-        '.docx': 'docx',
-    }
-
-    return type_map.get(ext, 'unknown')
-
-
 async def build_translated_output(
     translation_id: str,
     checkpoint_manager: Any,

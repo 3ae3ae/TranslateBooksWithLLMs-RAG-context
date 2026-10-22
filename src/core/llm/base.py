@@ -11,7 +11,6 @@ from typing import Iterable, List, Optional, Union
 import httpx
 
 from src.config import TRANSLATE_TAG_IN, TRANSLATE_TAG_OUT, REQUEST_TIMEOUT
-from src.utils.telemetry import get_telemetry_headers
 from src.core.llm.utils.extraction import TranslationExtractor
 from src.core.llm.key_pool import KeyPool
 
@@ -89,12 +88,9 @@ class LLMProvider(ABC):
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create a persistent HTTP client with connection pooling"""
         if self._client is None:
-            # Add client identification headers to all requests
-            telemetry_headers = get_telemetry_headers()
             self._client = httpx.AsyncClient(
                 limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
                 timeout=httpx.Timeout(REQUEST_TIMEOUT),
-                headers=telemetry_headers
             )
         return self._client
 
@@ -138,10 +134,3 @@ class LLMProvider(ABC):
             Extracted translation text, or None if extraction fails
         """
         return self._extractor.extract(response)
-
-    async def translate_text(self, prompt: str) -> Optional[str]:
-        """Complete translation workflow: request + extraction"""
-        response = await self.generate(prompt)
-        if response:
-            return self.extract_translation(response.content)
-        return None

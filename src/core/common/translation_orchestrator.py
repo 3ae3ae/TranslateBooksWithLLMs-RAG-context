@@ -207,56 +207,6 @@ class GenericTranslationOrchestrator(Generic[SourceT, ResultT]):
         """
         from ..epub.translation_metrics import TranslationMetrics
 
-        # Check if adapter has translate_content method (for EPUB with checkpoint support)
-        if hasattr(self.adapter, 'translate_content'):
-            # Use adapter's custom translation method (EPUB with checkpoint support)
-            raw_content, preservation_context = self.adapter.extract_content(
-                source, log_callback
-            )
-
-            if not raw_content or not raw_content.strip():
-                if log_callback:
-                    log_callback("no_content", "No content to translate")
-                empty_result = self.adapter.finalize_output("", source, preservation_context, log_callback)
-                return empty_result, TranslationMetrics()
-
-            # Preserve structure to get structure_map (needed for translate_content signature)
-            text_with_placeholders, structure_map, placeholder_format = \
-                self.adapter.preserve_structure(
-                    raw_content, preservation_context, log_callback
-                )
-
-            # Call adapter's translate_content with checkpoint parameters
-            # Pass through any additional kwargs (e.g., global_total_chunks, global_completed_chunks)
-            success, stats = await self.adapter.translate_content(
-                raw_content=source,
-                structure_map=structure_map,
-                context=preservation_context,
-                source_language=source_language,
-                target_language=target_language,
-                model_name=model_name,
-                llm_client=llm_client,
-                max_tokens_per_chunk=max_tokens_per_chunk,
-                log_callback=log_callback,
-                context_manager=context_manager,
-                max_retries=max_retries,
-                prompt_options=prompt_options,
-                stats_callback=stats_callback,
-                checkpoint_manager=checkpoint_manager,
-                translation_id=translation_id,
-                file_href=file_href,
-                check_interruption_callback=check_interruption_callback,
-                resume_state=resume_state,
-                **kwargs
-            )
-
-            return success, stats
-
-        # Standard pipeline (for formats without checkpoint support)
-        # 1. Extract content
-        if log_callback:
-            log_callback("extract_start", "Extracting content")
-
         raw_content, preservation_context = self.adapter.extract_content(
             source, log_callback
         )
@@ -267,78 +217,34 @@ class GenericTranslationOrchestrator(Generic[SourceT, ResultT]):
             empty_result = self.adapter.finalize_output("", source, preservation_context, log_callback)
             return empty_result, TranslationMetrics()
 
-        # 2. Preserve structure
-        if log_callback:
-            log_callback("preserve_start", "Preserving structure")
-
+        # Preserve structure to get structure_map (needed for translate_content signature)
         text_with_placeholders, structure_map, placeholder_format = \
             self.adapter.preserve_structure(
                 raw_content, preservation_context, log_callback
             )
 
-        # 3. Chunk
-        if log_callback:
-            log_callback("chunk_start", "Creating chunks")
-
-        chunks = self.adapter.create_chunks(
-            text_with_placeholders, structure_map, max_tokens_per_chunk, log_callback
-        )
-
-        if log_callback:
-            log_callback("chunks_created", f"Created {len(chunks)} chunks")
-
-        # 4. Translation (réutilise _translate_all_chunks d'EPUB)
-        from ..epub.xhtml_translator import _translate_all_chunks
-
-        translated_chunks, stats = await _translate_all_chunks(
-            chunks=chunks,
+        # Call adapter's translate_content with checkpoint parameters
+        # Pass through any additional kwargs (e.g., global_total_chunks, global_completed_chunks)
+        success, stats = await self.adapter.translate_content(
+            raw_content=source,
+            structure_map=structure_map,
+            context=preservation_context,
             source_language=source_language,
             target_language=target_language,
             model_name=model_name,
             llm_client=llm_client,
-            max_retries=max_retries,
-            context_manager=context_manager,
-            placeholder_format=placeholder_format,
+            max_tokens_per_chunk=max_tokens_per_chunk,
             log_callback=log_callback,
+            context_manager=context_manager,
+            max_retries=max_retries,
+            prompt_options=prompt_options,
             stats_callback=stats_callback,
+            checkpoint_manager=checkpoint_manager,
+            translation_id=translation_id,
+            file_href=file_href,
             check_interruption_callback=check_interruption_callback,
-            prompt_options=prompt_options
+            resume_state=resume_state,
+            **kwargs
         )
 
-        # 5. Refinement (optional)
-        enable_refinement = prompt_options and prompt_options.get('refine')
-        if enable_refinement and translated_chunks:
-            from ..epub.xhtml_translator import _refine_epub_chunks
-
-            if log_callback:
-                log_callback("refine_start", "Refining translation")
-
-            refined_result = await _refine_epub_chunks(
-                translated_chunks=translated_chunks,
-                chunks=chunks,
-                target_language=target_language,
-                model_name=model_name,
-                llm_client=llm_client,
-                context_manager=context_manager,
-                placeholder_format=placeholder_format,
-                log_callback=log_callback,
-                prompt_options=prompt_options,
-                check_interruption_callback=check_interruption_callback,
-            )
-            if refined_result:
-                translated_chunks = refined_result
-
-        # 6. Reconstruct
-        if log_callback:
-            log_callback("reconstruct_start", "Reconstructing content")
-
-        reconstructed = self.adapter.reconstruct_content(
-            translated_chunks, structure_map, preservation_context
-        )
-
-        # 7. Finalize
-        result = self.adapter.finalize_output(
-            reconstructed, source, preservation_context, log_callback
-        )
-
-        return result, stats
+        return success, stats

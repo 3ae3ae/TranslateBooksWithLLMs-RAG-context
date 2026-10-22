@@ -22,7 +22,7 @@ from lxml import etree
 from src.config import (
     NAMESPACES, DEFAULT_MODEL, API_ENDPOINT,
     MAX_TOKENS_PER_CHUNK, THINKING_MODELS, ADAPTIVE_CONTEXT_INITIAL_THINKING,
-    MAX_TRANSLATION_ATTEMPTS, ATTRIBUTION_ENABLED, GENERATOR_NAME, GENERATOR_SOURCE
+    MAX_TRANSLATION_ATTEMPTS
 )
 from ..common.translation_orchestrator import GenericTranslationOrchestrator
 from .epub_translation_adapter import EpubTranslationAdapter
@@ -1569,7 +1569,7 @@ def _update_epub_metadata(
     opf_path: str,
     target_language: str
 ) -> None:
-    """Update EPUB metadata with target language and translation signature."""
+    """Update EPUB metadata with target language."""
     opf_root = opf_tree.getroot()
     metadata = opf_root.find('.//opf:metadata', namespaces=NAMESPACES)
     if metadata is not None:
@@ -1582,44 +1582,5 @@ def _update_epub_metadata(
             lang_code = get_language_code(target_language)
             if lang_code:
                 lang_el.text = lang_code
-
-        # Add translation signature if enabled
-        if ATTRIBUTION_ENABLED:
-            # Add contributor (translator)
-            contributor_el = etree.SubElement(
-                metadata,
-                '{http://purl.org/dc/elements/1.1/}contributor'
-            )
-            contributor_el.text = GENERATOR_NAME
-            contributor_el.set('{http://www.idpf.org/2007/opf}role', 'trl')
-
-            # Add or update description with signature
-            desc_el = metadata.find('.//dc:description', namespaces=NAMESPACES)
-            signature_text = f"\n\nTranslated using {GENERATOR_NAME}\n{GENERATOR_SOURCE}"
-
-            if desc_el is None:
-                desc_el = etree.SubElement(
-                    metadata,
-                    '{http://purl.org/dc/elements/1.1/}description'
-                )
-                desc_el.text = signature_text.strip()
-            else:
-                if desc_el.text:
-                    desc_el.text += signature_text
-                else:
-                    desc_el.text = signature_text.strip()
-
-        # Stable per-install identifier for cross-platform rendering diagnostics.
-        # Added as an auxiliary dc:identifier; EPUB allows multiple identifiers.
-        try:
-            from src.utils.text_encoding import derive_identifier_urn
-            aux_id = etree.SubElement(
-                metadata,
-                '{http://purl.org/dc/elements/1.1/}identifier'
-            )
-            aux_id.text = derive_identifier_urn()
-            aux_id.set('id', 'render-uid')
-        except Exception:
-            pass
 
     opf_tree.write(opf_path, encoding='utf-8', xml_declaration=True, pretty_print=True)

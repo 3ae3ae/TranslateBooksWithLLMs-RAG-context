@@ -187,14 +187,6 @@ class TestTranslationContainer:
         assert chunker1.max_tokens == 400
         assert chunker2.max_tokens == 600
 
-    def test_create_translator_not_implemented(self):
-        """create_translator should raise NotImplementedError (Phase 3)."""
-        container = TranslationContainer()
-
-        with pytest.raises(NotImplementedError, match="Phase 3"):
-            container.create_translator(None, None)
-
-
 class TestContainerIntegration:
     """Integration tests for container usage."""
 

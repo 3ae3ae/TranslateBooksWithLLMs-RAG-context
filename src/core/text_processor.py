@@ -1,10 +1,7 @@
 """
 Text processing module for chunking and context management
 """
-from typing import List, Dict, Optional, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from src.config import TranslationConfig
+from typing import List, Dict, Optional
 
 
 # Legacy line-based chunking functions removed
@@ -13,7 +10,6 @@ if TYPE_CHECKING:
 
 def split_text_into_chunks(
     text: str,
-    config: Optional['TranslationConfig'] = None,
     max_tokens_per_chunk: Optional[int] = None,
     soft_limit_ratio: Optional[float] = None,
     chapter_mode: bool = False,
@@ -23,7 +19,6 @@ def split_text_into_chunks(
 
     Args:
         text: Input text to split
-        config: TranslationConfig object (optional, for default values)
         max_tokens_per_chunk: Override for max tokens per chunk
         soft_limit_ratio: Override for soft limit ratio
         chapter_mode: Keep detected chapters as independent semantic ranges
@@ -33,13 +28,8 @@ def split_text_into_chunks(
     """
     from src.config import MAX_TOKENS_PER_CHUNK, SOFT_LIMIT_RATIO
 
-    # Determine settings from config or defaults
-    if config is not None:
-        _max_tokens = max_tokens_per_chunk if max_tokens_per_chunk is not None else config.max_tokens_per_chunk
-        _soft_limit = soft_limit_ratio if soft_limit_ratio is not None else config.soft_limit_ratio
-    else:
-        _max_tokens = max_tokens_per_chunk if max_tokens_per_chunk is not None else MAX_TOKENS_PER_CHUNK
-        _soft_limit = soft_limit_ratio if soft_limit_ratio is not None else SOFT_LIMIT_RATIO
+    _max_tokens = max_tokens_per_chunk if max_tokens_per_chunk is not None else MAX_TOKENS_PER_CHUNK
+    _soft_limit = soft_limit_ratio if soft_limit_ratio is not None else SOFT_LIMIT_RATIO
 
     # Token-based chunking
     from src.core.chunking.token_chunker import TokenChunker

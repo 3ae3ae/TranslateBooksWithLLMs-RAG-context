@@ -5,7 +5,6 @@ import os
 import sys
 import logging
 from pathlib import Path
-from dataclasses import dataclass
 from typing import Optional
 from dotenv import load_dotenv
 
@@ -341,7 +340,6 @@ REPETITION_MIN_COUNT_STREAMING = int(os.getenv("REPETITION_MIN_COUNT_STREAMING",
 
 # Legacy settings (kept for compatibility)
 MIN_CHUNK_SIZE = int(os.getenv("MIN_CHUNK_SIZE", "5"))
-MAX_CHUNK_SIZE = int(os.getenv("MAX_CHUNK_SIZE", "100"))
 
 # Token-based chunking configuration
 # All file types use token-based chunking with tiktoken for consistent chunk sizes
@@ -375,15 +373,6 @@ SRT_LINES_PER_BLOCK = int(os.getenv('SRT_LINES_PER_BLOCK', '10'))
 # Total attempts = 1 + this value. After exhaustion the unit keeps its
 # best-effort content and is marked failed (job ends 'partial', retryable).
 UNIT_VALIDATION_RETRIES = int(os.getenv('UNIT_VALIDATION_RETRIES', '2'))
-
-# Translation Attribution
-# This adds a discrete attribution to your translations (metadata for EPUB, footer for TXT, comment for SRT)
-# Please consider keeping this enabled to support the project and help others discover this free tool!
-# The attribution is non-intrusive and placed at the end of files. Thank you for your support!
-ATTRIBUTION_ENABLED = os.getenv('ATTRIBUTION_ENABLED', os.getenv('SIGNATURE_ENABLED', 'true')).lower() == 'true'
-GENERATOR_NAME = "TranslateBook with LLM (TBL)"
-GENERATOR_SOURCE = "https://github.com/hydropix/TranslateBookWithLLM"
-METADATA_VERSION = "1.0"
 
 # Default languages from environment (optional)
 # Source language: Auto-detected from file content (langdetect)
@@ -582,144 +571,6 @@ MODEL_FAMILY_CONTEXT_DEFAULTS = {
     "phi": 2048,
 }
 DEFAULT_CONTEXT_FALLBACK = 2048
-
-
-@dataclass
-class TranslationConfig:
-    """Unified configuration for both CLI and web interfaces"""
-    
-    # Core settings
-    source_language: str = DEFAULT_SOURCE_LANGUAGE
-    target_language: str = DEFAULT_TARGET_LANGUAGE
-    model: str = DEFAULT_MODEL
-    api_endpoint: str = API_ENDPOINT
-    
-    # LLM Provider settings
-    llm_provider: str = LLM_PROVIDER
-    gemini_api_key: str = GEMINI_API_KEY
-    openai_api_key: str = OPENAI_API_KEY
-    openrouter_api_key: str = OPENROUTER_API_KEY
-    mistral_api_key: str = MISTRAL_API_KEY
-    deepseek_api_key: str = DEEPSEEK_API_KEY
-    poe_api_key: str = POE_API_KEY
-    nim_api_key: str = NIM_API_KEY
-
-    # LLM parameters
-    timeout: int = REQUEST_TIMEOUT
-    max_attempts: int = MAX_TRANSLATION_ATTEMPTS
-    retry_delay: int = 2  # Fixed retry delay in seconds
-    context_window: int = OLLAMA_NUM_CTX
-
-    # Context optimization
-    auto_adjust_context: bool = AUTO_ADJUST_CONTEXT
-    min_chunk_size: int = MIN_CHUNK_SIZE
-    max_chunk_size: int = MAX_CHUNK_SIZE
-
-    # Token-based chunking
-    max_tokens_per_chunk: int = MAX_TOKENS_PER_CHUNK
-    soft_limit_ratio: float = SOFT_LIMIT_RATIO
-
-    # Parallel translation (concurrent chunks). Effective value is resolved at
-    # run time via resolve_parallel_workers() so local providers stay at 1.
-    parallel_workers: int = PARALLEL_TRANSLATIONS
-
-    # Interface-specific
-    interface_type: str = "cli"  # or "web"
-    enable_colors: bool = True
-    enable_interruption: bool = False
-
-    @classmethod
-    def from_cli_args(cls, args) -> 'TranslationConfig':
-        """Create config from CLI arguments"""
-        return cls(
-            source_language=args.source_lang,
-            target_language=args.target_lang,
-            model=args.model,
-            api_endpoint=args.api_endpoint,
-            interface_type="cli",
-            enable_colors=not args.no_color,
-            llm_provider=getattr(args, 'provider', LLM_PROVIDER),
-            gemini_api_key=getattr(args, 'gemini_api_key', GEMINI_API_KEY),
-            openai_api_key=getattr(args, 'openai_api_key', OPENAI_API_KEY),
-            openrouter_api_key=getattr(args, 'openrouter_api_key', OPENROUTER_API_KEY),
-            mistral_api_key=getattr(args, 'mistral_api_key', MISTRAL_API_KEY),
-            deepseek_api_key=getattr(args, 'deepseek_api_key', DEEPSEEK_API_KEY),
-            poe_api_key=getattr(args, 'poe_api_key', POE_API_KEY),
-            nim_api_key=getattr(args, 'nim_api_key', NIM_API_KEY),
-            max_tokens_per_chunk=getattr(args, 'max_tokens_per_chunk', MAX_TOKENS_PER_CHUNK),
-            soft_limit_ratio=getattr(args, 'soft_limit_ratio', SOFT_LIMIT_RATIO),
-            parallel_workers=getattr(args, 'parallel', PARALLEL_TRANSLATIONS)
-        )
-
-    @classmethod
-    def from_web_request(cls, request_data: dict) -> 'TranslationConfig':
-        """Create config from web request data"""
-        # Keep a small positive floor while honoring the live .env/request
-        # budget. The old 1,000-token ceiling silently changed valid settings.
-        try:
-            requested_max_tokens = int(request_data.get('max_tokens_per_chunk', MAX_TOKENS_PER_CHUNK))
-            clamped_max_tokens = max(50, requested_max_tokens)
-        except (TypeError, ValueError):
-            clamped_max_tokens = MAX_TOKENS_PER_CHUNK
-
-        # Clamp parallel workers to [1, MAX_PARALLEL_TRANSLATIONS], falling back
-        # to the .env default when absent or malformed.
-        try:
-            requested_workers = int(request_data.get('parallel_workers', PARALLEL_TRANSLATIONS))
-            clamped_workers = max(1, min(MAX_PARALLEL_TRANSLATIONS, requested_workers))
-        except (TypeError, ValueError):
-            clamped_workers = PARALLEL_TRANSLATIONS
-
-        return cls(
-            source_language=request_data.get('source_language', DEFAULT_SOURCE_LANGUAGE),
-            target_language=request_data.get('target_language', DEFAULT_TARGET_LANGUAGE),
-            model=request_data.get('model', DEFAULT_MODEL),
-            api_endpoint=request_data.get('llm_api_endpoint', API_ENDPOINT),
-            timeout=request_data.get('timeout', REQUEST_TIMEOUT),
-            max_attempts=request_data.get('max_attempts', MAX_TRANSLATION_ATTEMPTS),
-            retry_delay=request_data.get('retry_delay', 2),
-            context_window=request_data.get('context_window', OLLAMA_NUM_CTX),
-            auto_adjust_context=request_data.get('auto_adjust_context', AUTO_ADJUST_CONTEXT),
-            min_chunk_size=request_data.get('min_chunk_size', MIN_CHUNK_SIZE),
-            max_chunk_size=request_data.get('max_chunk_size', MAX_CHUNK_SIZE),
-            interface_type="web",
-            enable_interruption=True,
-            llm_provider=request_data.get('llm_provider', LLM_PROVIDER),
-            gemini_api_key=request_data.get('gemini_api_key', GEMINI_API_KEY),
-            openai_api_key=request_data.get('openai_api_key', OPENAI_API_KEY),
-            openrouter_api_key=request_data.get('openrouter_api_key', OPENROUTER_API_KEY),
-            mistral_api_key=request_data.get('mistral_api_key', MISTRAL_API_KEY),
-            deepseek_api_key=request_data.get('deepseek_api_key', DEEPSEEK_API_KEY),
-            poe_api_key=request_data.get('poe_api_key', POE_API_KEY),
-            nim_api_key=request_data.get('nim_api_key', NIM_API_KEY),
-            max_tokens_per_chunk=clamped_max_tokens,
-            soft_limit_ratio=request_data.get('soft_limit_ratio', SOFT_LIMIT_RATIO),
-            parallel_workers=clamped_workers
-        )
-
-    def to_dict(self) -> dict:
-        """Convert to dictionary for serialization"""
-        return {
-            'source_language': self.source_language,
-            'target_language': self.target_language,
-            'model': self.model,
-            'api_endpoint': self.api_endpoint,
-            'timeout': self.timeout,
-            'max_attempts': self.max_attempts,
-            'retry_delay': self.retry_delay,
-            'context_window': self.context_window,
-            'llm_provider': self.llm_provider,
-            'gemini_api_key': self.gemini_api_key,
-            'openai_api_key': self.openai_api_key,
-            'openrouter_api_key': self.openrouter_api_key,
-            'mistral_api_key': self.mistral_api_key,
-            'deepseek_api_key': self.deepseek_api_key,
-            'poe_api_key': self.poe_api_key,
-            'nim_api_key': self.nim_api_key,
-            'max_tokens_per_chunk': self.max_tokens_per_chunk,
-            'soft_limit_ratio': self.soft_limit_ratio,
-            'parallel_workers': self.parallel_workers
-        }
 
 
 def detect_placeholder_format_in_text(text: str) -> tuple:

@@ -113,22 +113,6 @@ class TokenProgressTracker:
         self._completed_chunks += 1
         self._completed_tokens += self._chunk_tokens[chunk_index]
 
-    def mark_recovered(self, chunk_index: int, elapsed_time: float):
-        """
-        Transition a previously failed chunk to completed after a successful retry.
-
-        Decrements failed_chunks without double-counting completed_chunks
-        (mark_failed already incremented it when the chunk first errored).
-        """
-        if chunk_index >= len(self._chunk_tokens):
-            raise ValueError(f"Invalid chunk index: {chunk_index}")
-
-        if self._failed_chunks > 0:
-            self._failed_chunks -= 1
-        self._chunk_times.append(elapsed_time)
-        if len(self._chunk_times) >= self.CALIBRATION_THRESHOLD:
-            self._calibrate_token_rate()
-
     def get_progress_percent(self) -> float:
         """
         Calculate progress as a percentage of total work completed.

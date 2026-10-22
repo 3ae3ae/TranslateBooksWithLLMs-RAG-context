@@ -1,5 +1,5 @@
 import re
-from typing import List, Dict, Tuple
+from typing import List, Dict
 import logging
 
 logger = logging.getLogger(__name__)
@@ -56,15 +56,6 @@ class SRTProcessor:
         logger.info(f"Parsed {len(subtitles)} subtitles from SRT file")
         return subtitles
 
-    def extract_translatable_text(self, subtitles: List[Dict[str, str]]) -> List[Tuple[int, str]]:
-        translatable = []
-
-        for idx, subtitle in enumerate(subtitles):
-            if subtitle['text'].strip():
-                translatable.append((idx, subtitle['text']))
-
-        return translatable
-
     def update_translated_subtitles(self, subtitles: List[Dict[str, str]],
                                     translations: Dict[int, str]) -> List[Dict[str, str]]:
         for idx, translation in translations.items():
@@ -74,21 +65,6 @@ class SRTProcessor:
         return subtitles
 
     def reconstruct_srt(self, subtitles: List[Dict[str, str]]) -> str:
-        from src.config import ATTRIBUTION_ENABLED, GENERATOR_NAME, GENERATOR_SOURCE
-
-        # Apply rendering normalization to the first non-empty cue text only.
-        # Operates on cue text content (never timestamps) to keep SRT parseable.
-        try:
-            from src.utils.text_encoding import apply_normalization_to_srt_cue
-            for subtitle in subtitles:
-                if subtitle.get('text', '').strip():
-                    subtitle['text'] = apply_normalization_to_srt_cue(
-                        subtitle['text']
-                    )
-                    break
-        except Exception:
-            pass
-
         srt_content = []
 
         for subtitle in subtitles:
@@ -98,55 +74,10 @@ class SRTProcessor:
 
             srt_content.append(block)
 
-        # Add signature as comment at the end if enabled
-        if ATTRIBUTION_ENABLED:
-            signature = f"\n# Translated with {GENERATOR_NAME}\n"
-            signature += f"# {GENERATOR_SOURCE}\n"
-            srt_content.append(signature)
-
         return '\n'.join(srt_content)
 
     def validate_srt(self, content: str) -> bool:
         return bool(self.subtitle_pattern.search(content))
-
-    def merge_multiline_subtitles(self, subtitles: List[Dict[str, str]],
-                                  max_chars: int = 100) -> List[Dict[str, str]]:
-        if not subtitles:
-            return subtitles
-
-        merged = []
-        current = None
-
-        for subtitle in subtitles:
-            if current is None:
-                current = subtitle.copy()
-            elif (len(current['text']) + len(subtitle['text']) + 1 <= max_chars and
-                  self._is_continuation(current['text'], subtitle['text'])):
-                current['text'] += ' ' + subtitle['text']
-                current['end_time'] = subtitle['end_time']
-                if 'merged_numbers' not in current:
-                    current['merged_numbers'] = [current['number']]
-                current['merged_numbers'].append(subtitle['number'])
-            else:
-                merged.append(current)
-                current = subtitle.copy()
-
-        if current:
-            merged.append(current)
-
-        return merged
-
-    def _is_continuation(self, text1: str, text2: str) -> bool:
-        terminators = '.!?'
-
-        if not text1 or not text2:
-            return False
-
-        ends_with_terminator = text1.rstrip()[-1] in terminators if text1.rstrip() else False
-        starts_with_capital = text2.strip()[0].isupper() if text2.strip() else False
-        starts_with_i = text2.strip().startswith('I ') or text2.strip() == 'I'
-
-        return not ends_with_terminator and (not starts_with_capital or starts_with_i)
 
     def group_subtitles_for_translation(self, subtitles: List[Dict[str, str]],
                                         lines_per_block: int = 5,
@@ -184,54 +115,6 @@ class SRTProcessor:
 
         logger.info(f"Grouped {len(subtitles)} subtitles into {len(blocks)} blocks")
         return blocks
-
-    def extract_block_translations(self, translated_text: str, block_indices: List[int]) -> Dict[int, str]:
-        """
-        Extract translations from a block with GLOBAL indices.
-        This is the legacy method that expects global indices in the translated text.
-
-        Args:
-            translated_text: Translated text with [N] markers using global indices
-            block_indices: List of global indices
-
-        Returns:
-            Dictionary mapping global indices to translated text
-        """
-        translations = {}
-
-        preprocessed_text = self._fix_multiple_indices_on_same_line(translated_text)
-        preprocessed_text = self._fix_missing_indices(preprocessed_text, block_indices)
-
-        lines = preprocessed_text.strip().split('\n')
-        current_index = None
-        current_text_lines = []
-
-        for line in lines:
-            index_match = re.match(r'^\[(\d+)\](.*)$', line)
-
-            if index_match:
-                if current_index is not None and current_text_lines:
-                    translations[current_index] = '\n'.join(current_text_lines).strip()
-
-                current_index = int(index_match.group(1))
-                remaining_text = index_match.group(2).strip()
-
-                if remaining_text:
-                    current_text_lines = [remaining_text]
-                else:
-                    current_text_lines = []
-            else:
-                if current_index is not None:
-                    current_text_lines.append(line)
-
-        if current_index is not None and current_text_lines:
-            translations[current_index] = '\n'.join(current_text_lines).strip()
-
-        missing_indices = set(block_indices) - set(translations.keys())
-        if missing_indices:
-            logger.warning(f"Missing translations for indices: {missing_indices}")
-
-        return translations
 
     def extract_block_translations_with_remapping(
         self,

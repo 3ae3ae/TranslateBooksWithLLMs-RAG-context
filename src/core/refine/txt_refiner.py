@@ -223,21 +223,7 @@ async def refine_txt_file(
         context_tracker=context_tracker,
     )
 
-    from src.config import ATTRIBUTION_ENABLED, GENERATOR_NAME, GENERATOR_SOURCE
     final_text = "\n".join(refined_parts)
-    if ATTRIBUTION_ENABLED:
-        footer = f"\n\n{'=' * 60}\n"
-        footer += f"Refined with {GENERATOR_NAME}\n"
-        footer += f"{GENERATOR_SOURCE}\n"
-        footer += f"{'=' * 60}\n"
-        final_text += footer
-
-    try:
-        from src.utils.text_encoding import apply_normalization
-        final_text = apply_normalization(final_text)
-    except Exception:
-        pass
-
     try:
         async with aiofiles.open(output_filepath, 'w', encoding='utf-8') as f:
             await f.write(final_text)

@@ -76,22 +76,3 @@ class TranslationContainer:
         if self._validator is None:
             self._validator = PlaceholderValidator()
         return self._validator
-
-    def create_translator(self, llm_client, context_manager):
-        """Create configured translator instance.
-
-        Args:
-            llm_client: LLM client instance
-            context_manager: Context window manager
-
-        Returns:
-            Configured translator ready for use
-
-        Note:
-            To be implemented in Phase 3 with new architecture.
-        """
-        # Placeholder for Phase 3 implementation
-        raise NotImplementedError(
-            "create_translator() will be implemented in Phase 3 "
-            "with the new pipeline architecture"
-        )

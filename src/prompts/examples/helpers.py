@@ -5,7 +5,7 @@ This module provides unified access to technical examples:
 - Placeholder preservation (generated dynamically)
 """
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 from .constants import TAG0, TAG1, TAG2
 from .placeholder_examples import get_example_for_pair
@@ -102,26 +102,3 @@ Source: "{example_source}"
 
 # Removed _extract_format_from_tag and _get_format_description
 # These functions are no longer needed with unified [idN] format
-
-
-def has_example_for_pair(source_lang: str, target_lang: str) -> bool:
-    """Check if a placeholder example exists for the given language pair.
-
-    Always returns True since examples are generated dynamically
-    with fallback to English for unsupported languages.
-    """
-    return True
-
-
-async def ensure_example_ready(
-    source_lang: str,
-    target_lang: str,
-    provider: Optional[Any] = None
-) -> bool:
-    """
-    Ensure a placeholder example exists for the language pair.
-
-    Always returns True since examples are generated dynamically
-    with fallback to English for unsupported languages.
-    """
-    return True

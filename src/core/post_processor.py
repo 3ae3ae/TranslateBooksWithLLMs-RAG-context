@@ -3,7 +3,7 @@ Post-processing module for cleaning translated text.
 Provides extensible cleaning operations for translation output.
 """
 import re
-from typing import List, Dict
+from typing import List
 from abc import ABC, abstractmethod
 
 from src.config import PLACEHOLDER_PATTERN
@@ -102,10 +102,6 @@ class PostProcessor:
         """Add a new post-processing rule"""
         self.rules.append(rule)
     
-    def remove_rule(self, rule_type: type):
-        """Remove a rule by its type"""
-        self.rules = [r for r in self.rules if not isinstance(r, rule_type)]
-    
     def process(self, text: str, verbose: bool = False) -> str:
         """
         Apply all post-processing rules to the text
@@ -128,17 +124,6 @@ class PostProcessor:
         
         return result
     
-    def get_rules(self) -> List[Dict[str, str]]:
-        """Get a list of all active rules and their descriptions"""
-        return [
-            {
-                "name": rule.__class__.__name__,
-                "description": rule.description()
-            }
-            for rule in self.rules
-        ]
-
-
 # Create a default instance
 default_post_processor = PostProcessor()
 
@@ -170,22 +155,6 @@ def clean_residual_tag_placeholders(text: str) -> str:
     """
     cleaner = RemoveResidualTagPlaceholdersRule()
     return cleaner.apply(text)
-
-
-# Example of how to create a custom rule:
-class CustomPunctuationRule(PostProcessingRule):
-    """Example custom rule for specific punctuation cleaning"""
-    
-    def __init__(self, replacements: Dict[str, str]):
-        self.replacements = replacements
-    
-    def apply(self, text: str) -> str:
-        for old, new in self.replacements.items():
-            text = text.replace(old, new)
-        return text
-    
-    def description(self) -> str:
-        return f"Custom punctuation replacements: {list(self.replacements.keys())}"
 
 
 if __name__ == "__main__":
