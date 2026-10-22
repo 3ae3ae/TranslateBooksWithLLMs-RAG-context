@@ -1,0 +1,32 @@
+{
+  "preact": {
+    "version": "11.0.1",
+    "source_url": "https://registry.npmjs.org/preact/-/preact-11.0.1.tgz",
+    "license": "MIT"
+  },
+  "htm": {
+    "version": "3.1.1",
+    "source_url": "https://registry.npmjs.org/htm/-/htm-3.1.1.tgz",
+    "license": "Apache-2.0"
+  },
+  "@preact/signals-core": {
+    "version": "1.14.4",
+    "source_url": "https://registry.npmjs.org/@preact/signals-core/-/signals-core-1.14.4.tgz",
+    "license": "MIT"
+  },
+  "@preact/signals": {
+    "version": "2.11.3",
+    "source_url": "https://registry.npmjs.org/@preact/signals/-/signals-2.11.3.tgz",
+    "license": "MIT"
+  },
+  "socket.io-client": {
+    "version": "4.5.4",
+    "source_url": "https://registry.npmjs.org/socket.io-client/-/socket.io-client-4.5.4.tgz",
+    "license": "MIT"
+  },
+  "lucide-static": {
+    "version": "1.61.0",
+    "source_url": "https://registry.npmjs.org/lucide-static/-/lucide-static-1.61.0.tgz",
+    "license": "ISC"
+  }
+}

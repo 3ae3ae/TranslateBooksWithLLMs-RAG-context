@@ -1,0 +1,9 @@
+{
+  "imports": {
+    "preact": "/static/vendor/preact.mjs",
+    "preact/hooks": "/static/vendor/preact-hooks.mjs",
+    "htm": "/static/vendor/htm.mjs",
+    "@preact/signals-core": "/static/vendor/signals-core.mjs",
+    "@preact/signals": "/static/vendor/signals.mjs"
+  }
+}
