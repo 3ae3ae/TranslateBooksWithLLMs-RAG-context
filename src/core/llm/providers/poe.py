@@ -18,8 +18,9 @@ import httpx
 import asyncio
 import json
 
-from src.config import REQUEST_TIMEOUT, MAX_TRANSLATION_ATTEMPTS, TEMPERATURE
 from ..base import LLMProvider, LLMResponse
+from ..thinking.parameters import reasoning_parameters, drop_rejected_parameters
+from src import config
 from ..exceptions import ContextOverflowError
 from ..rate_limit_handler import handle_rate_limit, is_retryable_http_status
 
@@ -81,7 +82,9 @@ class PoeProvider(LLMProvider):
         self,
         api_key: Union[str, List[str]],
         model: str = "Claude-Sonnet-4",
-        api_endpoint: Optional[str] = None
+        api_endpoint: Optional[str] = None,
+        *, request_timeout=None, max_attempts=None, temperature=...,
+        reasoning_effort="default", local=None, connection_type=None, log_callback=None
     ):
         """
         Initialize the Poe provider.
@@ -91,7 +94,10 @@ class PoeProvider(LLMProvider):
             model: Bot name on Poe (default: Claude-Sonnet-4)
             api_endpoint: Optional custom API endpoint (default: https://api.poe.com/v1)
         """
-        super().__init__(model, api_keys=api_key, provider_name="poe")
+        super().__init__(model, api_keys=api_key, provider_name="poe",
+                         request_timeout=request_timeout, max_attempts=max_attempts,
+                         temperature=config.TEMPERATURE if temperature is ... else temperature, reasoning_effort=reasoning_effort,
+                         local=local, connection_type=connection_type, log_callback=log_callback)
         self.api_endpoint = api_endpoint or self.API_URL
 
     def _get_context_limit(self) -> int:
@@ -174,12 +180,12 @@ class PoeProvider(LLMProvider):
         try:
             client = await self._get_client()
             headers = {
-                "Authorization": f"Bearer {self.api_key}",
+                **({"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}),
                 "Accept": "application/json"
             }
 
             response = await client.get(
-                "https://api.poe.com/v1/models",
+                self.models_url,
                 headers=headers,
                 timeout=30
             )
@@ -315,7 +321,7 @@ class PoeProvider(LLMProvider):
     async def generate(
         self,
         prompt: str,
-        timeout: int = REQUEST_TIMEOUT,
+        timeout: int = None,
         system_prompt: Optional[str] = None
     ) -> Optional[LLMResponse]:
         """
@@ -342,18 +348,22 @@ class PoeProvider(LLMProvider):
             "model": self.model,
             "messages": messages,
             "stream": False,
-            "temperature": TEMPERATURE,
         }
+
+        timeout = self.request_timeout if timeout is None else timeout
+        payload.update(reasoning_parameters(self.connection_type, self.model, self.reasoning_effort, local=self.local))
+        if self.temperature is not None:
+            payload["temperature"] = self.temperature
 
         client = await self._get_client()
         # 429s have their own budget (rate_limit_events): rotating to a spare
         # key must not consume a transient-retry attempt (issue #217).
         attempt = 0
         rate_limit_events = 0
-        while attempt < MAX_TRANSLATION_ATTEMPTS:
-            current_key = await self._key_pool.acquire()
+        while attempt < self.max_attempts:
+            current_key = await self._key_pool.acquire() if self._key_pool else None
             headers = {
-                "Authorization": f"Bearer {current_key}",
+                **({"Authorization": f"Bearer {current_key}"} if current_key else {}),
                 "Content-Type": "application/json",
                 "Accept": "application/json"
             }
@@ -376,11 +386,11 @@ class PoeProvider(LLMProvider):
                     print(f"   Check your subscription at: https://poe.com/subscribe")
                     return None
 
-                if response.status_code == 429:
+                if response.status_code == 429 and self._key_pool:
                     rate_limit_events += 1
                     await handle_rate_limit(
                         self._key_pool, current_key, response.headers,
-                        rate_limit_events, MAX_TRANSLATION_ATTEMPTS,
+                        rate_limit_events, self.max_attempts,
                     )
                     continue
 
@@ -426,14 +436,16 @@ class PoeProvider(LLMProvider):
                 )
 
             except httpx.TimeoutException as e:
-                print(f"Poe API Timeout (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
+                print(f"Poe API Timeout (attempt {attempt + 1}/{self.max_attempts}): {e}")
                 attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
+                if attempt < self.max_attempts:
                     await asyncio.sleep(2)
                     continue
                 return None
 
             except httpx.HTTPStatusError as e:
+                if drop_rejected_parameters(payload, e.response, log_callback=self.log_callback):
+                    continue
                 error_body = ""
                 error_message = str(e)
                 if hasattr(e, 'response') and hasattr(e.response, 'text'):
@@ -445,7 +457,7 @@ class PoeProvider(LLMProvider):
                     print(f"   Note: Only public bots are accessible via API")
                     print(f"   Find bots at: https://poe.com/explore")
                 elif e.response.status_code not in [401, 402, 429]:  # Already handled above
-                    print(f"Poe API HTTP Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
+                    print(f"Poe API HTTP Error (attempt {attempt + 1}/{self.max_attempts}): {e}")
                     print(f"Response details: Status {e.response.status_code}, Body: {error_body}...")
 
                 # Detect context overflow errors
@@ -463,23 +475,23 @@ class PoeProvider(LLMProvider):
                     return None
 
                 attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
+                if attempt < self.max_attempts:
                     await asyncio.sleep(2)
                     continue
                 return None
 
             except json.JSONDecodeError as e:
-                print(f"Poe API JSON Decode Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
+                print(f"Poe API JSON Decode Error (attempt {attempt + 1}/{self.max_attempts}): {e}")
                 attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
+                if attempt < self.max_attempts:
                     await asyncio.sleep(2)
                     continue
                 return None
 
             except Exception as e:
-                print(f"Poe API Unknown Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
+                print(f"Poe API Unknown Error (attempt {attempt + 1}/{self.max_attempts}): {e}")
                 attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
+                if attempt < self.max_attempts:
                     await asyncio.sleep(2)
                     continue
                 return None

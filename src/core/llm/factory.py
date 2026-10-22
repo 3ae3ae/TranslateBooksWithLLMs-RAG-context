@@ -1,22 +1,9 @@
-"""
-Factory for creating LLM provider instances.
-
-This module provides the create_llm_provider() function which instantiates
-the appropriate provider based on the provider_type parameter.
-"""
+"""Create providers, preserving the legacy env defaults outside connections."""
 
 import os
+from urllib.parse import urlsplit
 
-from src.config import (
-    API_ENDPOINT, DEFAULT_MODEL, OLLAMA_NUM_CTX,
-    OPENAI_API_KEY,
-    OPENROUTER_API_KEY, OPENROUTER_MODEL,
-    MISTRAL_API_KEY, MISTRAL_MODEL, MISTRAL_API_ENDPOINT,
-    DEEPSEEK_API_KEY, DEEPSEEK_MODEL, DEEPSEEK_API_ENDPOINT,
-    DEEPSEEK_DISABLE_THINKING,
-    POE_API_KEY, POE_MODEL, POE_API_ENDPOINT,
-    NIM_API_KEY, NIM_MODEL, NIM_API_ENDPOINT,
-)
+from src import config
 from .base import LLMProvider, normalize_api_keys
 from .providers.ollama import OllamaProvider
 from .providers.openai import OpenAICompatibleProvider
@@ -28,146 +15,70 @@ from .providers.poe import PoeProvider
 
 
 def _require_key(raw, error_message: str):
-    """Validate that at least one usable key is present in `raw`.
-
-    Used by cloud providers in the factory to surface a clear error before
-    instantiation. Returns the original `raw` value so providers receive the
-    multi-key string unchanged (the base class handles splitting).
-    """
     if not normalize_api_keys(raw):
         raise ValueError(error_message)
     return raw
 
 
-def create_llm_provider(provider_type: str = "ollama", **kwargs) -> LLMProvider:
-    """
-    Create an LLM provider instance.
-
-    Auto-detection: If provider_type is "ollama" and model name starts with "gemini",
-    automatically switches to Gemini provider.
-
-    Args:
-        provider_type: Type of provider ("ollama", "openai", "gemini", "openrouter", "mistral", "deepseek", "poe", "nim")
-        **kwargs: Provider-specific parameters:
-            - api_endpoint: API endpoint URL (Ollama, OpenAI)
-            - model: Model name/identifier
-            - api_key: API key (Gemini, OpenAI, OpenRouter)
-            - context_window: Context window size (Ollama, OpenAI)
-            - log_callback: Logging callback function (Ollama, OpenAI)
-
-    Returns:
-        Instantiated LLMProvider subclass
-
-    Raises:
-        ValueError: If provider_type is unknown or required parameters are missing
-
-    Examples:
-        >>> # Ollama provider
-        >>> provider = create_llm_provider("ollama", model="llama3")
-
-        >>> # OpenAI-compatible provider
-        >>> provider = create_llm_provider("openai", api_key="sk-...", model="gpt-4")
-
-        >>> # Gemini provider (auto-detected from model name)
-        >>> provider = create_llm_provider("ollama", model="gemini-2.0-flash")
-
-        >>> # OpenRouter provider
-        >>> provider = create_llm_provider("openrouter", api_key="sk-or-...", model="anthropic/claude-sonnet-4")
-    """
-    # Auto-detect provider from model name if not explicitly set
-    model = kwargs.get("model", DEFAULT_MODEL)
-    if provider_type == "ollama" and model and model.startswith("gemini"):
-        # Auto-switch to Gemini provider when Gemini model is detected
+def create_llm_provider(provider_type: str = "ollama", *, connection: dict | None = None, **kwargs) -> LLMProvider:
+    if connection is not None:
+        provider_type = connection["llm_provider"]
+        kwargs.update(api_endpoint=connection["llm_api_endpoint"], model=connection["model"],
+                      api_key=connection["api_key"],
+                      **{key: connection[key] for key in (
+                          "request_timeout", "max_attempts", "temperature", "reasoning_effort",
+                          "local", "connection_type")})
+    provider_type = provider_type.lower()
+    model = kwargs.get("model", config.DEFAULT_MODEL)
+    if connection is None and provider_type == "ollama" and model and model.startswith("gemini"):
         provider_type = "gemini"
+    options = {key: kwargs[key] for key in (
+        "request_timeout", "max_attempts", "temperature", "reasoning_effort", "local",
+        "connection_type", "log_callback") if key in kwargs}
+    endpoint = kwargs.get("api_endpoint") or kwargs.get("endpoint")
 
-    if provider_type.lower() == "ollama":
-        return OllamaProvider(
-            api_endpoint=kwargs.get("api_endpoint") or kwargs.get("endpoint") or API_ENDPOINT,
-            model=kwargs.get("model", DEFAULT_MODEL),
-            context_window=kwargs.get("context_window") or OLLAMA_NUM_CTX,
-            log_callback=kwargs.get("log_callback")
-        )
-    elif provider_type.lower() == "openai":
-        api_endpoint = kwargs.get("api_endpoint") or kwargs.get("endpoint") or ""
-        # Distinguish official OpenAI from local llama.cpp/vLLM/LM Studio for log clarity
-        pname = "openai" if "api.openai.com" in api_endpoint else "openai-compatible"
-        return OpenAICompatibleProvider(
-            api_endpoint=api_endpoint,
-            model=kwargs.get("model", DEFAULT_MODEL),
-            # Env fallback matters for resume: checkpoints carry no keys
-            # (issue #213). Key stays optional — local OpenAI-compatible
-            # endpoints (llama.cpp, LM Studio, vLLM) don't need one.
-            api_key=kwargs.get("api_key") or kwargs.get("openai_api_key")
-            or os.getenv("OPENAI_API_KEY", OPENAI_API_KEY),
-            context_window=kwargs.get("context_window") or OLLAMA_NUM_CTX,
-            log_callback=kwargs.get("log_callback"),
-            provider_name=pname,
-        )
-    elif provider_type.lower() == "gemini":
-        api_key = _require_key(
-            kwargs.get("api_key") or kwargs.get("gemini_api_key") or os.getenv("GEMINI_API_KEY"),
-            "Gemini provider requires an API key. Set GEMINI_API_KEY environment variable or pass api_key parameter."
-        )
-        return GeminiProvider(
-            api_key=api_key,
-            model=kwargs.get("model", "gemini-2.0-flash")
-        )
-    elif provider_type.lower() == "openrouter":
-        api_key = _require_key(
-            kwargs.get("api_key") or kwargs.get("openrouter_api_key")
-            or os.getenv("OPENROUTER_API_KEY", OPENROUTER_API_KEY),
-            "OpenRouter provider requires an API key. Set OPENROUTER_API_KEY environment variable or pass api_key parameter."
-        )
-        return OpenRouterProvider(
-            api_key=api_key,
-            model=kwargs.get("model", OPENROUTER_MODEL)
-        )
-    elif provider_type.lower() == "mistral":
-        api_key = _require_key(
-            kwargs.get("api_key") or kwargs.get("mistral_api_key")
-            or os.getenv("MISTRAL_API_KEY", MISTRAL_API_KEY),
-            "Mistral provider requires an API key. Set MISTRAL_API_KEY environment variable or pass api_key parameter."
-        )
-        return MistralProvider(
-            api_key=api_key,
-            model=kwargs.get("model", MISTRAL_MODEL),
-            api_endpoint=MISTRAL_API_ENDPOINT
-        )
-    elif provider_type.lower() == "deepseek":
-        api_key = _require_key(
-            kwargs.get("api_key") or kwargs.get("deepseek_api_key")
-            or os.getenv("DEEPSEEK_API_KEY", DEEPSEEK_API_KEY),
-            "DeepSeek provider requires an API key. Set DEEPSEEK_API_KEY environment variable or pass api_key parameter."
-        )
-        return DeepSeekProvider(
-            api_key=api_key,
-            model=kwargs.get("model", DEEPSEEK_MODEL),
-            api_endpoint=DEEPSEEK_API_ENDPOINT,
-            disable_thinking=kwargs.get("deepseek_disable_thinking", DEEPSEEK_DISABLE_THINKING)
-        )
-    elif provider_type.lower() == "poe":
-        api_key = _require_key(
-            kwargs.get("api_key") or kwargs.get("poe_api_key")
-            or os.getenv("POE_API_KEY", POE_API_KEY),
-            "Poe provider requires an API key. Get your key at https://poe.com/api_key"
-        )
-        return PoeProvider(
-            api_key=api_key,
-            model=kwargs.get("model", POE_MODEL),
-            api_endpoint=POE_API_ENDPOINT
-        )
-    elif provider_type.lower() == "nim":
-        api_key = _require_key(
-            kwargs.get("api_key") or kwargs.get("nim_api_key")
-            or os.getenv("NIM_API_KEY", NIM_API_KEY),
-            "NVIDIA NIM provider requires an API key. Get your key at https://build.nvidia.com/"
-        )
-        return OpenAICompatibleProvider(
-            api_key=api_key,
-            model=kwargs.get("model", NIM_MODEL),
-            api_endpoint=kwargs.get("api_endpoint", NIM_API_ENDPOINT),
-            provider_name="nim",
-        )
+    def key(prefix):
+        if connection is not None:
+            return kwargs["api_key"]
+        value = kwargs.get("api_key") or kwargs.get(prefix.lower() + "_api_key") or os.getenv(prefix + "_API_KEY", getattr(config, prefix + "_API_KEY", ""))
+        if provider_type not in {"ollama", "openai", "openai_compatible"}:
+            _require_key(value, f"{prefix} provider requires an API key. Set {prefix}_API_KEY or pass api_key.")
+        return value
 
-    else:
-        raise ValueError(f"Unknown provider type: {provider_type}")
+    if provider_type in {"ollama", "ollama_cloud"}:
+        if provider_type == "ollama_cloud":
+            options.setdefault("local", False)
+            options.setdefault("connection_type", "ollama_cloud")
+        return OllamaProvider(api_endpoint=endpoint or ("https://ollama.com/api/chat" if provider_type == "ollama_cloud" else config.API_ENDPOINT),
+                              model=model, api_key=key("OLLAMA"),
+                              context_window=kwargs.get("context_window") or config.OLLAMA_NUM_CTX, **options)
+    if provider_type in {"openai", "openai_compatible", "nim"}:
+        endpoint = endpoint or (config.NIM_API_ENDPOINT if provider_type == "nim" else "")
+        pname = "nim" if provider_type == "nim" else ("openai" if urlsplit(endpoint).hostname == "api.openai.com" else "openai-compatible")
+        return OpenAICompatibleProvider(api_endpoint=endpoint,
+                                        model=kwargs.get("model", config.NIM_MODEL if provider_type == "nim" else config.DEFAULT_MODEL),
+                                        api_key=key("NIM" if provider_type == "nim" else "OPENAI"),
+                                        context_window=kwargs.get("context_window") or config.OLLAMA_NUM_CTX,
+                                        provider_name=pname, **options)
+    if provider_type == "gemini":
+        return GeminiProvider(api_key=key("GEMINI"), model=kwargs.get("model", "gemini-2.0-flash"),
+                              api_endpoint=endpoint, **options)
+    if provider_type == "openrouter":
+        return OpenRouterProvider(api_key=key("OPENROUTER"), model=kwargs.get("model", config.OPENROUTER_MODEL),
+                                  api_endpoint=endpoint or config.OPENROUTER_API_ENDPOINT, **options)
+    if provider_type == "mistral":
+        return MistralProvider(api_key=key("MISTRAL"), model=kwargs.get("model", config.MISTRAL_MODEL),
+                               api_endpoint=endpoint or config.MISTRAL_API_ENDPOINT, **options)
+    if provider_type == "deepseek":
+        if connection is None and "deepseek_disable_thinking" in kwargs:
+            options.setdefault("reasoning_effort", "off" if kwargs["deepseek_disable_thinking"] else "low")
+        return DeepSeekProvider(api_key=key("DEEPSEEK"), model=kwargs.get("model", config.DEEPSEEK_MODEL),
+                                api_endpoint=endpoint or config.DEEPSEEK_API_ENDPOINT, **options)
+    if provider_type == "poe":
+        return PoeProvider(api_key=key("POE"), model=kwargs.get("model", config.POE_MODEL),
+                           api_endpoint=endpoint or config.POE_API_ENDPOINT, **options)
+    raise ValueError(f"Unknown provider type: {provider_type}")
+
+
+def create_llm_client(provider_type: str = "ollama", *, connection: dict | None = None, **kwargs) -> LLMProvider:
+    return create_llm_provider(provider_type, connection=connection, **kwargs)

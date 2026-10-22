@@ -16,8 +16,9 @@ import httpx
 import asyncio
 import json
 
-from src.config import REQUEST_TIMEOUT, MAX_TRANSLATION_ATTEMPTS
 from ..base import LLMProvider, LLMResponse
+from ..thinking.parameters import reasoning_parameters, drop_rejected_parameters
+from src import config
 from ..exceptions import ContextOverflowError
 from ..rate_limit_handler import handle_rate_limit, is_retryable_http_status
 
@@ -81,7 +82,9 @@ class OpenRouterProvider(LLMProvider):
         "anthropic/claude-3-5-sonnet-20241022",
     ]
 
-    def __init__(self, api_key: Union[str, List[str]], model: str = "anthropic/claude-sonnet-4"):
+    def __init__(self, api_key: Union[str, List[str]], model: str = "anthropic/claude-sonnet-4", api_endpoint=None,
+                 *, request_timeout=None, max_attempts=None, temperature=...,
+                 reasoning_effort="default", local=None, connection_type=None, log_callback=None):
         """
         Initialize the OpenRouter provider.
 
@@ -89,7 +92,12 @@ class OpenRouterProvider(LLMProvider):
             api_key: OpenRouter API key
             model: Model identifier (default: anthropic/claude-sonnet-4)
         """
-        super().__init__(model, api_keys=api_key, provider_name="openrouter")
+        super().__init__(model, api_keys=api_key, provider_name="openrouter",
+                         request_timeout=request_timeout, max_attempts=max_attempts,
+                         temperature=None if temperature is ... else temperature, reasoning_effort=reasoning_effort,
+                         local=local, connection_type=connection_type, log_callback=log_callback)
+
+        self.api_endpoint = api_endpoint or self.API_URL
 
     @classmethod
     def get_session_cost(cls) -> tuple:
@@ -141,7 +149,7 @@ class OpenRouterProvider(LLMProvider):
             client = await self._get_client()
 
             response = await client.get(
-                self.MODELS_URL,
+                self.models_url,
                 headers=headers,
                 timeout=15
             )
@@ -206,7 +214,7 @@ class OpenRouterProvider(LLMProvider):
         return [{"id": m, "name": m, "pricing": {"prompt": 0, "completion": 0}}
                 for m in self.FALLBACK_MODELS]
 
-    async def generate(self, prompt: str, timeout: int = REQUEST_TIMEOUT,
+    async def generate(self, prompt: str, timeout: int = None,
                       system_prompt: Optional[str] = None) -> Optional[LLMResponse]:
         """
         Generate text using OpenRouter API with cost tracking.
@@ -227,29 +235,31 @@ class OpenRouterProvider(LLMProvider):
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
-        # thinking/enable_thinking forwarded to underlying models (DeepSeek, Qwen, etc.)
         payload = {
             "model": self.model,
             "messages": messages,
             "stream": False,
-            "thinking": False,
-            "enable_thinking": False,
         }
+
+        timeout = self.request_timeout if timeout is None else timeout
+        payload.update(reasoning_parameters(self.connection_type, self.model, self.reasoning_effort, local=self.local))
+        if self.temperature is not None:
+            payload["temperature"] = self.temperature
 
         client = await self._get_client()
         # 429s have their own budget (rate_limit_events): rotating to a spare
         # key must not consume a transient-retry attempt (issue #217).
         attempt = 0
         rate_limit_events = 0
-        while attempt < MAX_TRANSLATION_ATTEMPTS:
-            current_key = await self._key_pool.acquire()
+        while attempt < self.max_attempts:
+            current_key = await self._key_pool.acquire() if self._key_pool else None
             headers = {
-                "Authorization": f"Bearer {current_key}",
+                **({"Authorization": f"Bearer {current_key}"} if current_key else {}),
                 "Content-Type": "application/json",
             }
             try:
                 response = await client.post(
-                    self.API_URL,
+                    self.api_endpoint,
                     headers=headers,
                     json=payload,
                     timeout=timeout
@@ -312,24 +322,26 @@ class OpenRouterProvider(LLMProvider):
                 )
 
             except httpx.TimeoutException as e:
-                print(f"OpenRouter API Timeout (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
+                print(f"OpenRouter API Timeout (attempt {attempt + 1}/{self.max_attempts}): {e}")
                 attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
+                if attempt < self.max_attempts:
                     await asyncio.sleep(2)
                     continue
                 return None
             except httpx.HTTPStatusError as e:
+                if drop_rejected_parameters(payload, e.response, log_callback=self.log_callback):
+                    continue
                 error_body = ""
                 error_message = str(e)
                 if hasattr(e, 'response') and hasattr(e.response, 'text'):
                     error_body = e.response.text[:500]
                     error_message = f"{e} - {error_body}"
 
-                if e.response.status_code == 429:
+                if e.response.status_code == 429 and self._key_pool:
                     rate_limit_events += 1
                     await handle_rate_limit(
                         self._key_pool, current_key, e.response.headers,
-                        rate_limit_events, MAX_TRANSLATION_ATTEMPTS,
+                        rate_limit_events, self.max_attempts,
                     )
                     continue
 
@@ -342,7 +354,7 @@ class OpenRouterProvider(LLMProvider):
                 elif e.response.status_code == 402:
                     print(f"[OpenRouter] ERROR: Insufficient credits!")
                 else:
-                    print(f"OpenRouter API HTTP Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
+                    print(f"OpenRouter API HTTP Error (attempt {attempt + 1}/{self.max_attempts}): {e}")
                     print(f"Response details: Status {e.response.status_code}, Body: {error_body}...")
 
                 context_overflow_keywords = ["context_length", "maximum context", "token limit",
@@ -357,21 +369,21 @@ class OpenRouterProvider(LLMProvider):
                     return None
 
                 attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
+                if attempt < self.max_attempts:
                     await asyncio.sleep(2)
                     continue
                 return None
             except json.JSONDecodeError as e:
-                print(f"OpenRouter API JSON Decode Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
+                print(f"OpenRouter API JSON Decode Error (attempt {attempt + 1}/{self.max_attempts}): {e}")
                 attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
+                if attempt < self.max_attempts:
                     await asyncio.sleep(2)
                     continue
                 return None
             except Exception as e:
-                print(f"OpenRouter API Unknown Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
+                print(f"OpenRouter API Unknown Error (attempt {attempt + 1}/{self.max_attempts}): {e}")
                 attempt += 1
-                if attempt < MAX_TRANSLATION_ATTEMPTS:
+                if attempt < self.max_attempts:
                     await asyncio.sleep(2)
                     continue
                 return None

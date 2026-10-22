@@ -15,12 +15,12 @@ import httpx
 import asyncio
 
 from src.config import (
-    REQUEST_TIMEOUT,
     MAX_TRANSLATION_ATTEMPTS,
-    TEMPERATURE,
     GEMINI_SAFETY_THRESHOLD,
 )
 from ..base import LLMProvider, LLMResponse
+from ..thinking.parameters import reasoning_parameters, drop_rejected_parameters
+from src import config
 from ..exceptions import ContextOverflowError
 from ..rate_limit_handler import handle_rate_limit, is_retryable_http_status
 
@@ -63,7 +63,9 @@ class GeminiProvider(LLMProvider):
         >>> response = await provider.generate("Translate: Hello")
     """
 
-    def __init__(self, api_key: Union[str, List[str]], model: str = "gemini-2.0-flash"):
+    def __init__(self, api_key: Union[str, List[str]], model: str = "gemini-2.0-flash", api_endpoint=None,
+                 *, request_timeout=None, max_attempts=None, temperature=...,
+                 reasoning_effort="default", local=None, connection_type=None, log_callback=None):
         """
         Initialize the Gemini provider.
 
@@ -73,18 +75,18 @@ class GeminiProvider(LLMProvider):
                 them in a KeyPool that rotates on rate-limit).
             model: Gemini model name (default: gemini-2.0-flash)
         """
-        super().__init__(model, api_keys=api_key, provider_name="gemini")
-        self.api_endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        super().__init__(model, api_keys=api_key, provider_name="gemini",
+                         request_timeout=request_timeout, max_attempts=max_attempts,
+                         temperature=config.TEMPERATURE if temperature is ... else temperature, reasoning_effort=reasoning_effort,
+                         local=local, connection_type=connection_type, log_callback=log_callback)
+        self.api_endpoint = api_endpoint or f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
     def _is_thinking_model(self) -> bool:
         """Check if the current model supports thinking mode (Gemini 2.5+)."""
         return "2.5" in self.model
 
     def _get_thinking_config(self) -> dict:
-        """Return thinkingConfig to disable thinking for supported models."""
-        if self._is_thinking_model():
-            return {"thinkingConfig": {"thinkingBudget": 0}}
-        return {}
+        return reasoning_parameters("gemini", self.model, self.reasoning_effort)
 
     async def get_available_models(self) -> list[dict]:
         """
@@ -95,10 +97,10 @@ class GeminiProvider(LLMProvider):
         """
         headers = {
             "Content-Type": "application/json",
-            "x-goog-api-key": self.api_key
+            **({"x-goog-api-key": self.api_key} if self.api_key else {}),
         }
 
-        models_endpoint = "https://generativelanguage.googleapis.com/v1beta/models"
+        models_endpoint = self.models_url
 
         client = await self._get_client()
         try:
@@ -148,7 +150,7 @@ class GeminiProvider(LLMProvider):
         except Exception as e:
             raise RuntimeError(f"Error fetching Gemini models: {e}") from e
 
-    async def generate(self, prompt: str, timeout: int = REQUEST_TIMEOUT,
+    async def generate(self, prompt: str, timeout: int = None,
                       system_prompt: Optional[str] = None) -> Optional[LLMResponse]:
         """
         Generate text using Gemini API.
@@ -171,10 +173,7 @@ class GeminiProvider(LLMProvider):
                     "text": prompt
                 }]
             }],
-            "generationConfig": {
-                "temperature": TEMPERATURE,
-                **self._get_thinking_config()
-            },
+            "generationConfig": self._get_thinking_config(),
             "safetySettings": [
                 {"category": category, "threshold": GEMINI_SAFETY_THRESHOLD}
                 for category in _GEMINI_HARM_CATEGORIES
@@ -189,16 +188,20 @@ class GeminiProvider(LLMProvider):
                 }]
             }
 
+        timeout = self.request_timeout if timeout is None else timeout
+        if self.temperature is not None:
+            payload["generationConfig"]["temperature"] = self.temperature
+
         client = await self._get_client()
         # 429s have their own budget (rate_limit_events): rotating to a spare
         # key must not consume a transient-retry attempt (issue #217).
         attempt = 0
         rate_limit_events = 0
-        while attempt < MAX_TRANSLATION_ATTEMPTS:
-            current_key = await self._key_pool.acquire()
+        while attempt < self.max_attempts:
+            current_key = await self._key_pool.acquire() if self._key_pool else None
             headers = {
                 "Content-Type": "application/json",
-                "x-goog-api-key": current_key,
+                **({"x-goog-api-key": current_key} if current_key else {}),
             }
             try:
                 response = await client.post(
@@ -262,13 +265,15 @@ class GeminiProvider(LLMProvider):
                 )
 
             except httpx.TimeoutException as e:
-                    print(f"Gemini API Timeout (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
+                    print(f"Gemini API Timeout (attempt {attempt + 1}/{self.max_attempts}): {e}")
                     attempt += 1
-                    if attempt < MAX_TRANSLATION_ATTEMPTS:
+                    if attempt < self.max_attempts:
                         await asyncio.sleep(2)
                         continue
                     return None
             except httpx.HTTPStatusError as e:
+                    if drop_rejected_parameters(payload, e.response, log_callback=self.log_callback):
+                        continue
                     error_message = str(e)
                     error_body = ""
                     if hasattr(e, 'response') and hasattr(e.response, 'text'):
@@ -276,15 +281,15 @@ class GeminiProvider(LLMProvider):
                         error_message = f"{e} - {error_body}"
 
                     # Handle rate limiting (429) — rotate key or sleep, raise if exhausted
-                    if e.response.status_code == 429:
+                    if e.response.status_code == 429 and self._key_pool:
                         rate_limit_events += 1
                         await handle_rate_limit(
                             self._key_pool, current_key, e.response.headers,
-                            rate_limit_events, MAX_TRANSLATION_ATTEMPTS,
+                            rate_limit_events, self.max_attempts,
                         )
                         continue
 
-                    print(f"Gemini API HTTP Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
+                    print(f"Gemini API HTTP Error (attempt {attempt + 1}/{self.max_attempts}): {e}")
                     if error_body:
                         print(f"Response details: Status {e.response.status_code}, Body: {error_body[:200]}...")
 
@@ -300,14 +305,14 @@ class GeminiProvider(LLMProvider):
                         return None
 
                     attempt += 1
-                    if attempt < MAX_TRANSLATION_ATTEMPTS:
+                    if attempt < self.max_attempts:
                         await asyncio.sleep(2)
                         continue
                     return None
             except Exception as e:
-                    print(f"Gemini API Error (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}")
+                    print(f"Gemini API Error (attempt {attempt + 1}/{self.max_attempts}): {e}")
                     attempt += 1
-                    if attempt < MAX_TRANSLATION_ATTEMPTS:
+                    if attempt < self.max_attempts:
                         await asyncio.sleep(2)
                         continue
                     return None

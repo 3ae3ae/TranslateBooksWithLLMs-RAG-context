@@ -12,7 +12,9 @@ import re
 import httpx
 
 from ..base import LLMProvider, LLMResponse
-from ..exceptions import ContextOverflowError, RepetitionLoopError
+from ..exceptions import ContextOverflowError, RepetitionLoopError, RateLimitError
+from ..rate_limit_handler import handle_rate_limit, is_retryable_http_status
+from ..thinking.parameters import reasoning_parameters, drop_rejected_parameters
 from ..thinking.cache import get_thinking_cache
 from ..thinking.detection import detect_repetition_loop
 from ..thinking.behavior import ThinkingBehavior, _model_matches_pattern
@@ -21,9 +23,7 @@ from ..utils.context_detection import ContextDetector
 from src.config import (
     API_ENDPOINT,
     DEFAULT_MODEL,
-    REQUEST_TIMEOUT,
     OLLAMA_NUM_CTX,
-    MAX_TRANSLATION_ATTEMPTS,
     UNCONTROLLABLE_THINKING_MODELS,
     CONTROLLABLE_THINKING_MODELS,
     REPETITION_MIN_COUNT_STREAMING
@@ -34,11 +34,19 @@ class OllamaProvider(LLMProvider):
     """Ollama API provider - uses /api/chat for proper think parameter support"""
 
     def __init__(self, api_endpoint: str = API_ENDPOINT, model: str = DEFAULT_MODEL,
-                 context_window: int = OLLAMA_NUM_CTX, log_callback: Optional[Callable] = None):
-        super().__init__(model)
+                 context_window: int = OLLAMA_NUM_CTX, log_callback: Optional[Callable] = None,
+                 *, api_key=None, request_timeout=None, max_attempts=None, temperature=None,
+                 reasoning_effort="default", local=None, connection_type=None):
+        if local is None:
+            local = True
+        super().__init__(model, api_keys=api_key, provider_name="ollama",
+                         request_timeout=request_timeout, max_attempts=max_attempts,
+                         temperature=temperature, reasoning_effort=reasoning_effort,
+                         local=local, connection_type=connection_type, log_callback=log_callback)
         # Convert /api/generate endpoint to /api/chat for proper think support
         self.api_endpoint = api_endpoint.replace('/api/generate', '/api/chat')
         self.context_window = context_window
+        self._context_detector = ContextDetector()
         self.log_callback = log_callback
         # Will be detected on first request via _detect_thinking_behavior()
         self._thinking_behavior: Optional[ThinkingBehavior] = None
@@ -46,6 +54,14 @@ class OllamaProvider(LLMProvider):
         # Quick check against known model lists (fallback if detection fails)
         self._known_uncontrollable = any(_model_matches_pattern(model, tm) for tm in UNCONTROLLABLE_THINKING_MODELS)
         self._known_controllable = any(_model_matches_pattern(model, tm) for tm in CONTROLLABLE_THINKING_MODELS)
+
+    @property
+    def _local_execution(self):
+        return self.local and not re.search(r"(?:-cloud|:cloud)(?:$|:)", self.model)
+
+    async def _headers(self):
+        key = await self._key_pool.acquire() if self._key_pool else None
+        return {"Authorization": f"Bearer {key}"} if key else {}
 
     def _check_known_model_lists(self) -> Optional[ThinkingBehavior]:
         """Check if model matches known model lists for quick classification."""
@@ -71,6 +87,8 @@ class OllamaProvider(LLMProvider):
         Returns:
             (has_thinking_field, has_think_tags, supports_param)
         """
+        if not self._local_execution:
+            return False, False, False
         test_prompt = "What is 2+2? Reply with just the number."
 
         payload = {
@@ -84,7 +102,7 @@ class OllamaProvider(LLMProvider):
             payload["think"] = think_param
 
         client = await self._get_client()
-        response = await client.post(self.api_endpoint, json=payload, timeout=60)
+        response = await client.post(self.api_endpoint, json=payload, headers=await self._headers(), timeout=min(60, self.request_timeout))
         response.raise_for_status()
         data = response.json()
 
@@ -112,6 +130,8 @@ class OllamaProvider(LLMProvider):
             ThinkingBehavior classification
         """
         # Check cache first (instant)
+        if not self._local_execution:
+            return ThinkingBehavior.STANDARD
         cache = get_thinking_cache()
         cached = cache.get(self.model, self.api_endpoint)
         if cached:
@@ -232,7 +252,7 @@ class OllamaProvider(LLMProvider):
         print(f"{RED}{'='*70}{RESET}\n")
         print(f"{CYAN}[INFO] Using think=true to cleanly separate thinking from content{RESET}\n")
 
-    async def generate(self, prompt: str, timeout: int = REQUEST_TIMEOUT,
+    async def generate(self, prompt: str, timeout: int = None,
                       system_prompt: Optional[str] = None) -> Optional[LLMResponse]:
         """
         Generate text using Ollama Chat API with streaming for real-time token monitoring.
@@ -249,7 +269,7 @@ class OllamaProvider(LLMProvider):
             LLMResponse with content and token usage info, or None if failed
         """
         # Detect thinking behavior on first request
-        if self._thinking_behavior is None:
+        if self._local_execution and self.reasoning_effort == "default" and self._thinking_behavior is None:
             self._thinking_behavior = await self._detect_thinking_behavior()
 
             # Show warning only for uncontrollable thinking models
@@ -270,31 +290,23 @@ class OllamaProvider(LLMProvider):
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
-        # Determine think parameter based on behavior:
-        # - UNCONTROLLABLE: use think=true to cleanly separate thinking into dedicated field
-        # - CONTROLLABLE: use think=false to disable thinking
-        # - STANDARD: don't include think param (model doesn't support it)
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "stream": True,  # Enable streaming for real-time token monitoring
-            "options": {
-                "num_ctx": self.context_window,
-                "truncate": False
-            },
-        }
-
-        # Only add think param if model supports it
-        if self._supports_think_param:
-            if self._thinking_behavior == ThinkingBehavior.UNCONTROLLABLE:
-                # For uncontrollable models, use think=true to get clean separation
-                payload["think"] = True
-            else:
-                # For controllable and standard models, use think=false
-                payload["think"] = False
+        timeout = self.request_timeout if timeout is None else timeout
+        payload = {"model": self.model, "messages": messages, "stream": True, "options": {}}
+        if self._local_execution:
+            payload["options"].update(num_ctx=self.context_window, truncate=False)
+        if self.temperature is not None:
+            payload["options"]["temperature"] = self.temperature
+        if self.reasoning_effort == "default":
+            if self._local_execution and self._supports_think_param:
+                payload["think"] = self._thinking_behavior == ThinkingBehavior.UNCONTROLLABLE
+        else:
+            payload.update(reasoning_parameters(self.connection_type, self.model, self.reasoning_effort))
 
         client = await self._get_client()
-        for attempt in range(MAX_TRANSLATION_ATTEMPTS):
+        attempt = 0
+        rate_limit_events = 0
+        while attempt < self.max_attempts:
+            headers = await self._headers()
             try:
                 # Use streaming to monitor tokens in real-time
                 content_chunks = []
@@ -308,7 +320,9 @@ class OllamaProvider(LLMProvider):
                 # Use 90% of remaining context as safety margin
                 max_completion_tokens = int(self.context_window * 0.85)
 
-                async with client.stream("POST", self.api_endpoint, json=payload, timeout=timeout) as response:
+                async with client.stream("POST", self.api_endpoint, json=payload, headers=headers, timeout=timeout) as response:
+                    if response.status_code >= 400:
+                        await response.aread()
                     response.raise_for_status()
 
                     try:
@@ -345,7 +359,7 @@ class OllamaProvider(LLMProvider):
                             # Heuristic: ~4 chars per token on average
                             estimated_tokens = current_completion_len // 3
 
-                            if estimated_tokens > max_completion_tokens:
+                            if self._local_execution and estimated_tokens > max_completion_tokens:
                                 exceeded_context = True
                                 if self.log_callback:
                                     RED = '\033[91m'
@@ -432,7 +446,7 @@ class OllamaProvider(LLMProvider):
 
                 # Detect if context was nearly exhausted
                 truncation_threshold = self.context_window * 0.95
-                was_truncated = context_used >= truncation_threshold
+                was_truncated = self._local_execution and context_used >= truncation_threshold
 
                 # Log token usage
                 if self.log_callback:
@@ -487,7 +501,7 @@ class OllamaProvider(LLMProvider):
                     prompt_tokens=prompt_tokens,
                     completion_tokens=effective_completion_tokens,  # Use effective count (includes thinking estimate)
                     context_used=context_used,
-                    context_limit=self.context_window,
+                    context_limit=self.context_window if self._local_execution else 0,
                     was_truncated=was_truncated
                 )
 
@@ -498,16 +512,17 @@ class OllamaProvider(LLMProvider):
 
                 if self.log_callback:
                     self.log_callback("llm_timeout",
-                        f"{YELLOW}⚠️ LLM request timeout (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}){RESET}\n"
+                        f"{YELLOW}⚠️ LLM request timeout (attempt {attempt + 1}/{self.max_attempts}){RESET}\n"
                         f"{YELLOW}   Model: {self.model}{RESET}\n"
                         f"{YELLOW}   Possible causes:{RESET}\n"
                         f"{YELLOW}   - Model crashed or became unresponsive{RESET}\n"
                         f"{YELLOW}   - Server overloaded or out of memory{RESET}\n"
                         f"{YELLOW}   - Network connectivity issues{RESET}")
                 else:
-                    print(f"{YELLOW}⚠️ LLM timeout (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}): {e}{RESET}")
+                    print(f"{YELLOW}⚠️ LLM timeout (attempt {attempt + 1}/{self.max_attempts}): {e}{RESET}")
 
-                if attempt < MAX_TRANSLATION_ATTEMPTS - 1:
+                attempt += 1
+                if attempt < self.max_attempts:
                     if self.log_callback:
                         self.log_callback("llm_retry", f"   Retrying in 2 seconds...")
                     await asyncio.sleep(2)
@@ -516,7 +531,7 @@ class OllamaProvider(LLMProvider):
                 # All retry attempts exhausted
                 if self.log_callback:
                     self.log_callback("llm_timeout_fatal",
-                        f"{RED}❌ All {MAX_TRANSLATION_ATTEMPTS} retry attempts exhausted{RESET}\n"
+                        f"{RED}❌ All {self.max_attempts} retry attempts exhausted{RESET}\n"
                         f"{RED}   Translation failed - unable to reach LLM server{RESET}\n"
                         f"{RED}   Recommendations:{RESET}\n"
                         f"{RED}   1. Check if Ollama/llama.cpp server is running{RESET}\n"
@@ -528,6 +543,14 @@ class OllamaProvider(LLMProvider):
 
                 return None
             except httpx.HTTPStatusError as e:
+                if drop_rejected_parameters(payload, e.response, log_callback=self.log_callback):
+                    continue
+                if e.response.status_code == 429 and self._key_pool:
+                    rate_limit_events += 1
+                    current_key = headers["Authorization"].removeprefix("Bearer ")
+                    await handle_rate_limit(self._key_pool, current_key, e.response.headers,
+                                            rate_limit_events, self.max_attempts, self.log_callback)
+                    continue
                 RED = '\033[91m'
                 YELLOW = '\033[93m'
                 RESET = '\033[0m'
@@ -560,14 +583,17 @@ class OllamaProvider(LLMProvider):
                 # Handle other HTTP errors
                 if self.log_callback:
                     self.log_callback("llm_http_error",
-                        f"{YELLOW}⚠️ HTTP error from LLM server (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}){RESET}\n"
+                        f"{YELLOW}⚠️ HTTP error from LLM server (attempt {attempt + 1}/{self.max_attempts}){RESET}\n"
                         f"{YELLOW}   Status: {e.response.status_code if e.response else 'unknown'}{RESET}\n"
                         f"{YELLOW}   Error: {error_message}{RESET}\n"
                         f"{YELLOW}   Model: {self.model}{RESET}")
                 else:
                     print(f"{YELLOW}HTTP error (attempt {attempt + 1}): {error_message}{RESET}")
 
-                if attempt < MAX_TRANSLATION_ATTEMPTS - 1:
+                if not is_retryable_http_status(e.response.status_code):
+                    return None
+                attempt += 1
+                if attempt < self.max_attempts:
                     if self.log_callback:
                         self.log_callback("llm_retry", f"   Retrying in 2 seconds...")
                     await asyncio.sleep(2)
@@ -576,13 +602,13 @@ class OllamaProvider(LLMProvider):
                 # All retries exhausted
                 if self.log_callback:
                     self.log_callback("llm_http_error_fatal",
-                        f"{RED}❌ All {MAX_TRANSLATION_ATTEMPTS} retry attempts exhausted{RESET}\n"
+                        f"{RED}❌ All {self.max_attempts} retry attempts exhausted{RESET}\n"
                         f"{RED}   HTTP error persists - translation failed{RESET}")
                 else:
                     print(f"{RED}❌ All retry attempts exhausted. Translation failed.{RESET}")
 
                 return None
-            except (RepetitionLoopError, ContextOverflowError):
+            except (RepetitionLoopError, ContextOverflowError, RateLimitError):
                 # These errors should propagate up for handling by translator
                 raise
             except json.JSONDecodeError as e:
@@ -592,7 +618,7 @@ class OllamaProvider(LLMProvider):
 
                 if self.log_callback:
                     self.log_callback("llm_json_error",
-                        f"{YELLOW}⚠️ Invalid JSON response from LLM (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}){RESET}\n"
+                        f"{YELLOW}⚠️ Invalid JSON response from LLM (attempt {attempt + 1}/{self.max_attempts}){RESET}\n"
                         f"{YELLOW}   Model: {self.model}{RESET}\n"
                         f"{YELLOW}   Error: {str(e)}{RESET}\n"
                         f"{YELLOW}   This may indicate:{RESET}\n"
@@ -602,7 +628,8 @@ class OllamaProvider(LLMProvider):
                 else:
                     print(f"{YELLOW}JSON decode error (attempt {attempt + 1}): {e}{RESET}")
 
-                if attempt < MAX_TRANSLATION_ATTEMPTS - 1:
+                attempt += 1
+                if attempt < self.max_attempts:
                     if self.log_callback:
                         self.log_callback("llm_retry", f"   Retrying in 2 seconds...")
                     await asyncio.sleep(2)
@@ -610,7 +637,7 @@ class OllamaProvider(LLMProvider):
 
                 if self.log_callback:
                     self.log_callback("llm_json_error_fatal",
-                        f"{RED}❌ All {MAX_TRANSLATION_ATTEMPTS} retry attempts exhausted{RESET}\n"
+                        f"{RED}❌ All {self.max_attempts} retry attempts exhausted{RESET}\n"
                         f"{RED}   Unable to parse LLM response - translation failed{RESET}")
                 else:
                     print(f"{RED}❌ All retry attempts exhausted. Translation failed.{RESET}")
@@ -623,14 +650,15 @@ class OllamaProvider(LLMProvider):
 
                 if self.log_callback:
                     self.log_callback("llm_unexpected_error",
-                        f"{YELLOW}⚠️ Unexpected error during LLM request (attempt {attempt + 1}/{MAX_TRANSLATION_ATTEMPTS}){RESET}\n"
+                        f"{YELLOW}⚠️ Unexpected error during LLM request (attempt {attempt + 1}/{self.max_attempts}){RESET}\n"
                         f"{YELLOW}   Model: {self.model}{RESET}\n"
                         f"{YELLOW}   Error type: {type(e).__name__}{RESET}\n"
                         f"{YELLOW}   Error: {str(e)}{RESET}")
                 else:
                     print(f"{YELLOW}Unexpected error (attempt {attempt + 1}): {type(e).__name__}: {e}{RESET}")
 
-                if attempt < MAX_TRANSLATION_ATTEMPTS - 1:
+                attempt += 1
+                if attempt < self.max_attempts:
                     if self.log_callback:
                         self.log_callback("llm_retry", f"   Retrying in 2 seconds...")
                     await asyncio.sleep(2)
@@ -638,7 +666,7 @@ class OllamaProvider(LLMProvider):
 
                 if self.log_callback:
                     self.log_callback("llm_unexpected_error_fatal",
-                        f"{RED}❌ All {MAX_TRANSLATION_ATTEMPTS} retry attempts exhausted{RESET}\n"
+                        f"{RED}❌ All {self.max_attempts} retry attempts exhausted{RESET}\n"
                         f"{RED}   Unexpected error persists - translation failed{RESET}\n"
                         f"{RED}   Please report this issue with the error details above{RESET}")
                 else:
@@ -655,6 +683,8 @@ class OllamaProvider(LLMProvider):
         Returns:
             int: Maximum context size in tokens
         """
+        if not self._local_execution:
+            return self.context_window
         try:
             client = await self._get_client()
             # Use ContextDetector for Ollama-specific detection
@@ -663,7 +693,8 @@ class OllamaProvider(LLMProvider):
                 model=self.model,
                 endpoint=self.api_endpoint,
                 log_callback=self.log_callback,
-                fallback_context=self.context_window
+                fallback_context=self.context_window,
+                api_key=self.api_key,
             )
         except Exception as e:
             if self.log_callback:
