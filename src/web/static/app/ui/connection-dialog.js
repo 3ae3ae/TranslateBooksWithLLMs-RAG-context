@@ -10,10 +10,10 @@ import { formatNumber, formatCost } from '../lib/format.js';
 
 export const TYPE_ICONS = {
   ollama: 'cpu', ollama_cloud: 'cloud', openai: 'sparkles', openai_compatible: 'server',
-  openrouter: 'link', gemini: 'sparkles', mistral: 'wand-sparkles', deepseek: 'brain', poe: 'message-square-quote', nim: 'zap',
+  openrouter: 'link', gemini: 'sparkles', mistral: 'wand-sparkles', deepseek: 'brain', poe: 'message-square-quote', nim: 'zap', neuralwatt: 'gauge',
 };
-const TYPE_ORDER = ['ollama', 'ollama_cloud', 'openai_compatible', 'openai', 'openrouter', 'gemini', 'deepseek', 'mistral', 'poe', 'nim'];
-const OPENAI_STYLE = new Set(['openai', 'openai_compatible', 'openrouter', 'mistral', 'deepseek', 'poe', 'nim']);
+const TYPE_ORDER = ['ollama', 'ollama_cloud', 'openai_compatible', 'openai', 'openrouter', 'neuralwatt', 'gemini', 'deepseek', 'mistral', 'poe', 'nim'];
+const OPENAI_STYLE = new Set(['openai', 'openai_compatible', 'openrouter', 'mistral', 'deepseek', 'poe', 'nim', 'neuralwatt']);
 
 /** Mirror of the server's URL rules (design §14.2) for the live preview. */
 export function resolveUrls(type, baseUrl) {

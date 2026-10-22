@@ -710,5 +710,7 @@
   "styles.toast.duplicated": "번역 지침을 복제했어요",
   "styles.confirm.delete_title": "“{{name}}”을(를) 삭제할까요?",
   "styles.confirm.delete_body": "이미 시작한 번역은 자체 복사본을 그대로 써요.",
-  "settings.notify.headers_invalid": "헤더는 {\"Authorization\": \"Bearer …\"} 같은 JSON 객체여야 해요"
+  "settings.notify.headers_invalid": "헤더는 {\"Authorization\": \"Bearer …\"} 같은 JSON 객체여야 해요",
+  "connection.type.neuralwatt": "Neuralwatt",
+  "connection.type_desc.neuralwatt": "Neuralwatt API 키로 Neuralwatt가 서비스하는 오픈 모델을 써요."
 }
