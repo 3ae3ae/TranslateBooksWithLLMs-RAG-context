@@ -61,10 +61,18 @@ NOTIFICATION_SCHEMA = {
 SCHEMA["notifications"]["properties"] = NOTIFICATION_SCHEMA
 
 
+# The default connection and model are owned by the connections store; preferences
+# only expose them so the UI reads every default from one place.
+_CONNECTION_KEYS = ("default_connection_id", "default_model")
+
+
 def _connection_defaults():
-    from src.core.llm.connections import get_default
-    connection = get_default()
-    return {"default_connection_id": connection["id"], "default_model": connection.get("default_model", "")} if connection else {}
+    try:
+        from src.core.llm.connections import get_default
+        default = get_default() or {}
+    except Exception:
+        return {}
+    return {"default_connection_id": default.get("connection_id") or "", "default_model": default.get("model") or ""}
 
 
 def _seed():
@@ -131,6 +139,7 @@ def get_preferences() -> dict:
         defaults = {k: copy.deepcopy(v["default"]) for k, v in SCHEMA.items()}
         defaults.update(values)
         defaults["notifications"] = {**{k: copy.deepcopy(v["default"]) for k, v in NOTIFICATION_SCHEMA.items()}, **defaults["notifications"]}
+        defaults.update(_connection_defaults())
         return defaults
 
 
@@ -199,7 +208,18 @@ def patch_preferences(patch):
             values[key] = value
         if errors:
             raise PreferenceValidationError(errors)
+        if any(patch.get(key) is not None for key in _CONNECTION_KEYS):
+            from src.core.llm.connections import set_default
+            current = _connection_defaults()
+            connection_id = patch.get("default_connection_id") or current.get("default_connection_id")
+            try:
+                set_default(connection_id, patch.get("default_model") or None)
+            except Exception as exc:
+                raise PreferenceValidationError({"default_connection_id": str(exc)}) from exc
+        for key in _CONNECTION_KEYS:
+            values.pop(key, None)
         _atomic_write(values)
+        values.update(_connection_defaults())
         return values
 
 

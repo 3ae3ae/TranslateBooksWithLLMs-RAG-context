@@ -32,7 +32,14 @@ def resources(tmp_path, monkeypatch):
     connection = dict(connection_id="test", llm_provider="openai", model="test-model", reasoning_effort="off", connection_type="openai", local=False, request_timeout=30, api_key="", llm_api_endpoint="https://example.test/v1/chat/completions")
     connections = ModuleType("src.core.llm.connections")
     connections.ConnectionNotFound = type("ConnectionNotFound", (ValueError,), {})
-    connections.get_default = Mock(return_value={"id": "test", "default_model": "test-model"})
+    default = {"connection_id": "test", "model": "test-model"}
+    connections.get_default = Mock(side_effect=lambda: dict(default))
+
+    def set_default(connection_id, model=None):
+        default.update(connection_id=connection_id, model=model or default["model"])
+        return dict(default)
+
+    connections.set_default = Mock(side_effect=set_default)
     connections.resolve_for_pipeline = Mock(side_effect=lambda cid, model, reasoning="off": {**connection, "connection_id": cid, "model": model or connection["model"], "reasoning_effort": reasoning})
     connections.list_models = Mock(return_value=[{"id": "test-model", "pricing": {"input_per_m": 2, "output_per_m": 4}}])
     monkeypatch.setitem(sys.modules, "src.core.llm.connections", connections)
@@ -63,7 +70,7 @@ def test_preferences_seed_schema_permissions_and_connection_authority(resources,
     assert stat.S_IMODE(preferences.preferences_path().stat().st_mode) == 0o600
     monkeypatch.setattr(config, "MAX_TOKENS_PER_CHUNK", 900)
     assert preferences.get_preferences()["passage_tokens"] == 700
-    connections.get_default.assert_called_once()
+    connections.set_default.assert_not_called()
 
 
 def test_preferences_validation_is_atomic_and_masks_secrets(resources):
@@ -101,11 +108,13 @@ def test_preferences_nested_validation(resources, patch):
 
 
 def test_remember_defaults_copies_job_fields(resources):
+    _, connections = resources
     preferences.remember_job_defaults({"connection_id": "other", "model": "model", "reasoning": "low", "bilingual": True, "notes": {"mode": "copy", "update_interval": 3}, "files": []})
     values = preferences.get_preferences()
     assert (values["default_connection_id"], values["default_model"], values["default_reasoning"]) == ("other", "model", "low")
     assert values["notes_mode"] == "copy" and values["notes_update_interval"] == 3
     assert values["bilingual"] is True
+    connections.set_default.assert_called_with("other", "model")
 
 
 def test_notes_round_trip_dry_run_matches_saved_normalization(resources):

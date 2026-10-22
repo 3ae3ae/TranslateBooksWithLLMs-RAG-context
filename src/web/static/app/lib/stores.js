@@ -47,7 +47,8 @@ export async function loadConnections() {
       connectionsApi.list(),
     ]);
     if (types) connectionTypes.value = types.types || types;
-    connections.value = list.connections || [];
+    const def = list.default || {};
+    connections.value = (list.connections || []).map((c) => ({ ...c, is_default: c.id === def.connection_id }));
     connectionsError.value = null;
   } catch (e) {
     connectionsError.value = e;

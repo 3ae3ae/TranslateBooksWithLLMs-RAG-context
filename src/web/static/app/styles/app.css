@@ -467,14 +467,14 @@ button.chip:hover { color: var(--text); border-color: var(--text-3); }
 .progress--indeterminate .progress__bar { width: 35% !important; animation: indeterminate 1.3s ease-in-out infinite; }
 
 /* tabs */
-.tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--border); margin-bottom: 20px; overflow-x: auto; }
+.tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--border); margin-bottom: 20px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .tab {
   position: relative; display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 2px;
   border: 0; background: transparent; color: var(--text-2); font-weight: 550; white-space: nowrap; text-decoration: none !important;
 }
 .tab:hover { color: var(--text); }
 .tab[aria-selected="true"] { color: var(--text); }
-.tab[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 2px; background: var(--accent); }
+.tab[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 2px; background: var(--accent); }
 .tab__count { font-size: 12px; color: var(--text-3); }
 
 /* table */
