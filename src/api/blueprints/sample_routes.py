@@ -8,6 +8,8 @@ No persistence: state lives in `SampleStateManager` and is dropped after 1
 hour or on server restart.
 """
 import asyncio
+import hashlib
+import json
 import logging
 import os
 import random
@@ -36,7 +38,7 @@ from src.core.text_processor import split_text_into_chunks
 from src.prompts.prompts import (
     generate_refinement_prompt, generate_translation_prompt,
 )
-from src.utils.custom_instructions import is_safe_filename, load_custom_instructions
+from src.utils.custom_instructions import is_safe_filename, load_custom_instructions, runtime_directory, style_filename
 from src.utils.file_detector import detect_file_type
 from src.utils.language_detector import LanguageDetector
 
@@ -45,11 +47,8 @@ from src.utils.language_detector import LanguageDetector
 # hammering providers; this is enforced per sample run via an asyncio.Semaphore.
 SAMPLE_CONCURRENCY_CAP = 8
 
-# Sampling defaults used when a request omits the fields (safety net — both
-# front-ends always send explicit values). Must mirror the frontend single
-# source in src/web/static/js/sample/sample-defaults.js.
+# Sampling count fallback for clients that omit it.
 DEFAULT_N_SAMPLES = 5
-DEFAULT_MAX_CHARS = 400
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +144,7 @@ def _extract_docx_text(file_path: str) -> str:
     return "\n\n".join(parts)
 
 
-def _load_source_units(file_path: str, file_type: str) -> List[Dict[str, str]]:
+def _load_source_units(file_path: str, file_type: str, *, passage_tokens=None, srt_lines_per_block=None, chapter_mode=False) -> List[Dict[str, str]]:
     """
     Return a normalized list of "source units" for sampling.
 
@@ -171,7 +170,7 @@ def _load_source_units(file_path: str, file_type: str) -> List[Dict[str, str]]:
         if not subtitles:
             raise ValueError("No subtitles found in SRT file")
 
-        block_size = max(1, SRT_LINES_PER_BLOCK)
+        block_size = max(1, SRT_LINES_PER_BLOCK if srt_lines_per_block is None else srt_lines_per_block)
         blocks: List[str] = []
         for i in range(0, len(subtitles), block_size):
             block_text = "\n".join(
@@ -195,7 +194,8 @@ def _load_source_units(file_path: str, file_type: str) -> List[Dict[str, str]]:
         raise ValueError("File is empty or unreadable")
     return split_text_into_chunks(
         text,
-        max_tokens_per_chunk=_config.MAX_TOKENS_PER_CHUNK,
+        max_tokens_per_chunk=_config.MAX_TOKENS_PER_CHUNK if passage_tokens is None else passage_tokens,
+        chapter_mode=chapter_mode,
     )
 
 
@@ -221,43 +221,6 @@ def _items_for_indices(
     return items
 
 
-def _build_srt_sample_blocks(file_path: str, n_samples: int, max_chars: int) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """For SRT files, sample N blocks. Returns (items, warnings)."""
-    units = _load_source_units(file_path, "srt")
-    total = len(units)
-    if total < 3:
-        raise ValueError("document too small for sampling")
-
-    warnings: List[Dict[str, Any]] = []
-    indices = select_sample_indices(total, n_samples)
-    if len(indices) < n_samples:
-        warnings.append(_small_document_warning(total, len(indices), n_samples))
-    return _items_for_indices(units, indices, max_chars), warnings
-
-
-def _build_text_sample_items(
-    text: str,
-    n_samples: int,
-    max_chars: int,
-    chapter_mode: bool = False,
-) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Chunk plain text and select N representative items capped at max_chars."""
-    chunks = split_text_into_chunks(
-        text,
-        max_tokens_per_chunk=_config.MAX_TOKENS_PER_CHUNK,
-        chapter_mode=chapter_mode,
-    )
-    total = len(chunks)
-    if total < 3:
-        raise ValueError("document too small for sampling")
-
-    warnings: List[Dict[str, Any]] = []
-    indices = select_sample_indices(total, n_samples)
-    if len(indices) < n_samples:
-        warnings.append(_small_document_warning(total, len(indices), n_samples))
-    return _items_for_indices(chunks, indices, max_chars), warnings
-
-
 def _pick_random_unused_index(total: int, exclude: Set[int]) -> Optional[int]:
     """Pick a random interior index (1..total-2) not in `exclude`. None if all used."""
     if total < 3:
@@ -273,6 +236,12 @@ def _instantiate_provider(column: Dict[str, Any]):
 
     Resolves `__USE_ENV__` placeholders to the corresponding env variable.
     """
+    if column.get("connection_id"):
+        connection = column.get("_connection")
+        if connection is None:
+            from src.core.llm.connections import resolve_for_pipeline
+            connection = resolve_for_pipeline(column["connection_id"], column.get("model", ""), column.get("reasoning", "off"))
+        return create_llm_provider(connection=connection)
     provider = (column.get("provider") or "ollama").lower()
     env_var = _provider_env_var(provider)
     api_key = _resolve_api_key(column.get("api_key"), env_var) if env_var else None
@@ -332,7 +301,7 @@ async def _execute_cell(
         response = await provider.generate(
             prompt=prompt_pair.user,
             system_prompt=prompt_pair.system,
-            timeout=REQUEST_TIMEOUT,
+            timeout=column.get("_connection", {}).get("request_timeout", REQUEST_TIMEOUT),
         )
         latency_ms = int((time.perf_counter() - started) * 1000)
 
@@ -362,6 +331,8 @@ async def _execute_cell(
             response.prompt_tokens,
             response.completion_tokens,
         )
+        if column.get("_connection", {}).get("local") or column.get("_connection", {}).get("connection_type") == "ollama_cloud":
+            cost = 0.0
         src_len = max(1, len(ref_text))
         length_ratio = round(len(output_text) / src_len, 3)
 
@@ -498,15 +469,18 @@ def _column_prompt_options(base_options: Dict[str, Any], column: Dict[str, Any])
     (refine phase). Best-effort: an unsafe/missing/empty file is ignored, so the
     column falls back to the run-wide options.
     """
+    if "_prompt_options" in column:
+        return dict(column["_prompt_options"])
     opts = dict(base_options or {})
-    filename = (column.get("custom_instruction_file") or "").strip()
+    filename = (column.get("style") or column.get("custom_instruction_file") or "").strip()
     if not filename:
         return opts
+    filename = style_filename(filename)
     if not is_safe_filename(filename):
         logger.warning("sample: ignoring unsafe custom instruction filename %r", filename)
         return opts
     try:
-        ci_dir = Path(os.getcwd()) / "Custom_Instructions"
+        ci_dir = runtime_directory()
         loaded = load_custom_instructions(filename, ci_dir)
         translation = loaded.get("translation")
         refinement = loaded.get("refinement")
@@ -515,6 +489,8 @@ def _column_prompt_options(base_options: Dict[str, Any], column: Dict[str, Any])
         if refinement:
             opts["refinement_instructions"] = refinement
     except Exception as exc:
+        if column.get("style"):
+            raise ValueError("Invalid or missing style") from exc
         logger.warning("sample: failed to load custom instructions %r: %s", filename, exc)
     return opts
 
@@ -589,7 +565,7 @@ async def _run_sample_async(
     # cell of that column reuses them (the glossary block is still filtered per
     # cell against that cell's source text).
     column_options = [_column_prompt_options(prompt_options, c) for c in columns]
-    column_glossaries = [_load_column_glossary(c.get("glossary_id")) for c in columns]
+    column_glossaries = [c["_glossary"] if "_glossary" in c else _load_column_glossary(c.get("glossary_id")) for c in columns]
 
     async def cell_task(row: int, col: int):
         async with sem:
@@ -675,6 +651,22 @@ def _spawn_sample_thread(coro_factory):
     return thread
 
 
+def _sample_max_chars(data):
+    passage_tokens = _clamp_int(data.get("passage_tokens"), _config.MAX_TOKENS_PER_CHUNK, 50, 1000000)
+    return _clamp_int(data.get("max_chars"), passage_tokens * 4, 50, 2000)
+
+
+def _sample_units(file_path, file_type, data):
+    return _load_source_units(file_path, file_type,
+        passage_tokens=_clamp_int(data.get("passage_tokens"), _config.MAX_TOKENS_PER_CHUNK, 50, 1000000),
+        srt_lines_per_block=_clamp_int(data.get("srt_lines_per_block"), SRT_LINES_PER_BLOCK, 1, 10000),
+        chapter_mode=bool(data.get("chapter_mode") or (data.get("prompt_options") or {}).get("chapter_mode")))
+
+
+def _public_column(column):
+    return {k: v for k, v in column.items() if k != "api_key" and not k.startswith("_")}
+
+
 def create_sample_blueprint(sample_state_manager, socketio=None, output_dir="."):
     """Create the sample blueprint.
 
@@ -734,12 +726,12 @@ def create_sample_blueprint(sample_state_manager, socketio=None, output_dir=".")
 
         try:
             n_samples = _clamp_int(data.get("n_samples"), DEFAULT_N_SAMPLES, 2, 20)
-            max_chars = _clamp_int(data.get("max_chars"), DEFAULT_MAX_CHARS, 50, 2000)
+            max_chars = _sample_max_chars(data)
         except (TypeError, ValueError):
             return jsonify({"error": "n_samples and max_chars must be integers"}), 400
 
         try:
-            units = _load_source_units(file_path, file_type)
+            units = _sample_units(file_path, file_type, data)
             total = len(units)
             if total < 3:
                 return jsonify({"error": "document too small for sampling"}), 400
@@ -773,7 +765,7 @@ def create_sample_blueprint(sample_state_manager, socketio=None, output_dir=".")
             return err
 
         try:
-            max_chars = _clamp_int(data.get("max_chars"), DEFAULT_MAX_CHARS, 50, 2000)
+            max_chars = _sample_max_chars(data)
         except (TypeError, ValueError):
             return jsonify({"error": "max_chars must be an integer"}), 400
 
@@ -786,7 +778,7 @@ def create_sample_blueprint(sample_state_manager, socketio=None, output_dir=".")
                 continue
 
         try:
-            units = _load_source_units(file_path, file_type)
+            units = _sample_units(file_path, file_type, data)
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
         except Exception as exc:
@@ -834,7 +826,7 @@ def create_sample_blueprint(sample_state_manager, socketio=None, output_dir=".")
 
         try:
             n_samples = _clamp_int(data.get("n_samples"), DEFAULT_N_SAMPLES, 2, 20)
-            max_chars = _clamp_int(data.get("max_chars"), DEFAULT_MAX_CHARS, 50, 2000)
+            max_chars = _sample_max_chars(data)
         except (TypeError, ValueError):
             return jsonify({"error": "n_samples and max_chars must be integers"}), 400
 
@@ -857,7 +849,7 @@ def create_sample_blueprint(sample_state_manager, socketio=None, output_dir=".")
             if client_items is not None:
                 if not isinstance(client_items, list) or not client_items:
                     return jsonify({"error": "items must be a non-empty list"}), 400
-                units = _load_source_units(file_path, file_type)
+                units = _sample_units(file_path, file_type, data)
                 items = []
                 total = len(units)
                 for raw in client_items:
@@ -881,53 +873,23 @@ def create_sample_blueprint(sample_state_manager, socketio=None, output_dir=".")
                     })
                 if not items:
                     return jsonify({"error": "no valid items provided"}), 400
-            elif file_type == "srt":
-                items, warnings = _build_srt_sample_blocks(file_path, n_samples, max_chars)
             else:
-                text = _extract_plain_text(file_path, file_type)
-                if not text or not text.strip():
-                    return jsonify({"error": "File is empty or unreadable"}), 400
-                items, warnings = _build_text_sample_items(
-                    text,
-                    n_samples,
-                    max_chars,
-                    chapter_mode=bool(prompt_options.get("chapter_mode")),
-                )
+                units = _sample_units(file_path, file_type, data)
+                indices = select_sample_indices(len(units), n_samples)
+                items = _items_for_indices(units, indices, max_chars)
+                if len(indices) < n_samples:
+                    warnings.append(_small_document_warning(len(units), len(indices), n_samples))
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
         except Exception as exc:
             return jsonify({"error": f"Failed to prepare samples: {exc}"}), 500
 
-        # Normalize columns and create state entry
-        columns = []
-        for raw in columns_raw:
-            columns.append({
-                "provider": (raw.get("provider") or "ollama").lower(),
-                "model": raw.get("model") or "",
-                "api_key": raw.get("api_key"),
-                "api_endpoint": raw.get("api_endpoint") or raw.get("endpoint"),
-                "custom_instruction_file": raw.get("custom_instruction_file") or "",
-                "glossary_id": raw.get("glossary_id") or None,
-            })
-
-        sample_id = f"sample_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
-        sample_state_manager.create(sample_id, items, columns, mode)
-
-        # Items exposed to the client must not leak context_before/context_after
-        # — those are kept server-side only and used to enrich prompts.
-        public_items = [
-            {"index": it["index"], "source_text": it["source_text"], "truncated": it["truncated"]}
-            for it in items
-        ]
-        public_columns = [
-            {k: v for k, v in col.items() if k != "api_key"}
-            for col in columns
-        ]
-
         source_language = (data.get("source_language") or "").strip()
         target_language = data["target_language"]
         # Auto-detect source language from file content when the user leaves
         # the picker on "Auto-detect" (same UX as the Translate tab).
+        if mode == "refine":
+            source_language = source_language or target_language
         if not source_language:
             try:
                 with open(file_path, "rb") as fh:
@@ -948,12 +910,20 @@ def create_sample_blueprint(sample_state_manager, socketio=None, output_dir=".")
                 "error": "Could not auto-detect source language; please pick one manually.",
             }), 400
 
-        if mode == "refine":
-            target_language = source_language
         # Resolve novel_context_file → novel_context content so the prompt
         # builder receives the actual text (it reads prompt_options['novel_context'],
         # not the filename).  Same resolution logic as GenericTranslator.translate().
-        novel_context_file = prompt_options.get('novel_context_file')
+        notes = data.get("notes")
+        if notes is not None and not isinstance(notes, (str, dict)):
+            return jsonify(error={"code": "validation_error", "message": "notes must be a filename or an object"}), 400
+        if notes:
+            from src.utils.notes_store import get_notes, serialize_sections
+            notes_name = notes if isinstance(notes, str) else notes.get("source") or notes.get("name")
+            try:
+                prompt_options["novel_context"] = serialize_sections(get_notes(notes_name)["sections"])
+            except (ValueError, FileNotFoundError):
+                return jsonify(error={"code": "notes_not_found", "message": "Invalid or missing notes"}), 400
+        novel_context_file = None if notes else prompt_options.get('novel_context_file')
         if novel_context_file and novel_context_file.strip():
             try:
                 from src.config import NOVEL_CONTEXTS_DIR
@@ -967,6 +937,45 @@ def create_sample_blueprint(sample_state_manager, socketio=None, output_dir=".")
                 prompt_options['novel_context'] = load_novel_context(nc_path.name, nc_path.parent)
             except Exception as exc:
                 logger.warning("sample: failed to load novel context %r: %s", novel_context_file, exc)
+
+        columns = []
+        for raw in columns_raw:
+            if not isinstance(raw, dict):
+                return jsonify({"error": "Each column must be an object"}), 400
+            column = {
+                "provider": (raw.get("provider") or "ollama").lower(),
+                "model": raw.get("model") or "",
+                "api_key": raw.get("api_key"),
+                "api_endpoint": raw.get("api_endpoint") or raw.get("endpoint"),
+                "custom_instruction_file": raw.get("custom_instruction_file") or "",
+                "style": raw.get("style") or "",
+                "glossary_id": data.get("glossary_id", raw.get("glossary_id")),
+            }
+            if raw.get("connection_id"):
+                from src.core.llm.connections import resolve_for_pipeline, ConnectionNotFound
+                try:
+                    connection = resolve_for_pipeline(raw["connection_id"], column["model"], raw.get("reasoning", "off"))
+                except ConnectionNotFound:
+                    return jsonify(error={"code": "connection_not_found", "message": "Connection not found"}), 404
+                except ValueError:
+                    return jsonify(error={"code": "validation_error", "message": "Invalid connection options"}), 400
+                column.update(connection_id=raw["connection_id"], model=connection["model"], reasoning=raw.get("reasoning", "off"), provider=connection["llm_provider"], _connection=connection)
+            try:
+                column["_prompt_options"] = _column_prompt_options(prompt_options, column)
+            except ValueError:
+                return jsonify(error={"code": "validation_error", "message": "Invalid style name"}), 400
+            column["_glossary"] = _load_column_glossary(column["glossary_id"])
+            revision = {
+                "column": _public_column(column), "options": column["_prompt_options"],
+                "glossary": column["_glossary"], "mode": mode,
+                "source_language": source_language, "target_language": target_language,
+            }
+            column["cache_key"] = hashlib.sha256(json.dumps(revision, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+            columns.append(column)
+        sample_id = f"sample_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
+        sample_state_manager.create(sample_id, items, columns, mode)
+        public_items = [{"index": it["index"], "source_text": it["source_text"], "truncated": it["truncated"]} for it in items]
+        public_columns = [_public_column(column) for column in columns]
 
         # `defer_dispatch=true` lets the client read the items first, compute
         # which cells are already cached, then call /dispatch with skip_cells.
@@ -1064,7 +1073,7 @@ def create_sample_blueprint(sample_state_manager, socketio=None, output_dir=".")
             return jsonify({"error": "Sample run not found"}), 404
         # Strip API keys defensively before returning
         snapshot["columns"] = [
-            {k: v for k, v in col.items() if k != "api_key"}
+            _public_column(col)
             for col in snapshot.get("columns", [])
         ]
         # Strip server-only context fields from items

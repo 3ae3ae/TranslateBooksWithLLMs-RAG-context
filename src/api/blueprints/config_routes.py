@@ -1047,19 +1047,13 @@ def create_config_blueprint(server_session_id=None):
     def test_notification():
         """Send a test webhook using the current saved configuration.
 
-        The notifier reads from src.config (post-reload), so the test always
-        reflects what's actually on disk. Returns success/failure with a hint
-        when the URL is empty or the event flag is off.
+        Uses the notifier's preferences/legacy fallback and event flags.
         """
         from src.utils import notifier
 
-        if not _config.NOTIFY_WEBHOOK_URL:
-            return jsonify({
-                "success": False,
-                "error": "NOTIFY_WEBHOOK_URL is empty. Set a URL and save before testing."
-            }), 400
-
         data = request.get_json(silent=True) or {}
+        if not isinstance(data, dict):
+            return jsonify({"success": False, "error": "Expected JSON object"}), 400
         event = data.get('event', notifier.EVENT_SUCCESS)
         if event not in notifier.known_events():
             return jsonify({
@@ -1067,12 +1061,13 @@ def create_config_blueprint(server_session_id=None):
                 "error": f"Unknown event '{event}'. Use one of: {', '.join(notifier.known_events())}"
             }), 400
 
-        flag_map = {
-            notifier.EVENT_SUCCESS: 'NOTIFY_ON_SUCCESS',
-            notifier.EVENT_FAILURE: 'NOTIFY_ON_FAILURE',
-            notifier.EVENT_INTERRUPTION: 'NOTIFY_ON_INTERRUPTION',
-        }
-        if not bool(getattr(_config, flag_map[event], False)):
+        try:
+            settings = notifier.get_notification_settings()
+        except (OSError, ValueError):
+            return jsonify({"success": False, "error": "Cannot read notification preferences"}), 500
+        if not settings.get("url"):
+            return jsonify({"success": False, "error": "Set a webhook URL and save before testing."}), 400
+        if not settings.get("enabled", False) or event not in settings.get("events", []):
             return jsonify({
                 "success": False,
                 "error": f"Event '{event}' is disabled. Enable it and save before testing."
@@ -1092,11 +1087,11 @@ def create_config_blueprint(server_session_id=None):
 
         try:
             sent = notifier.notify(event, ctx)
-        except Exception as exc:
-            logger.exception("Test webhook raised unexpectedly")
+        except Exception:
+            logger.error("Test webhook raised unexpectedly")
             return jsonify({
                 "success": False,
-                "error": f"Unexpected error: {exc}"
+                "error": "Notification test failed unexpectedly"
             }), 500
 
         if sent:
