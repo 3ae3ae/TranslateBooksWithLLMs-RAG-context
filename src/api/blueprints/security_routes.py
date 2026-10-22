@@ -8,17 +8,13 @@ from src.utils.security import SecureFileHandler, rate_limiter, get_client_ip, S
 from src.utils.language_detector import LanguageDetector
 
 
-def create_security_blueprint(output_dir):
-    """
-    Create and configure the security blueprint
-
-    Args:
-        output_dir: Base directory for file operations
-    """
+def create_security_blueprint():
+    """Create upload routes backed by the private data directory."""
+    from src.config import INCOMING_DIR, THUMBNAILS_DIR
     bp = Blueprint('security', __name__)
 
     # Initialize secure file handler
-    upload_dir = Path(output_dir) / 'uploads'
+    upload_dir = INCOMING_DIR
     secure_file_handler = SecureFileHandler(upload_dir)
 
     @bp.route('/api/uploads/<name>/delete', methods=['POST'])
@@ -106,8 +102,8 @@ def create_security_blueprint(output_dir):
                     from src.core.epub.cover_extractor import EPUBCoverExtractor
 
                     # Create thumbnails directory
-                    thumbnails_dir = Path(output_dir) / 'thumbnails'
-                    thumbnails_dir.mkdir(exist_ok=True)
+                    thumbnails_dir = THUMBNAILS_DIR
+                    thumbnails_dir.mkdir(parents=True, exist_ok=True)
 
                     # Extract and save thumbnail
                     thumbnail_filename = EPUBCoverExtractor.extract_cover(
@@ -180,7 +176,7 @@ def create_security_blueprint(output_dir):
             if safe_filename != filename or '..' in filename:
                 return jsonify({"error": "Invalid filename"}), 400
 
-            thumbnails_dir = Path(output_dir) / 'thumbnails'
+            thumbnails_dir = THUMBNAILS_DIR
             thumbnail_path = thumbnails_dir / safe_filename
 
             # Security: ensure path is within thumbnails directory

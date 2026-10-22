@@ -17,11 +17,12 @@ class FileService:
             output_dir: Base directory for file operations
         """
         self.output_dir = Path(output_dir)
-        self.uploads_dir = self.output_dir / 'uploads'
+        from src.config import INCOMING_DIR
+        self.uploads_dir = INCOMING_DIR
 
     def find_file(self, filename: str) -> Optional[Path]:
         """
-        Find file in main directory or uploads subdirectory
+        Find file in the translations or incoming uploads directory.
 
         Args:
             filename: Name of the file to find
@@ -34,7 +35,7 @@ class FileService:
         if main_path.exists() and main_path.is_file():
             return main_path
 
-        # Try uploads subdirectory
+        # Try incoming uploads
         upload_path = self.uploads_dir / filename
         if upload_path.exists() and upload_path.is_file():
             return upload_path

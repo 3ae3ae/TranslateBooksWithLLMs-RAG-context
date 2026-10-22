@@ -21,12 +21,7 @@ from src.utils import custom_instructions as styles, notes_store as notes, prefe
 
 
 @pytest.fixture
-def resources(tmp_path, monkeypatch):
-    runtime = tmp_path / "TranslateBook_Data"
-    monkeypatch.setattr(config, "CUSTOM_INSTRUCTIONS_DIR", runtime / "Custom_Instructions")
-    monkeypatch.setattr(config, "NOVEL_CONTEXTS_DIR", runtime / "Novel_Contexts")
-    monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
-    monkeypatch.setattr(config, "OUTPUT_DIR", str(tmp_path / "output"))
+def resources(monkeypatch):
     connection = dict(connection_id="test", llm_provider="openai", model="test-model", reasoning_effort="off", connection_type="openai", local=False, request_timeout=30, api_key="", llm_api_endpoint="https://example.test/v1/chat/completions")
     connections = ModuleType("src.core.llm.connections")
     connections.ConnectionNotFound = type("ConnectionNotFound", (ValueError,), {})
@@ -45,7 +40,7 @@ def resources(tmp_path, monkeypatch):
     app.register_blueprint(create_preferences_blueprint())
     app.register_blueprint(create_notes_blueprint())
     app.register_blueprint(create_styles_blueprint())
-    app.register_blueprint(create_estimate_blueprint(config.OUTPUT_DIR))
+    app.register_blueprint(create_estimate_blueprint())
     return app.test_client(), connections
 
 
@@ -213,9 +208,9 @@ def test_compare_snapshots_resources_and_changes_revision(resources, monkeypatch
     from src.api.sample_state import SampleStateManager
     state = SampleStateManager()
     app = Flask("compare")
-    app.register_blueprint(sample.create_sample_blueprint(state, output_dir=config.OUTPUT_DIR))
+    app.register_blueprint(sample.create_sample_blueprint(state))
     client = app.test_client()
-    uploads = Path(config.OUTPUT_DIR) / "uploads"
+    uploads = config.INCOMING_DIR
     uploads.mkdir(parents=True)
     path = uploads / "book.txt"
     path.write_text("This is sample source.")
@@ -241,7 +236,7 @@ def test_compare_snapshots_resources_and_changes_revision(resources, monkeypatch
 def test_estimate_requests_pricing_and_real_chunker(resources):
     client, connections = resources
     from pathlib import Path
-    uploads = Path(config.OUTPUT_DIR) / "uploads"
+    uploads = config.INCOMING_DIR
     uploads.mkdir(parents=True)
     path = uploads / "book.txt"
     path.write_text("\n\n".join(["A passage about Alice. " * 15] * 10))
@@ -271,7 +266,7 @@ def test_estimate_requests_pricing_and_real_chunker(resources):
 def test_estimate_srt_lines_read_only_notes_and_billing(resources, local, kind, billing):
     client, connections = resources
     from pathlib import Path
-    uploads = Path(config.OUTPUT_DIR) / "uploads"
+    uploads = config.INCOMING_DIR
     uploads.mkdir(parents=True)
     path = uploads / "subtitles.srt"
     path.write_text("\n\n".join(f"{i}\n00:00:01,000 --> 00:00:02,000\nHello Alice." for i in range(1, 6)))
@@ -378,7 +373,7 @@ def test_estimate_rejects_unsupported_notes_modes(resources, task, mode, message
 @pytest.mark.parametrize("mode", [None, "copy"])
 def test_estimate_srt_translation_updates_notes_for_every_passage(resources, mode):
     client, _ = resources
-    uploads = Path(config.OUTPUT_DIR) / "uploads"
+    uploads = config.INCOMING_DIR
     uploads.mkdir(parents=True)
     path = uploads / "subtitles.srt"
     path.write_text("\n\n".join(f"{i}\n00:00:01,000 --> 00:00:02,000\nHello Alice." for i in range(1, 6)))
@@ -396,7 +391,7 @@ def test_estimate_srt_translation_updates_notes_for_every_passage(resources, mod
 
 def test_interleaved_estimate_adds_one_polish_request_without_extra_notes(resources):
     client, _ = resources
-    uploads = Path(config.OUTPUT_DIR) / 'uploads'
+    uploads = config.INCOMING_DIR
     uploads.mkdir(parents=True)
     path = uploads / 'chapter.txt'
     path.write_text('A passage about Alice. ' * 100)

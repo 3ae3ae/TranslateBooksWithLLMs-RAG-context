@@ -13,7 +13,7 @@ from src.core.llm.factory import create_llm_provider
 
 @pytest.fixture
 def connection_store(tmp_path, monkeypatch):
-    path = tmp_path / "TranslateBook_Data" / "connections.json"
+    path = tmp_path / "tbl" / "connections.json"
     monkeypatch.setattr(store, "CONNECTIONS_PATH", path)
     builtin = store._normalize({"name": "Local Ollama", "type": "ollama", "default_model": "local-model"})
     builtin.update(id="local-ollama", builtin=True)

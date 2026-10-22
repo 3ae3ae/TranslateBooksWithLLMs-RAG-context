@@ -11,6 +11,7 @@ __pycache__/
 !.env.example
 /venv
 /.venv
+/dist/
 tests/.placeholder_tests/
 /plan/
 /experiments
@@ -23,7 +24,7 @@ tests/.placeholder_tests/
 /TranslateBook_Data/
 
 # Ad-hoc scratch scripts at repo root — keep them out of commits.
-# Real tests live under tests/, real entrypoints are translate.py / translation_api.py.
+# Real tests live under tests/; the app entrypoint is src/server.py (uv run tbl).
 /check_*.py
 /scratch_*.py
 /debug_*.py

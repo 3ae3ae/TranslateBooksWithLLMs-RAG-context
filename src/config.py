@@ -2,6 +2,7 @@
 Centralized configuration class
 """
 import os
+import sys
 import logging
 from pathlib import Path
 from typing import Optional
@@ -17,25 +18,30 @@ if _debug_mode:
     _config_logger.setLevel(logging.DEBUG)
     _config_logger.debug("🔍 DEBUG_MODE enabled - verbose logging active")
 
-# Get config directory (current working directory)
-_config_dir = Path.cwd()
+def resolve_tbl_home() -> Path:
+    """Resolve user data independently of the launch directory."""
+    if os.getenv('TBL_HOME'):
+        path = Path(os.environ['TBL_HOME']).expanduser()
+    elif sys.platform == 'darwin':
+        path = Path.home() / 'Library' / 'Application Support' / 'TBL'
+    elif sys.platform == 'win32':
+        path = Path(os.getenv('APPDATA') or Path.home() / 'AppData' / 'Roaming') / 'TBL'
+    else:
+        path = Path(os.getenv('XDG_DATA_HOME') or Path.home() / '.local' / 'share') / 'tbl'
+    # Relative overrides belong to the user's home, never the launch directory.
+    return (Path.home() / path).resolve()
 
-_env_file = _config_dir / '.env'
-_env_exists = _env_file.exists()
-_cwd = Path.cwd()
 
-if _debug_mode:
-    _config_logger.debug(f"📁 Current working directory: {_cwd}")
-    _config_logger.debug(f"📁 Looking for .env at: {_env_file.absolute()}")
-    _config_logger.debug(f"📁 .env exists: {_env_exists}")
-
-_project_root = Path(__file__).parent.parent.resolve()
-NOVEL_CONTEXTS_DIR = _project_root / 'TranslateBook_Data' / 'Novel_Contexts'
-CUSTOM_INSTRUCTIONS_DIR = _project_root / 'TranslateBook_Data' / 'Custom_Instructions'
-DATA_DIR = _project_root / 'data'
+TBL_HOME = resolve_tbl_home()
+NOVEL_CONTEXTS_DIR = TBL_HOME / 'notes'
+CUSTOM_INSTRUCTIONS_DIR = TBL_HOME / 'styles'
+DATA_DIR = TBL_HOME / 'data'
 UPLOADS_DIR = DATA_DIR / 'uploads'
+INCOMING_DIR = DATA_DIR / 'incoming'
+THUMBNAILS_DIR = DATA_DIR / 'thumbnails'
 
-# Load .env file if it exists
+# Process environment variables take precedence over TBL_HOME/.env.
+_env_file = TBL_HOME / '.env'
 _dotenv_result = load_dotenv(_env_file)
 if _debug_mode:
     _config_logger.debug(f"📁 load_dotenv() returned: {_dotenv_result}")
@@ -288,11 +294,8 @@ UNIT_VALIDATION_RETRIES = int(os.getenv('UNIT_VALIDATION_RETRIES', '2'))
 DEFAULT_SOURCE_LANGUAGE = os.getenv('DEFAULT_SOURCE_LANGUAGE', '')  # Empty = auto-detect
 DEFAULT_TARGET_LANGUAGE = os.getenv('DEFAULT_TARGET_LANGUAGE', '')  # Empty = use browser language
 
-# Resolve OUTPUT_DIR to an absolute path so downstream code (file listing, writes,
-# checkpoints) is independent of any later cwd change. A relative value still
-# anchors to the cwd at config-load time, which matches the previous behavior
-# (os.makedirs was already cwd-relative).
-OUTPUT_DIR = str(Path(os.getenv('OUTPUT_DIR', 'translated_files')).expanduser().resolve())
+# Relative output overrides are anchored to TBL_HOME as well.
+OUTPUT_DIR = str((TBL_HOME / Path(os.getenv('OUTPUT_DIR', 'translations')).expanduser()).resolve())
 
 # Output filename pattern
 # Placeholders: {originalName}, {targetLang}, {sourceLang}, {model}, {date}, {datetime}, {ext}

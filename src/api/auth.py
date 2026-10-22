@@ -9,7 +9,7 @@ self-update endpoints (drive-by attacks).
 
 The fix has two halves:
 
-1. CORS is no longer permissive (see translation_api.py): the wildcard
+1. CORS is no longer permissive (see src/server.py): the wildcard
    ``Access-Control-Allow-Origin`` is gone and Socket.IO falls back to its
    same-origin default. A foreign page can therefore no longer *read* responses.
 

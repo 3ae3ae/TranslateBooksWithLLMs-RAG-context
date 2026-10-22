@@ -9,6 +9,11 @@ import sys
 import os
 from pathlib import Path
 import importlib.util
+from tempfile import TemporaryDirectory
+
+# Collection imports config too, before per-test fixtures can run.
+_collection_home = TemporaryDirectory(prefix="tbl-tests-")
+os.environ["TBL_HOME"] = _collection_home.name
 
 # Add project root to Python path
 project_root = Path(__file__).parent.parent
@@ -82,7 +87,20 @@ def sampler_spine_docs():
 
 @pytest.fixture(autouse=True)
 def _isolate_user_data(tmp_path, monkeypatch):
-    """Keep tests from writing uploads and story notes into the real data folders."""
+    """Keep all app data, including credentials and defaults, inside each test."""
     import src.config as config
-    monkeypatch.setattr(config, "UPLOADS_DIR", tmp_path / "_user_data" / "uploads")
-    monkeypatch.setattr(config, "NOVEL_CONTEXTS_DIR", tmp_path / "_user_data" / "Novel_Contexts")
+    from src.core.llm import connections
+    from src.core.llm.thinking import cache
+
+    home = tmp_path / "_user_data"
+    monkeypatch.setenv("TBL_HOME", str(home))
+    monkeypatch.setattr(config, "TBL_HOME", home)
+    monkeypatch.setattr(config, "DATA_DIR", home / "data")
+    monkeypatch.setattr(config, "UPLOADS_DIR", home / "data" / "uploads")
+    monkeypatch.setattr(config, "INCOMING_DIR", home / "data" / "incoming")
+    monkeypatch.setattr(config, "THUMBNAILS_DIR", home / "data" / "thumbnails")
+    monkeypatch.setattr(config, "OUTPUT_DIR", str(home / "translations"))
+    monkeypatch.setattr(config, "NOVEL_CONTEXTS_DIR", home / "notes")
+    monkeypatch.setattr(config, "CUSTOM_INSTRUCTIONS_DIR", home / "styles")
+    monkeypatch.setattr(connections, "CONNECTIONS_PATH", home / "connections.json")
+    monkeypatch.setattr(cache, "_global_cache", None)

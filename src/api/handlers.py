@@ -390,7 +390,9 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
         # Handle special case for TXT with inline text content (no file upload)
         temp_txt_file_path = None
         if config['file_type'] == 'txt' and 'text' in config and input_path_for_translate_module is None:
-            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=False, suffix=".txt", dir=output_dir) as tmp_f:
+            from src.config import INCOMING_DIR
+            INCOMING_DIR.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=False, suffix=".txt", dir=INCOMING_DIR) as tmp_f:
                 tmp_f.write(config['text'])
                 temp_txt_file_path = tmp_f.name
             input_path_for_translate_module = temp_txt_file_path
@@ -859,7 +861,8 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                     if upload_path.exists() and upload_path != Path(preserved_path):
                         try:
                             # Only delete if it's in the uploads directory root (not in a job subdirectory)
-                            uploads_dir = Path(output_dir) / 'uploads'
+                            from src.config import INCOMING_DIR
+                            uploads_dir = INCOMING_DIR
                             resolved_path = upload_path.resolve()
 
                             # Check if file is directly in uploads/ (not in a job subdirectory)
@@ -924,7 +927,8 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                 if upload_path.exists():
                     try:
                         # Only delete if it's in the uploads directory root (not in a job subdirectory)
-                        uploads_dir = Path(output_dir) / 'uploads'
+                        from src.config import INCOMING_DIR
+                        uploads_dir = INCOMING_DIR
                         resolved_path = upload_path.resolve()
 
                         # Check if file is directly in uploads/ (not in a job subdirectory)
