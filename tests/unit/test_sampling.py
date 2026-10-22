@@ -14,10 +14,14 @@ from src.core.sampling import cap_chunk_text, select_sample_indices
 class TestSelectSampleIndices:
     """select_sample_indices(total_chunks, n)."""
 
-    def test_raises_when_document_too_small(self):
-        for total in (0, 1, 2):
-            with pytest.raises(ValueError):
-                select_sample_indices(total, 3)
+    def test_raises_when_document_is_empty(self):
+        with pytest.raises(ValueError):
+            select_sample_indices(0, 3)
+
+    def test_short_documents_sample_every_chunk(self):
+        # No interior to protect, so a one- or two-chunk story is still comparable.
+        assert select_sample_indices(1, 3) == [0]
+        assert select_sample_indices(2, 3) == [0, 1]
 
     def test_raises_when_n_below_one(self):
         with pytest.raises(ValueError):

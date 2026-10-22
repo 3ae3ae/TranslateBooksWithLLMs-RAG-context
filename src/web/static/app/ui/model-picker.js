@@ -67,7 +67,7 @@ export function ModelPicker({ value, onChange, id, disabled, onlyConnection }) {
 export const REASONING_LEVELS = ['off', 'low', 'medium', 'high', 'default'];
 
 /** Reasoning segmented control; hidden when the connection type cannot control it. */
-export function ReasoningControl({ connectionId, value, onChange }) {
+export function ReasoningControl({ connectionId, value, onChange, help = true }) {
   const conn = connections.value.find((c) => c.id === connectionId);
   const info = conn ? typeInfo(conn.type) : null;
   const support = info ? info.reasoning : 'best_effort';
@@ -80,9 +80,8 @@ export function ReasoningControl({ connectionId, value, onChange }) {
       onChange=${onChange}
       options=${levels.map((l) => ({ value: l, label: support === 'on_off' && l === 'high' ? t('reasoning.on') : t(`reasoning.${l}`) }))}
     />
-    <div class="field__help">
-      ${t('reasoning.help')}
-      ${support === 'best_effort' ? ` ${t('reasoning.best_effort')}` : ''}
-    </div>
+    ${(help || support === 'best_effort') && html`<div class="field__help">
+      ${[help && t('reasoning.help'), support === 'best_effort' && t('reasoning.best_effort')].filter(Boolean).join(' ')}
+    </div>`}
   </div>`;
 }

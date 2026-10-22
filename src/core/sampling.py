@@ -13,10 +13,16 @@ from typing import List, Tuple
 from src.config import SENTENCE_TERMINATORS
 
 
+def sample_range(total_chunks: int) -> Tuple[int, int]:
+    """Inclusive index range to sample from: the interior, or everything when there is none."""
+    return (1, total_chunks - 2) if total_chunks >= 3 else (0, total_chunks - 1)
+
+
 def select_sample_indices(total_chunks: int, n: int) -> List[int]:
     """
     Uniformly distribute up to N indices across [1, total_chunks - 2], i.e.
-    excluding the first (0) and last (total_chunks - 1) chunks.
+    excluding the first (0) and last (total_chunks - 1) chunks. Documents with
+    fewer than 3 chunks have no interior, so every chunk is eligible.
 
     Formula: round((i + 1) * (T - 1) / (N + 1)) for i in [0, N - 1]
     Where T = total_chunks. The result is clamped to [1, T - 2] and deduplicated
@@ -30,15 +36,15 @@ def select_sample_indices(total_chunks: int, n: int) -> List[int]:
         A list of unique chunk indices, in ascending order.
 
     Raises:
-        ValueError: If total_chunks < 3 (no interior chunks to sample).
+        ValueError: If total_chunks < 1 (nothing to sample).
         ValueError: If n < 1.
     """
     if n < 1:
         raise ValueError("n must be >= 1")
-    if total_chunks < 3:
+    if total_chunks < 1:
         raise ValueError("document too small for sampling")
 
-    interior_lo, interior_hi = 1, total_chunks - 2
+    interior_lo, interior_hi = sample_range(total_chunks)
 
     # When the interior is smaller than n, return every interior index.
     interior_count = interior_hi - interior_lo + 1

@@ -42,8 +42,14 @@ function CellMetrics({ m }) {
   </div>`;
 }
 
-export function ComparePage({ query }) {
-  const prefs = preferences.value || {};
+export function ComparePage(props) {
+  // Initial form state comes from saved defaults, so wait for them.
+  if (!preferences.value) return html`<div class="page"><${PageHeader} title=${t('compare.title')} /><p class="muted">${t('common.loading')}</p></div>`;
+  return html`<${CompareForm} ...${props} />`;
+}
+
+function CompareForm({ query }) {
+  const prefs = preferences.value;
   const init = (query && query.from === 'draft' && fromDraft()) || null;
   const [file, setFile] = useState(init ? init.file : null);
   const [uploading, setUploading] = useState(false);
@@ -89,7 +95,7 @@ export function ComparePage({ query }) {
       if (!source && r.detected_language) setSource(r.detected_language);
       setItems(null);
       setResults({});
-    } catch (e) { setError(e.message); } finally { setUploading(false); }
+    } catch (e) { setError({ at: 'file', message: e.message }); } finally { setUploading(false); }
   };
 
   const pickPassages = async () => {
@@ -99,7 +105,7 @@ export function ComparePage({ query }) {
       setItems(r.items || []);
       setWarnings(r.warnings || []);
       setResults({});
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError({ at: 'passages', message: e.message }); }
   };
   const addPassage = async () => {
     try {
@@ -125,7 +131,7 @@ export function ComparePage({ query }) {
       if (r.warnings) setWarnings(r.warnings);
       setRun({ id: r.sample_id, running: true });
       if (r.deferred) await compareApi.dispatch(r.sample_id, {});
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError({ at: 'run', message: e.message }); }
   };
   const stop = async () => {
     if (!run) return;
@@ -154,12 +160,13 @@ export function ComparePage({ query }) {
     const costKnown = cells.some((x) => x.metrics && x.metrics.cost_usd != null);
     return { done: cells.length, failed: cells.filter((x) => x.error).length, avg: lat.length ? lat.reduce((a, b) => a + b, 0) / lat.length : null, cost: costKnown ? cost : null };
   });
+  // Errors show next to the action that failed, not above the fold.
+  const errorAt = (at) => error && error.at === at && html`<${Callout} tone="danger">${error.message}<//>`;
   const langOptions = LANGUAGES.map((l) => html`<option value=${l.value}>${t(`lang.name.${l.code}`)}</option>`);
 
   return html`<div class="page" style="max-width:1280px">
     <${PageHeader} title=${t('compare.title')} subtitle=${t('compare.subtitle')} />
     <datalist id="cmp-langs">${langOptions}</datalist>
-    ${error && html`<${Callout} tone="danger" class="group">${error}<//>`}
 
     <${Section} step="1" title=${t('compare.setup')}>
       <div class="form-rows">
@@ -168,6 +175,7 @@ export function ComparePage({ query }) {
               <${Button} variant="link" onClick=${() => { setFile(null); setItems(null); setResults({}); }}>${t('common.change')}<//></div>`
           : html`<${Dropzone} multiple=${false} accept=".epub,.docx,.txt,.srt" disabled=${uploading}
               title=${uploading ? t('common.uploading') : t('compare.drop')} hint=${t('new.files.formats')} onFiles=${upload} />`}
+        ${errorAt('file')}
         <div class="field-grid">
           ${mode !== 'refine' && html`<${Field} label=${t('new.lang.from')} htmlFor="cmp-src">
             <input id="cmp-src" class="input" list="cmp-langs" value=${source} placeholder=${t('new.lang.detect')} onInput=${(e) => setSource(e.currentTarget.value)} />
@@ -206,6 +214,7 @@ export function ComparePage({ query }) {
         </div>
         <p class="small muted">${t('compare.honest')}</p>
         ${warnings.length > 0 && html`<${Callout} tone="warning">${warnings.map((w) => (typeof w === 'string' ? w : t(`compare.warning.${w.code}`, w.params || {}))).join(' ')}<//>`}
+        ${errorAt('passages')}
       </div>
     <//>
 
@@ -222,9 +231,10 @@ export function ComparePage({ query }) {
             <${Select} value=${c.style} aria-label=${t('new.style.label')} onChange=${(v) => setColumns(columns.map((x) => (x.id === c.id ? { ...x, style: v } : x)))}
               options=${[{ value: '', label: t('compare.no_style') }, ...((stylesList.value || []).map((s) => ({ value: s.name, label: s.display_name || displayName(s.name) })))]} />
           </div>
-          ${c.connectionId && html`<${ReasoningControl} connectionId=${c.connectionId} value=${c.reasoning}
+          ${c.connectionId && html`<${ReasoningControl} connectionId=${c.connectionId} value=${c.reasoning} help=${i === 0}
             onChange=${(v) => setColumns(columns.map((x) => (x.id === c.id ? { ...x, reasoning: v } : x)))} />`}
         </div>`)}
+        ${errorAt('run')}
         <div class="row">
           ${run && run.running
             ? html`<${Button} variant="danger" icon="square" onClick=${stop}>${t('compare.stop')}<//><span class="small muted">${t('compare.stop_note')}</span>`

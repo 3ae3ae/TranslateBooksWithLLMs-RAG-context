@@ -31,7 +31,7 @@ from src.core.glossary import build_glossary_block, filter_glossary
 from src.core.glossary.models import GlossaryConfig
 from src.core.llm.factory import create_llm_provider
 from src.core.pricing.pricing_data import get_default_pricing
-from src.core.sampling import cap_chunk_text, select_sample_indices
+from src.core.sampling import cap_chunk_text, sample_range, select_sample_indices
 from src.api.api_keys import provider_env_var as _provider_env_var
 from src.api.api_keys import resolve_api_key as _resolve_api_key
 from src.core.text_processor import split_text_into_chunks
@@ -222,10 +222,9 @@ def _items_for_indices(
 
 
 def _pick_random_unused_index(total: int, exclude: Set[int]) -> Optional[int]:
-    """Pick a random interior index (1..total-2) not in `exclude`. None if all used."""
-    if total < 3:
-        return None
-    candidates = [i for i in range(1, total - 1) if i not in exclude]
+    """Pick a random sampleable index not in `exclude`. None if all used."""
+    lo, hi = sample_range(total)
+    candidates = [i for i in range(lo, hi + 1) if i not in exclude]
     if not candidates:
         return None
     return random.choice(candidates)
@@ -733,7 +732,7 @@ def create_sample_blueprint(sample_state_manager, socketio=None, output_dir=".")
         try:
             units = _sample_units(file_path, file_type, data)
             total = len(units)
-            if total < 3:
+            if not total:
                 return jsonify({"error": "document too small for sampling"}), 400
             indices = select_sample_indices(total, n_samples)
             items = _items_for_indices(units, indices, max_chars)
@@ -785,7 +784,7 @@ def create_sample_blueprint(sample_state_manager, socketio=None, output_dir=".")
             return jsonify({"error": f"Failed to load source: {exc}"}), 500
 
         total = len(units)
-        if total < 3:
+        if not total:
             return jsonify({"error": "document too small for sampling"}), 400
 
         idx = _pick_random_unused_index(total, exclude)
