@@ -104,37 +104,3 @@ def test_profile_listing_is_sorted_and_corrupt_files_are_reported(profile_client
 
     response = client.get("/api/profiles/Alpha")
     assert response.status_code == 422
-
-
-def test_profile_frontend_restores_complete_state_without_timer_race():
-    project_root = Path(__file__).resolve().parents[2]
-    form_manager = (
-        project_root / "src" / "web" / "static" / "js" / "ui" / "form-manager.js"
-    ).read_text(encoding="utf-8")
-    api_client = (
-        project_root / "src" / "web" / "static" / "js" / "core" / "api-client.js"
-    ).read_text(encoding="utf-8")
-
-    assert "await ProviderManager.waitForCurrentModelLoad()" in form_manager
-    assert "await GlossaryManager.refreshDropdown()" in form_manager
-    assert "await FormManager.loadNovelContexts()" in form_manager
-    assert "await FormManager.loadCustomInstructions()" in form_manager
-    assert "option.value === String(data.glossary)" in form_manager
-    assert "option.value === data.novel_context_file" in form_manager
-    assert "option.value === data.custom_instruction_file" in form_manager
-    assert "ApiClient.getProfiles()" in form_manager
-    assert "ApiClient.getProfile(name)" in form_manager
-    assert "ApiClient.saveProfile(name, profileData)" in form_manager
-    assert "-- Custom Settings --" not in form_manager
-
-    for field in (
-        "plain_text_mode",
-        "chapter_mode",
-        "auto_pause_on_rate_limit",
-        "parallel_workers",
-        "output_filename_pattern",
-    ):
-        assert field in form_manager
-
-    for method in ("getProfiles", "getProfile", "saveProfile"):
-        assert f"async {method}(" in api_client

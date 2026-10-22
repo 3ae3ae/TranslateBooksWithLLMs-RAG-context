@@ -11,9 +11,6 @@ from urllib.parse import urlparse
 from flask import Blueprint, request, jsonify, send_from_directory, render_template, make_response
 from pathlib import Path
 
-# UI locales served by /static/locales/<code>/*.json. Keep in sync with the
-# SUPPORTED_LOCALES constant in src/web/static/js/i18n/i18n.js. The list is
-# small enough that duplication beats a separate config file for now.
 SUPPORTED_UI_LOCALES = ['en', 'ko']
 UI_LOCALE_COOKIE = 'ui_locale'
 UI_LOCALE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
@@ -23,8 +20,7 @@ def resolve_ui_locale(req):
     """Pick the UI locale to render the page with.
 
     Order: explicit cookie (user's last choice) → Accept-Language best match
-    → 'en'. Returning the code is enough; i18next-http-backend loads the
-    JSON files asynchronously from /static/locales/<code>/.
+    → 'en'.
     """
     cookie_locale = req.cookies.get(UI_LOCALE_COOKIE)
     if cookie_locale in SUPPORTED_UI_LOCALES:
@@ -68,26 +64,11 @@ def create_config_blueprint(server_session_id=None):
 
     @bp.route('/')
     def serve_interface():
-        """Serve the main translation interface.
-
-        Switched from send_from_directory to render_template so Jinja can
-        inject the initial UI locale into the HTML — that avoids the
-        English flash on first paint when the user prefers another locale.
-        """
-        base_path = get_base_path()
-        templates_dir = os.path.join(base_path, 'src', 'web', 'templates')
-        interface_path = os.path.join(templates_dir, 'translation_interface.html')
-        if not os.path.exists(interface_path):
-            return f"<h1>Error: Interface not found</h1><p>Looked in: {interface_path}</p>", 404
-
+        """Serve the redesigned app shell (all UI is rendered client-side)."""
         from src.api.auth import API_TOKEN
         return render_template(
-            'translation_interface.html',
+            'app.html',
             initial_locale=resolve_ui_locale(request),
-            supported_locales=SUPPORTED_UI_LOCALES,
-            # Per-session token handed to the SPA so it can authenticate every
-            # /api/ call and the Socket.IO handshake (issue #210). Same-origin
-            # delivery means a foreign page cannot read it.
             api_token=API_TOKEN,
         )
 
@@ -99,24 +80,9 @@ def create_config_blueprint(server_session_id=None):
             response.headers['Cache-Control'] = 'no-cache'
         return response
 
-    @bp.route('/next')
-    def serve_next_interface():
-        """Serve the redesigned app shell (all UI is rendered client-side)."""
-        from src.api.auth import API_TOKEN
-        return render_template(
-            'app.html',
-            initial_locale=resolve_ui_locale(request),
-            api_token=API_TOKEN,
-        )
-
     @bp.route('/api/ui-locale', methods=['POST'])
     def set_ui_locale():
-        """Persist the user's UI locale choice in a long-lived cookie.
-
-        The client also calls i18next.changeLanguage() to swap the running
-        UI; this route exists so the next full page load renders the right
-        locale server-side (no English flash).
-        """
+        """Persist the user's UI locale choice in a long-lived cookie."""
         data = request.get_json(silent=True) or {}
         locale = data.get('locale')
         if locale not in SUPPORTED_UI_LOCALES:

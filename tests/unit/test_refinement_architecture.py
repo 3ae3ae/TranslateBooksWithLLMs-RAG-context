@@ -1101,15 +1101,10 @@ def test_structured_chunk_log_can_hide_internal_token_budget():
 
 def test_web_refine_after_uses_one_backend_refinement_phase():
     project_root = Path(__file__).resolve().parents[2]
-    batch_controller = (
-        project_root / "src" / "web" / "static" / "js"
-        / "translation" / "batch-controller.js"
-    ).read_text(encoding="utf-8")
     handlers = (
         project_root / "src" / "api" / "handlers.py"
     ).read_text(encoding="utf-8")
 
-    assert "refine: false" in batch_controller
     assert "translation_prompt_options['refine'] = False" in handlers
     assert "refine_success = await refine_file(" in handlers
     assert "refinement_prompt_options['_refine_after'] = True" in handlers
@@ -1117,34 +1112,12 @@ def test_web_refine_after_uses_one_backend_refinement_phase():
 
 def test_workflow_steps_and_resync_logs_use_the_canonical_ui_channel():
     project_root = Path(__file__).resolve().parents[2]
-    tracker = (
-        project_root / "src" / "web" / "static" / "js"
-        / "translation" / "translation-tracker.js"
-    ).read_text(encoding="utf-8")
     generic = (
         project_root / "src" / "core" / "adapters" / "generic_translator.py"
     ).read_text(encoding="utf-8")
 
-    assert "MessageLogger.addStepLog" in tracker
-    assert "ui_step === 'context_resync'" in tracker
     assert '"ui_step": "context_resync"' in generic
     assert "emit_update(" in generic
-
-
-def test_context_resync_save_does_not_replace_latest_with_historical_snapshot():
-    project_root = Path(__file__).resolve().parents[2]
-    tracker = (
-        project_root / "src" / "web" / "static" / "js"
-        / "translation" / "translation-tracker.js"
-    ).read_text(encoding="utf-8")
-
-    save_block = tracker.split(
-        "window.saveContextResync = async function()",
-        1,
-    )[1]
-    assert "NovelContextUI.latestContent = newContent" not in save_block
-    assert "NovelContextUI.renderContextTabs(newContent, true)" in save_block
-    assert "scope: isGlobal ? 'global_lore' : 'snapshot'" in save_block
 
 
 def test_chunk_context_snapshot_route_keeps_timeline_snapshot_isolated():
@@ -1167,34 +1140,8 @@ def test_refinement_context_state_omits_large_ui_payloads():
     refine_file = (
         project_root / "src" / "core" / "adapters" / "refine_file.py"
     ).read_text(encoding="utf-8")
-    tracker = (
-        project_root / "src" / "web" / "static" / "js"
-        / "translation" / "translation-tracker.js"
-    ).read_text(encoding="utf-8")
-
     assert '"content_omitted": True' in refine_file
     assert '"content_size": len(prompt_options' in refine_file
-    context_state_block = tracker.split(
-        "data.log_entry.type === 'novel_context_state'",
-        1,
-    )[1]
-    assert "typeof data.log_entry.data.content === 'string'" in context_state_block
-    assert "if (hasContextContent)" in context_state_block
-
-
-def test_running_refinement_can_be_restored_after_browser_refresh():
-    project_root = Path(__file__).resolve().parents[2]
-    routes = (
-        project_root / "src" / "api" / "blueprints" / "translation_routes.py"
-    ).read_text(encoding="utf-8")
-    tracker = (
-        project_root / "src" / "web" / "static" / "js"
-        / "translation" / "translation-tracker.js"
-    ).read_text(encoding="utf-8")
-
-    assert "'input_filename': (" in routes
-    assert "job.input_filename || job.output_filename" in tracker
-    assert "fileType: job.file_type || 'txt'" in tracker
 
 
 def test_max_tokens_setting_is_runtime_reloadable(monkeypatch, tmp_path):
