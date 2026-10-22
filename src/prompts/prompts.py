@@ -184,10 +184,13 @@ def _build_korean_style_section() -> str:
     return """
 # KOREAN STYLE GUARDRAILS
 
-- Treat `## CURRENT ADDRESSING FORMS` as authoritative for direct address, speech levels, and honorific titles.
-- Preserve character honorific titles and suffixes (e.g. "-ssi" / -씨, "-nim" / -님, "sunbae" / 선배, "oppa" / 오빠, "unnie" / 언니, "hyung" / 형, "noona" / 누나) when established by character relationship context or stored addressing forms.
-- Maintain consistent honorific registers (Jondaetmal / 존댓말 vs Banmal / 반말) matching each speaker's seniority, rank, and intimacy level across adjacent paragraphs.
-- Do not drop honorific suffixes or switch speech levels abruptly within the same scene unless the relationship or context explicitly changes."""
+- Treat `## CURRENT ADDRESSING FORMS` as authoritative for direct address, speech levels, honorific titles, and self-reference (저 / 나).
+- Every line of dialogue needs a Korean speech level. Keep each speaker's level toward each listener consistent (존댓말: 합쇼체 / 해요체; 반말: 해체 / 해라체), chosen from age, rank, intimacy, and setting, and change it only when the relationship changes.
+- Keep the narration in one register across paragraphs, normally plain 해라체 (-다) unless the source narrates in a different voice.
+- Do not render every "you" as "당신" or every "he" / "she" as "그" / "그녀". Use the name, title, or kinship term, or drop the subject when Korean context makes it clear. Use "당신" only where Korean prose would, such as between spouses or in a cold or hostile tone.
+- Convert foreign titles and address to Korean usage instead of copying them: "Mr. Smith" → "스미스 씨", "sir" / "ma'am" → the listener's title with -님 or another form that fits the relationship, "Your Majesty" → "폐하". Use -씨, -님, 선배, 형, 오빠, 누나, or 언니 only when the relationship supports it, and never leave romanized suffixes such as "-ssi" or "-nim" in the output.
+- Write names and proper nouns in Hangul with exactly the rendering in `## GLOSSARY & TERMINOLOGY`. A name with no entry is transliterated by standard Korean loanword conventions and spelled the same way every time.
+- Avoid translationese: needless passives ("~에 의해", "~되어지다"), "~를 가지고 있다" for "have", stacked "~의", "~들" on every plural, and sentence-initial "그리고" / "그러나" where Korean needs no connective."""
 
 
 def _build_relationship_addressing_section() -> str:
@@ -290,7 +293,9 @@ def _build_novel_context_section(
     guidance = """
 
 Use this context for narrative consistency: character identity, proven gender,
-aliases, relationships, addressing, and discovered terminology hints.
+aliases, relationships, addressing, and terminology.
+When the glossary gives a target-language rendering for a name or term, use
+exactly that rendering every time.
 Treat stated character genders as binding continuity facts. Do not reinterpret
 or change a character's gender from a title, role, old body, disguise,
 relationship label, or model prior."""
@@ -415,7 +420,7 @@ def generate_translation_prompt(
 Translate {source_language} to {target_language}. Output only the translation.
 
 **PRIORITY ORDER:**
-1. Preserve exact names
+1. Keep names exact and consistent (use the glossary rendering when the novel context gives one)
 2. Match original tone and formality
 3. Use natural {target_language} phrasing - never word-for-word
 4. Fix grammar/spelling errors in output
@@ -592,7 +597,7 @@ You will receive a DRAFT {target_language} translation that needs significant im
 Your job is to REWRITE it with perfect literary {target_language} style.
 
 **THE INPUT IS:**
-- A amator, literal, or awkward {target_language} translation
+- An amateur, literal, or awkward {target_language} translation
 - It may have unnatural phrasing, stilted expressions, or poor flow
 - Consider it a "bad" first draft that probably needs substantial reworking
 
@@ -618,7 +623,8 @@ Your job is to REWRITE it with perfect literary {target_language} style.
 
 **WHAT TO PRESERVE:**
 - All factual content and meaning
-- Character names and proper nouns
+- Character names and proper nouns, spelled exactly as in the draft and glossary
+- Each speaker's speech level and address forms, unless they contradict the stored addressing forms
 - Technical terms (if any)
 {optional_sections}
 {relationship_addressing_section}
