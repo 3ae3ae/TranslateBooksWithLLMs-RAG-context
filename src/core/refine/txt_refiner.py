@@ -11,7 +11,7 @@ from typing import Optional, Callable, Dict, Any
 
 from src.core.text_processor import split_text_into_chunks
 from src.core.translator import refine_chunks
-from src.config import DEFAULT_MODEL, API_ENDPOINT
+from src.config import DEFAULT_MODEL
 
 
 async def refine_txt_file(
@@ -19,7 +19,7 @@ async def refine_txt_file(
     output_filepath: str,
     target_language: str,
     model_name: str = DEFAULT_MODEL,
-    cli_api_endpoint: str = API_ENDPOINT,
+    cli_api_endpoint: Optional[str] = None,
     log_callback: Optional[Callable] = None,
     stats_callback: Optional[Callable] = None,
     check_interruption_callback: Optional[Callable] = None,

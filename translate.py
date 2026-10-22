@@ -33,10 +33,10 @@ if __name__ == "__main__":
     )
     parser.add_argument("-i", "--input", required=True, help="Path to the input file (text, EPUB, or SRT).")
     parser.add_argument("-o", "--output", default=None, help="Path to the output file. If not specified, uses input filename with suffix.")
-    parser.add_argument("-sl", "--source_lang", default=DEFAULT_SOURCE_LANGUAGE, help=f"Source language (default: {DEFAULT_SOURCE_LANGUAGE}).")
-    parser.add_argument("-tl", "--target_lang", default=DEFAULT_TARGET_LANGUAGE, help=f"Target language (default: {DEFAULT_TARGET_LANGUAGE}).")
+    parser.add_argument("-sl", "--source_lang", default=DEFAULT_SOURCE_LANGUAGE, help="Source language (required for translation unless DEFAULT_SOURCE_LANGUAGE is set).")
+    parser.add_argument("-tl", "--target_lang", default=DEFAULT_TARGET_LANGUAGE, help="Target language (required, including --refine-only, unless DEFAULT_TARGET_LANGUAGE is set).")
     parser.add_argument("-m", "--model", default=DEFAULT_MODEL, help=f"LLM model (default: {DEFAULT_MODEL}).")
-    parser.add_argument("--api_endpoint", default=API_ENDPOINT, help=f"API endpoint for Ollama or OpenAI-compatible servers (llama.cpp, LM Studio, vLLM, etc.) (default: {API_ENDPOINT}).")
+    parser.add_argument("--api_endpoint", default=None, help=f"Override the provider API endpoint. Ollama and OpenAI-compatible servers default to {API_ENDPOINT}; other providers use their configured endpoints.")
     parser.add_argument("--provider", default=LLM_PROVIDER, choices=["ollama", "gemini", "openai", "openrouter", "mistral", "deepseek", "poe", "nim"], help=f"LLM provider (default: {LLM_PROVIDER}). Use 'openai' for any OpenAI-compatible server.")
     parser.add_argument("--gemini_api_key", default=GEMINI_API_KEY, help="Google Gemini API key (required if using gemini provider).")
     parser.add_argument("--openai_api_key", default=OPENAI_API_KEY, help="OpenAI API key (required for OpenAI cloud, not needed for local servers).")
@@ -58,6 +58,14 @@ if __name__ == "__main__":
     prompt_group.add_argument("--auto-update-context", action="store_true", dest="auto_update_context", help="Auto-update the novel context file with new characters, genders, and relationships after each chunk translation.")
 
     args = parser.parse_args()
+
+    if not args.target_lang.strip():
+        parser.error("--target_lang is required; pass a non-empty language or set DEFAULT_TARGET_LANGUAGE")
+    if not args.refine_only and not args.source_lang.strip():
+        parser.error("--source_lang is required for translation; pass a non-empty language or set DEFAULT_SOURCE_LANGUAGE")
+
+    if args.api_endpoint is None and args.provider in {"ollama", "openai"}:
+        args.api_endpoint = API_ENDPOINT
 
     # Auto-select default model based on provider if not explicitly set
     from src.config import NIM_MODEL, MISTRAL_MODEL, DEEPSEEK_MODEL, POE_MODEL, OPENROUTER_MODEL, GEMINI_MODEL
@@ -81,7 +89,7 @@ if __name__ == "__main__":
     from src.config import warn_env_config_missing, PORT
     warn_env_config_missing(
         provider=args.provider,
-        api_endpoint=args.api_endpoint,
+        api_endpoint=args.api_endpoint or "provider default",
         model=args.model,
         port=PORT,
     )
@@ -206,7 +214,7 @@ if __name__ == "__main__":
         translation_id = f"cli_{uuid.uuid4().hex[:8]}"
 
         if args.refine_only:
-            asyncio.run(refine_file(
+            success = asyncio.run(refine_file(
                 input_filepath=args.input,
                 output_filepath=args.output,
                 target_language=args.target_lang,
@@ -227,12 +235,14 @@ if __name__ == "__main__":
                 nim_api_key=args.nim_api_key,
                 prompt_options=prompt_options,
             ))
+            if not success:
+                raise RuntimeError("Refinement pipeline returned failure")
             logger.info("Refine-Only Completed Successfully", LogType.TRANSLATION_END, {
                 'output_file': args.output,
                 'mode': 'refine-only',
             })
         else:
-            asyncio.run(translate_file(
+            success = asyncio.run(translate_file(
                 input_filepath=args.input,
                 output_filepath=args.output,
                 source_language=args.source_lang,
@@ -255,6 +265,8 @@ if __name__ == "__main__":
                 prompt_options=prompt_options,
                 parallel_workers=args.parallel
             ))
+            if not success:
+                raise RuntimeError("Translation pipeline returned failure")
 
             logger.info("Translation Completed Successfully", LogType.TRANSLATION_END, {
                 'output_file': args.output
@@ -285,3 +297,4 @@ if __name__ == "__main__":
             'model': args.model,
             'error': str(e),
         })
+        raise SystemExit(1)

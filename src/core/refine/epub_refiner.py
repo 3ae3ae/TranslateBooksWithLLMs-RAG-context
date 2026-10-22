@@ -11,7 +11,7 @@ from typing import Optional, Callable, Dict, Any, List, Tuple
 from lxml import etree
 
 from src.config import (
-    DEFAULT_MODEL, API_ENDPOINT, MAX_TOKENS_PER_CHUNK, THINKING_MODELS,
+    DEFAULT_MODEL, MAX_TOKENS_PER_CHUNK, THINKING_MODELS,
     ADAPTIVE_CONTEXT_INITIAL_THINKING,
 )
 from src.core.epub.translator import (
@@ -166,7 +166,7 @@ async def refine_epub_file(
     output_filepath: str,
     target_language: str,
     model_name: str = DEFAULT_MODEL,
-    cli_api_endpoint: str = API_ENDPOINT,
+    cli_api_endpoint: Optional[str] = None,
     log_callback: Optional[Callable] = None,
     stats_callback: Optional[Callable] = None,
     check_interruption_callback: Optional[Callable] = None,
