@@ -41,7 +41,7 @@ TOKEN_QUERY = 'token'
 # handled separately below. Everything else under /api/ is gated.
 #
 # /api/health is intentionally public: container HEALTHCHECK and CI smoke tests
-# hit it with no credentials, and it exposes nothing sensitive (status, version,
+# hit it with no credentials, and it exposes nothing sensitive (status,
 # default Ollama endpoint, startup_time used by the client to detect restarts) —
 # never the session token, masked keys, or webhook secrets.
 _EXEMPT_ENDPOINTS = frozenset({'config.serve_interface', 'config.health_check', 'static'})

@@ -54,33 +54,7 @@ class TranslationStateManager:
                 'interrupted': False,
                 'output_filepath': None
             }
-    
-    def update_translation(self, translation_id: str, updates: Dict[str, Any]) -> bool:
-        """Update translation state safely"""
-        with self._lock:
-            if translation_id not in self._translations:
-                return False
-            
-            translation = self._translations[translation_id]
-            
-            # Handle nested updates for stats
-            if 'stats' in updates and isinstance(updates['stats'], dict):
-                if 'stats' not in translation:
-                    translation['stats'] = {}
-                translation['stats'].update(updates['stats'])
-                updates = {k: v for k, v in updates.items() if k != 'stats'}
-            
-            # Handle logs append
-            if 'log' in updates:
-                if 'logs' not in translation:
-                    translation['logs'] = []
-                translation['logs'].append(updates['log'])
-                updates = {k: v for k, v in updates.items() if k != 'log'}
-            
-            # Update remaining fields
-            translation.update(updates)
-            return True
-    
+
     def get_translation(self, translation_id: str) -> Optional[Dict[str, Any]]:
         """Get translation state safely"""
         with self._lock:
@@ -162,14 +136,7 @@ class TranslationStateManager:
                     "last_translation": data.get('last_translation')
                 })
             return sorted(summaries, key=lambda x: x.get('start_time', 0), reverse=True)
-    
-    def is_interrupted(self, translation_id: str) -> bool:
-        """Check if translation is interrupted"""
-        with self._lock:
-            if translation_id not in self._translations:
-                return False
-            return self._translations[translation_id].get('interrupted', False)
-    
+
     def set_interrupted(self, translation_id: str, interrupted: bool = True) -> bool:
         """Set interrupted flag for translation"""
         with self._lock:

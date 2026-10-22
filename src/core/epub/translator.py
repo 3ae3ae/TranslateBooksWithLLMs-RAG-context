@@ -52,7 +52,6 @@ async def translate_epub_file(
     nim_api_key: Optional[str] = None,
     context_window: int = 2048,
     auto_adjust_context: bool = True,
-    min_chunk_size: int = 5,
     checkpoint_manager=None,
     translation_id: Optional[str] = None,
     resume_from_index: int = 0,
@@ -97,7 +96,6 @@ async def translate_epub_file(
         nim_api_key: NVIDIA NIM API key
         context_window: Context window size for LLM
         auto_adjust_context: Auto-adjust context based on model
-        min_chunk_size: Minimum chunk size
         checkpoint_manager: Checkpoint manager for resume functionality
         translation_id: ID of the translation job
         resume_from_index: Index to resume from (file index)

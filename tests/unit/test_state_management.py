@@ -120,25 +120,6 @@ class TestTranslationStateManager:
         state2 = state_manager.get_translation("trans_001")
         assert state2['config']['nested']['value'] == 1  # Original unchanged
 
-    def test_update_translation_modifies_state(self, state_manager):
-        """Updates should modify the translation state."""
-        state_manager.create_translation("trans_001", {})
-
-        success = state_manager.update_translation("trans_001", {
-            'status': 'running',
-            'progress': 50
-        })
-
-        assert success is True
-        state = state_manager.get_translation("trans_001")
-        assert state['status'] == 'running'
-        assert state['progress'] == 50
-
-    def test_update_nonexistent_translation_returns_false(self, state_manager):
-        """Updating non-existent translation should return False."""
-        success = state_manager.update_translation("nonexistent", {'status': 'running'})
-        assert success is False
-
     def test_update_stats_nested_merge(self, state_manager):
         """Stats updates should merge with existing stats."""
         state_manager.create_translation("trans_001", {})
@@ -165,13 +146,13 @@ class TestTranslationStateManager:
         """Interrupted flag should be settable."""
         state_manager.create_translation("trans_001", {})
 
-        assert state_manager.is_interrupted("trans_001") is False
+        assert state_manager.get_translation_field("trans_001", "interrupted") is False
 
         state_manager.set_interrupted("trans_001", True)
-        assert state_manager.is_interrupted("trans_001") is True
+        assert state_manager.get_translation_field("trans_001", "interrupted") is True
 
         state_manager.set_interrupted("trans_001", False)
-        assert state_manager.is_interrupted("trans_001") is False
+        assert state_manager.get_translation_field("trans_001", "interrupted") is False
 
     def test_exists_check(self, state_manager):
         """Existence check should work correctly."""
@@ -630,7 +611,6 @@ class TestStateManagerCheckpointIntegration:
             assert updated_job['config']['llm_provider'] == "provider-B"
 
             checkpoint_mgr.close()
-
 
 
 class TestHealthEndpointSessionId:

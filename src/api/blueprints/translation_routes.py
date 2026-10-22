@@ -16,9 +16,7 @@ from src.config import (
     OLLAMA_NUM_CTX,
     AUTO_PAUSE_ON_RATE_LIMIT,
     MAX_PARALLEL_TRANSLATIONS,
-    MIN_CHUNK_SIZE,
 )
-from src.tts.tts_config import TTSConfig
 from src.api.api_keys import resolve_api_key as _resolve_api_key
 from src.utils.unified_logger import get_logger
 
@@ -521,9 +519,6 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
             'refine_only': data.get('refine_only', False),
             # Chained refinement pass after translation
             'refine_after': data.get('refine_after', False),
-            # TTS configuration
-            'tts_enabled': data.get('tts_enabled', False),
-            'tts_config': TTSConfig.from_web_request(data).to_dict() if data.get('tts_enabled') else None,
             # Chunker settings persisted for resume consistency
             'max_tokens_per_chunk': _clamp_chunk_tokens(
                 data.get('max_tokens_per_chunk')
@@ -532,7 +527,6 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
                 data.get('soft_limit_ratio')
                 or _config.SOFT_LIMIT_RATIO
             ),
-            'min_chunk_size': int(data.get('min_chunk_size') or MIN_CHUNK_SIZE),
         }
 
         # Add file-specific or text-specific configuration

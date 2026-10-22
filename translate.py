@@ -15,9 +15,8 @@ ensure_utf8_stdio()
 logging.getLogger('httpx').setLevel(logging.WARNING)
 
 from src.config import DEFAULT_MODEL, API_ENDPOINT, LLM_PROVIDER, GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, MISTRAL_API_KEY, DEEPSEEK_API_KEY, POE_API_KEY, NIM_API_KEY, DEFAULT_SOURCE_LANGUAGE, DEFAULT_TARGET_LANGUAGE, PARALLEL_TRANSLATIONS
-from src.utils.file_utils import get_unique_output_path, generate_tts_for_translation
+from src.utils.file_utils import get_unique_output_path
 from src.utils.unified_logger import setup_cli_logger, LogType
-from src.tts.tts_config import TTSConfig, TTS_ENABLED, TTS_VOICE, TTS_RATE, TTS_BITRATE, TTS_OUTPUT_FORMAT
 from src.persistence.checkpoint_manager import CheckpointManager
 from src.core.adapters import translate_file, refine_file
 from src.utils.notifier import notify, EVENT_SUCCESS, EVENT_FAILURE
@@ -38,7 +37,7 @@ if __name__ == "__main__":
     parser.add_argument("-tl", "--target_lang", default=DEFAULT_TARGET_LANGUAGE, help=f"Target language (default: {DEFAULT_TARGET_LANGUAGE}).")
     parser.add_argument("-m", "--model", default=DEFAULT_MODEL, help=f"LLM model (default: {DEFAULT_MODEL}).")
     parser.add_argument("--api_endpoint", default=API_ENDPOINT, help=f"API endpoint for Ollama or OpenAI-compatible servers (llama.cpp, LM Studio, vLLM, etc.) (default: {API_ENDPOINT}).")
-    parser.add_argument("--provider", default=LLM_PROVIDER, choices=["ollama", "gemini", "openai", "openrouter", "mistral", "deepseek", "poe", "nim", "litellm"], help=f"LLM provider (default: {LLM_PROVIDER}). Use 'openai' for any OpenAI-compatible server. Use 'litellm' to reach 100+ providers via a provider-prefixed model name (e.g. anthropic/claude-sonnet-4-6); keys are read from each provider's native env var (OPENAI_API_KEY, ANTHROPIC_API_KEY, ...).")
+    parser.add_argument("--provider", default=LLM_PROVIDER, choices=["ollama", "gemini", "openai", "openrouter", "mistral", "deepseek", "poe", "nim"], help=f"LLM provider (default: {LLM_PROVIDER}). Use 'openai' for any OpenAI-compatible server.")
     parser.add_argument("--gemini_api_key", default=GEMINI_API_KEY, help="Google Gemini API key (required if using gemini provider).")
     parser.add_argument("--openai_api_key", default=OPENAI_API_KEY, help="OpenAI API key (required for OpenAI cloud, not needed for local servers).")
     parser.add_argument("--openrouter_api_key", default=OPENROUTER_API_KEY, help="OpenRouter API key (required if using openrouter provider).")
@@ -58,23 +57,13 @@ if __name__ == "__main__":
     prompt_group.add_argument("--novel-context", default=None, dest="novel_context_file", help="Path or name of the novel context file in Novel_Contexts/ (e.g. novel_context.txt).")
     prompt_group.add_argument("--auto-update-context", action="store_true", dest="auto_update_context", help="Auto-update the novel context file with new characters, genders, and relationships after each chunk translation.")
 
-    # TTS (Text-to-Speech) arguments
-    tts_group = parser.add_argument_group('TTS Options', 'Text-to-Speech audio generation')
-    tts_group.add_argument("--tts", action="store_true", default=TTS_ENABLED, help="Generate audio from translated text using Edge-TTS.")
-    tts_group.add_argument("--tts-voice", default=TTS_VOICE, help="TTS voice name (auto-selected based on target language if not specified).")
-    tts_group.add_argument("--tts-rate", default=TTS_RATE, help="TTS speech rate adjustment, e.g. '+10%%' or '-20%%' (default: %(default)s).")
-    tts_group.add_argument("--tts-bitrate", default=TTS_BITRATE, help="Audio bitrate for encoding, e.g. '64k', '96k' (default: %(default)s).")
-    tts_group.add_argument("--tts-format", default=TTS_OUTPUT_FORMAT, choices=["opus", "mp3"], help="Audio output format (default: %(default)s).")
-
     args = parser.parse_args()
 
     # Auto-select default model based on provider if not explicitly set
-    from src.config import NIM_MODEL, MISTRAL_MODEL, DEEPSEEK_MODEL, POE_MODEL, OPENROUTER_MODEL, GEMINI_MODEL, LITELLM_MODEL
+    from src.config import NIM_MODEL, MISTRAL_MODEL, DEEPSEEK_MODEL, POE_MODEL, OPENROUTER_MODEL, GEMINI_MODEL
     if args.model == DEFAULT_MODEL:
         if args.provider == "nim" and NIM_MODEL:
             args.model = NIM_MODEL
-        elif args.provider == "litellm" and LITELLM_MODEL:
-            args.model = LITELLM_MODEL
         elif args.provider == "mistral" and MISTRAL_MODEL:
             args.model = MISTRAL_MODEL
         elif args.provider == "deepseek" and DEEPSEEK_MODEL:
@@ -88,7 +77,7 @@ if __name__ == "__main__":
 
     # If no .env was found, surface the *effective* settings now (after argparse)
     # so the warning box shows the real CLI arguments rather than the import-time
-    # defaults (issue #187). No-op when a .env exists or running as executable.
+    # defaults (issue #187). No-op when a .env exists.
     from src.config import warn_env_config_missing, PORT
     warn_env_config_missing(
         provider=args.provider,
@@ -138,14 +127,6 @@ if __name__ == "__main__":
         parser.error("--poe_api_key is required when using poe provider. Get your key at https://poe.com/api_key")
     if args.provider == "nim" and not args.nim_api_key:
         parser.error("--nim_api_key is required when using nim provider. Get your key at https://build.nvidia.com/")
-    # LiteLLM needs a provider-prefixed model name; the default Ollama model
-    # won't route. Keys come from each provider's native env var, so we only
-    # guard the model here rather than an API key.
-    if args.provider == "litellm" and args.model == DEFAULT_MODEL:
-        parser.error("litellm provider requires a provider-prefixed model. "
-                     "Set LITELLM_MODEL in .env or pass -m, e.g. "
-                     "-m anthropic/claude-sonnet-4-6")
-
     # Refinement is monolingual: mismatched source/target almost always
     # means the user forgot. Warn but proceed using target_lang.
     if args.refine_only and args.source_lang != args.target_lang:
@@ -289,34 +270,6 @@ if __name__ == "__main__":
             'target_lang': args.target_lang,
             'mode': 'refine-only' if args.refine_only else 'translate',
         })
-
-        # TTS Generation (if enabled)
-        if args.tts:
-            logger.info("Starting TTS Generation", LogType.INFO, {
-                'voice': args.tts_voice or 'auto',
-                'rate': args.tts_rate,
-                'format': args.tts_format
-            })
-
-            # Create TTS config from CLI arguments
-            tts_config = TTSConfig.from_cli_args(args)
-
-            # Generate audio from translated file
-            success, message, audio_path = asyncio.run(generate_tts_for_translation(
-                translated_filepath=args.output,
-                target_language=args.target_lang,
-                tts_config=tts_config,
-                log_callback=log_callback
-            ))
-
-            if success:
-                logger.info("TTS Generation Completed", LogType.INFO, {
-                    'audio_file': audio_path
-                })
-            else:
-                logger.error(f"TTS generation failed: {message}", LogType.ERROR_DETAIL, {
-                    'details': message
-                })
 
     except Exception as e:
         logger.error(f"Translation failed: {str(e)}", LogType.ERROR_DETAIL, {

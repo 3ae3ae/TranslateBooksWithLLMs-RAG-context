@@ -25,10 +25,6 @@ from urllib.parse import urlparse
 from flask import Flask
 from flask_socketio import SocketIO
 
-# Explicitly import the threading driver so PyInstaller bundles it.
-# This prevents "ValueError: Invalid async_mode specified" in the executable.
-import engineio.async_drivers.threading
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -50,7 +46,6 @@ from src.config import (
     API_ENDPOINT as DEFAULT_OLLAMA_API_ENDPOINT,
     DEFAULT_MODEL,
     PORT,
-    HOST,
     OUTPUT_DIR,
     warn_env_config_missing,
 )
@@ -62,30 +57,9 @@ from src.api.auth import register_auth
 
 
 # Initialize Flask app with static folder configuration
-# Handle PyInstaller bundle paths
-if getattr(sys, 'frozen', False):
-    # Running as compiled executable - files are in _MEIPASS
-    bundle_dir = sys._MEIPASS
-    static_folder_path = os.path.join(bundle_dir, 'src', 'web', 'static')
-    template_folder_path = os.path.join(bundle_dir, 'src', 'web', 'templates')
-
-    # Debug: print paths to verify
-    print(f"🔍 PyInstaller bundle detected")
-    print(f"   Bundle dir: {bundle_dir}")
-    print(f"   Static folder: {static_folder_path}")
-    print(f"   Template folder: {template_folder_path}")
-    print(f"   Static folder exists: {os.path.exists(static_folder_path)}")
-    print(f"   Template folder exists: {os.path.exists(template_folder_path)}")
-
-    if os.path.exists(template_folder_path):
-        print(f"   Templates: {os.listdir(template_folder_path)}")
-    if os.path.exists(bundle_dir):
-        print(f"   Bundle contents: {os.listdir(bundle_dir)}")
-else:
-    # Running as normal Python script
-    base_path = os.getcwd()
-    static_folder_path = os.path.join(base_path, 'src', 'web', 'static')
-    template_folder_path = os.path.join(base_path, 'src', 'web', 'templates')
+base_path = os.getcwd()
+static_folder_path = os.path.join(base_path, 'src', 'web', 'static')
+template_folder_path = os.path.join(base_path, 'src', 'web', 'templates')
 
 app = Flask(__name__,
             static_folder=static_folder_path,
@@ -94,8 +68,7 @@ app = Flask(__name__,
 # Security (issue #210): no wildcard CORS. The SPA is served from and talks to
 # the same origin, so it needs no CORS headers at all; omitting cors_allowed_origins
 # makes Socket.IO fall back to its same-origin default (it derives the allowed
-# origin from the request Host, which keeps localhost, 127.0.0.1 and LAN/Docker
-# access working). Cross-origin pages can therefore no longer read responses.
+# origin from the request Host). Cross-origin pages can therefore no longer read responses.
 socketio = SocketIO(app, async_mode='threading')
 
 # Gate every /api/ route behind the per-session token (issue #210).
@@ -201,7 +174,7 @@ def _ensure_novel_contexts_dir_exists():
     import shutil
     try:
         # Seeding Novel_Contexts in dev mode from unbuilt folder if missing
-        if not getattr(sys, 'frozen', False) and not NOVEL_CONTEXTS_DIR.exists():
+        if not NOVEL_CONTEXTS_DIR.exists():
             from pathlib import Path
             unbuilt_contexts = Path(__file__).parent.resolve() / 'Novel_Contexts'
             if unbuilt_contexts.exists():
@@ -269,7 +242,7 @@ def restore_incomplete_jobs():
 
 restore_incomplete_jobs()
 
-def open_browser(host, port):
+def open_browser(port):
     """Open the web interface in the default browser after a short delay"""
     if os.environ.get("TBL_NO_BROWSER", "").strip().lower() in {
         "1", "true", "yes", "on"
@@ -280,7 +253,7 @@ def open_browser(host, port):
         # Small delay to ensure server is ready
         import time
         time.sleep(1.5)
-        url = f"http://{'localhost' if host == '0.0.0.0' else host}:{port}"
+        url = f"http://127.0.0.1:{port}"
         webbrowser.open(url)
 
     # Run in background thread to not block server startup
@@ -352,16 +325,9 @@ def start_server():
         logger.info("  Press Ctrl+C to stop the server")
         logger.info("")
 
-        # Production deployment note (silent for normal use)
-        if HOST == '0.0.0.0' and os.environ.get('SHOW_PRODUCTION_WARNING'):
-            logger.warning("⚠️  Server is binding to 0.0.0.0 (all network interfaces)")
-            logger.warning("   For production, use a proper WSGI server like gunicorn")
-            logger.info("")
+        open_browser(PORT)
 
-        # Auto-open browser (especially useful for portable executable)
-        open_browser(HOST, PORT)
-
-        socketio.run(app, debug=False, host=HOST, port=PORT, allow_unsafe_werkzeug=True)
+        socketio.run(app, debug=False, host='127.0.0.1', port=PORT, allow_unsafe_werkzeug=True)
     except Exception as e:
         logger.error("="*60)
         logger.error("❌ FATAL ERROR")

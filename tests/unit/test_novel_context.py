@@ -66,17 +66,7 @@ def test_novel_context_operations():
         resolved = resolve_novel_context_path("test_novel.txt", tmp_path)
         assert resolved == tmp_path / "test_novel.txt"
 
-        # Test absolute path redirection (old unbuilt path containing Novel_Contexts)
-        old_unbuilt_path = r"C:\unbuilt_folder\Novel_Contexts\test_novel.txt"
-        resolved_old = resolve_novel_context_path(old_unbuilt_path, tmp_path)
-        assert resolved_old == tmp_path / "test_novel.txt"
-
-        # Test absolute path redirection (old app data path containing TranslateBook_Data)
-        old_data_path = r"C:\Users\lmao\Downloads\Compressed\TranslateBooksWithLLMs\TranslateBook_Data\Novel_Contexts\test_novel.txt"
-        resolved_data = resolve_novel_context_path(old_data_path, tmp_path)
-        assert resolved_data == tmp_path / "test_novel.txt"
-
-        # Test normal absolute path (should not redirect in dev/unfrozen mode)
+        # Test normal absolute path
         other_abs_path = r"C:\external_folder\my_test_context.txt"
         resolved_other = resolve_novel_context_path(other_abs_path, tmp_path)
         assert resolved_other == Path(other_abs_path).resolve()
@@ -727,8 +717,6 @@ def test_korean_prompts_include_korean_style_guardrails():
         assert "-ssi" in prompt.system or "-씨" in prompt.system
         assert "Jondaetmal" in prompt.system or "존댓말" in prompt.system
         assert "VIETNAMESE STYLE GUARDRAILS" not in prompt.system
-
-
 
 
 def test_vietnamese_prompts_guard_first_person_pronoun_consistency():
@@ -4129,55 +4117,6 @@ def test_context_prompts_define_durable_dynamic_state_deltas():
         assert "English named skill, ability, technique, spell, combat move, weapon, artifact, or equipment" in prompt
 
 
-def test_json_dynamic_addressing_preserves_social_basis_and_scope():
-    from src.utils.novel_context import _json_dynamic_state
-
-    dynamic = _json_dynamic_state(
-        {
-            "current_addressing_forms": [
-                {
-                    "speaker": "Ellen Evans",
-                    "addressee": "Frondier De Roach",
-                    "source_form": "Frondier",
-                    "target_form": "Frondier",
-                    "register": "informal peer-like address",
-                    "social_basis": (
-                        "Ellen is Aster's older sister while Frondier is "
-                        "Aster's same-year peer"
-                    ),
-                    "scope": "direct address and Ellen's indirect thoughts",
-                    "details": "academy setting, not an elder-brother form",
-                },
-                {
-                    "speaker": "Elodie de Inies Rishae",
-                    "addressee": "Frondier De Roach",
-                    "source_form": "Fron",
-                    "self_reference": "casual self-reference",
-                    "second_person_pronoun": "casual second-person pronoun",
-                    "vocative_form": "nickname",
-                    "register": "casual nickname chosen while flustered",
-                }
-            ]
-        }
-    )
-
-    assert "## CURRENT ADDRESSING FORMS" in dynamic
-    assert "Ellen Evans → Frondier De Roach" in dynamic
-    assert 'source form "Frondier"' in dynamic
-    assert 'target-language form "Frondier"' in dynamic
-    assert "informal peer-like address" in dynamic
-    assert "same-year peer" in dynamic
-    assert "indirect thoughts" in dynamic
-    assert "not an elder-brother form" in dynamic
-    assert "Elodie de Inies Rishae → Frondier De Roach" in dynamic
-    assert (
-        'target-language form "self-reference: casual self-reference; '
-        'second-person pronoun: casual second-person pronoun; '
-        'vocative/address form: nickname"'
-    ) in dynamic
-    assert "casual nickname chosen while flustered" in dynamic
-
-
 def test_vietnamese_addressing_repairs_family_pair_and_blocks_generic_downgrade():
     from src.utils.novel_context import merge_dynamic_state
 
@@ -4313,7 +4252,6 @@ async def test_update_novel_context_chunk_deduplicates_headers():
     assert "- Li Fan → Sect Master: Intimate" in updated_dynamic
 
 
-
 def test_novel_context_filename_sanitization_preserves_unicode():
     assert make_novel_context_filename("Vampire.epub") == "Vampire_context.txt"
     assert (
@@ -4332,7 +4270,7 @@ def test_novel_context_filename_sanitization_preserves_unicode():
     )
 
 
-def test_canonical_snapshot_decodes_full_and_legacy_formats():
+def test_canonical_snapshot_decodes_full_context():
     fallback = build_novel_context("GLOBAL", "FILE DYNAMIC")
     full = build_novel_context("EDITED GLOBAL", "EDITED DYNAMIC")
 
@@ -4345,14 +4283,15 @@ def test_canonical_snapshot_decodes_full_and_legacy_formats():
     assert "## CURRENT ADDRESSING FORMS" in dynamic_state
     assert "## RELATIONSHIP EVOLUTION\nEDITED DYNAMIC" in dynamic_state
 
-    decoded_legacy, global_lore, dynamic_state = decode_context_snapshot(
-        compress_dynamic_state("LEGACY DYNAMIC"),
-        fallback,
-    )
+
+def test_missing_snapshot_uses_fallback_context():
+    fallback = build_novel_context("GLOBAL", "FILE DYNAMIC")
+
+    decoded, global_lore, dynamic_state = decode_context_snapshot(None, fallback)
+
+    assert decoded == fallback
     assert global_lore == "GLOBAL"
-    assert "## CURRENT ADDRESSING FORMS" in dynamic_state
-    assert "## RELATIONSHIP EVOLUTION\nLEGACY DYNAMIC" in dynamic_state
-    assert decoded_legacy == build_novel_context("GLOBAL", "LEGACY DYNAMIC")
+    assert "## RELATIONSHIP EVOLUTION\nFILE DYNAMIC" in dynamic_state
 
 
 def test_snapshot_decode_returns_canonical_lore_for_resume():

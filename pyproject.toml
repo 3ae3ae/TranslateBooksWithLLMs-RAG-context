@@ -1,6 +1,5 @@
 [project]
 name = "translatebook"
-# Not a package; the app version lives in src/__version__.py.
 version = "0.0.0"
 requires-python = ">=3.11"
 dependencies = [
@@ -14,7 +13,6 @@ dependencies = [
     "python-dotenv",
     "aiofiles>=22.0,<25.0",
     "tiktoken>=0.5.0",
-    "edge-tts>=6.1.9",
     "pyyaml>=6.0",
     "jinja2>=3.0",
     "langdetect>=1.0.9",
@@ -23,13 +21,6 @@ dependencies = [
     "mammoth>=1.0.0",
     "python-docx>=1.1.0",
 ]
-
-# Optional, not locked (install into the project env when needed):
-#   LiteLLM gateway (CLI-only, --provider litellm):
-#     uv pip install "litellm>=1.65,<1.85"
-#   Chatterbox TTS (strict numpy/torch pins that conflict with the lock):
-#     uv pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
-#     uv pip install chatterbox-tts
 
 [dependency-groups]
 dev = [

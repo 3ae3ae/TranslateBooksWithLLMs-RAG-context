@@ -2,7 +2,6 @@
 Configuration and health check routes
 """
 import os
-import sys
 import asyncio
 import logging
 import requests
@@ -36,9 +35,6 @@ def resolve_ui_locale(req):
 
 def get_base_path():
     """Get base path for resources (templates, static files)"""
-    # In PyInstaller bundle, use the temporary extraction directory
-    if getattr(sys, 'frozen', False):
-        return sys._MEIPASS
     return os.getcwd()
 
 
@@ -48,7 +44,6 @@ def get_config_path():
 
 import src.config as _config
 from src.config import reload_config
-from src import __version__
 from src.core.llm.base import normalize_api_keys
 from src.api.api_keys import resolve_api_key as _resolve_api_key
 
@@ -90,7 +85,6 @@ def create_config_blueprint(server_session_id=None):
             'translation_interface.html',
             initial_locale=resolve_ui_locale(request),
             supported_locales=SUPPORTED_UI_LOCALES,
-            app_version=__version__,
             # Per-session token handed to the SPA so it can authenticate every
             # /api/ call and the Socket.IO handshake (issue #210). Same-origin
             # delivery means a foreign page cannot read it.
@@ -137,7 +131,6 @@ def create_config_blueprint(server_session_id=None):
             "translate_module": "loaded",
             "ollama_default_endpoint": _config.API_ENDPOINT,
             "supported_formats": ["txt", "epub", "srt"],
-            "version": __version__,
             "startup_time": startup_time,  # Used to detect server restarts
             "session_id": startup_time  # Alias for compatibility with LifecycleManager
         })

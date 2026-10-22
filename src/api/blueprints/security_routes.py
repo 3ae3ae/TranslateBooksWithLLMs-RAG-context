@@ -153,48 +153,6 @@ def create_security_blueprint(output_dir):
                 "details": "Please try again or contact support"
             }), 500
 
-    @bp.route('/api/security/cleanup', methods=['POST'])
-    def cleanup_old_files():
-        """Clean up old uploaded files (admin endpoint)"""
-        try:
-            # Get max age from request (default 24 hours)
-            max_age_hours = request.json.get('max_age_hours', 24) if request.json else 24
-
-            # Validate input
-            if not isinstance(max_age_hours, (int, float)) or max_age_hours < 1:
-                return jsonify({"error": "Invalid max_age_hours parameter"}), 400
-
-            # Perform cleanup
-            secure_file_handler.cleanup_old_files(max_age_hours)
-
-            return jsonify({
-                "success": True,
-                "message": f"Cleanup completed for files older than {max_age_hours} hours"
-            })
-
-        except Exception as e:
-            current_app.logger.error(f"Cleanup error: {str(e)}")
-            return jsonify({"error": "Cleanup failed"}), 500
-
-    @bp.route('/api/security/info', methods=['GET'])
-    def get_security_info():
-        """Get security configuration and limits"""
-        client_ip = get_client_ip(request)
-
-        return jsonify({
-            "file_limits": {
-                "max_size_mb": SecureFileHandler.MAX_FILE_SIZE // (1024 * 1024),
-                "allowed_extensions": list(SecureFileHandler.ALLOWED_EXTENSIONS),
-                "allowed_mime_types": list(SecureFileHandler.ALLOWED_MIME_TYPES)
-            },
-            "rate_limit": {
-                "remaining_requests": rate_limiter.get_remaining_requests(client_ip),
-                "window_seconds": rate_limiter._window_seconds,
-                "max_requests": rate_limiter._max_requests
-            },
-            "upload_directory": str(secure_file_handler.upload_dir)
-        })
-
     @bp.route('/api/uploads/verify', methods=['POST'])
     def verify_uploaded_files():
         """Verify which uploaded files still exist on the server"""

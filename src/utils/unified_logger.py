@@ -104,12 +104,7 @@ class UnifiedLogger:
     def _format_timestamp(self) -> str:
         """Format current timestamp"""
         return datetime.now().strftime("%H:%M:%S")
-    
-    def _print_separator(self, char: str = '=', length: int = 80, color: str = Colors.GRAY):
-        """Print a colored separator line"""
-        if self.console_output:
-            print(f"{color}{char * length}{Colors.ENDC}")
-    
+
     def _format_console_message(self, level: LogLevel, message: str, 
                                log_type: LogType = LogType.GENERAL,
                                data: Optional[Dict[str, Any]] = None) -> str:
@@ -554,21 +549,6 @@ def log(level: LogLevel, message: str,
     logger.log(level, message, log_type, data)
 
 
-def debug(message: str, log_type: LogType = LogType.GENERAL, data: Optional[Dict[str, Any]] = None):
-    """Log debug message using global logger."""
-    log(LogLevel.DEBUG, message, log_type, data)
-
-
 def info(message: str, log_type: LogType = LogType.GENERAL, data: Optional[Dict[str, Any]] = None):
     """Log info message using global logger."""
     log(LogLevel.INFO, message, log_type, data)
-
-
-def warning(message: str, log_type: LogType = LogType.GENERAL, data: Optional[Dict[str, Any]] = None):
-    """Log warning message using global logger."""
-    log(LogLevel.WARNING, message, log_type, data)
-
-
-def error(message: str, log_type: LogType = LogType.GENERAL, data: Optional[Dict[str, Any]] = None):
-    """Log error message using global logger."""
-    log(LogLevel.ERROR, message, log_type, data)

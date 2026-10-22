@@ -350,47 +350,6 @@ class TestMultipleFilesInterruption:
 class TestStateManagement:
     """Tests for checkpoint state management across files."""
 
-    def test_list_partial_states(self, temp_checkpoint_manager):
-        """Test listing all partial states for a translation job."""
-        translation_id = "test_list_states"
-
-        # Create multiple states
-        from src.core.epub.xhtml_translation_state import XHTMLTranslationState
-        now = datetime.now(UTC).isoformat()
-        files = [
-            "OEBPS/chapter1.xhtml",
-            "OEBPS/chapter2.xhtml",
-            "OEBPS/chapter3.xhtml",
-        ]
-
-        for file_href in files:
-            state = XHTMLTranslationState(
-                file_path=file_href,
-                translation_id=translation_id,
-                file_href=file_href,
-                source_language="English",
-                target_language="French",
-                model_name="test-model",
-                max_tokens_per_chunk=100,
-                max_retries=1,
-                chunks=[],
-                global_tag_map={},
-                placeholder_format=('[[', ']]'),
-                translated_chunks=[],
-                current_chunk_index=0,
-                original_body_html='',
-                doc_metadata={},
-                stats={},
-                created_at=now,
-                updated_at=now,
-            )
-            temp_checkpoint_manager.save_xhtml_partial_state(translation_id, file_href, state)
-
-        # List all states
-        states = temp_checkpoint_manager.list_xhtml_partial_states(translation_id)
-
-        # Should have 3 states
-        assert len(states) >= 3, f"Expected at least 3 states, got {len(states)}"
 
     def test_cleanup_all_states(self, temp_checkpoint_manager):
         """Test cleaning up all partial states for a job."""
@@ -426,16 +385,16 @@ class TestStateManagement:
             temp_checkpoint_manager.save_xhtml_partial_state(translation_id, file_href, state)
 
         # Verify states exist
-        states_before = temp_checkpoint_manager.list_xhtml_partial_states(translation_id)
-        assert len(states_before) >= 2
+        for file_href in files:
+            assert temp_checkpoint_manager.load_xhtml_partial_state(translation_id, file_href) is not None
 
         # Delete all states
         for file_href in files:
             temp_checkpoint_manager.delete_xhtml_partial_state(translation_id, file_href)
 
         # Verify states deleted
-        states_after = temp_checkpoint_manager.list_xhtml_partial_states(translation_id)
-        assert len(states_after) == 0, "All states should be deleted"
+        for file_href in files:
+            assert temp_checkpoint_manager.load_xhtml_partial_state(translation_id, file_href) is None
 
 
 class TestErrorRecovery:

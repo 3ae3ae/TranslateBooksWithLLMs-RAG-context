@@ -44,7 +44,6 @@ async def translate_file(
     nim_api_key: Optional[str] = None,
     context_window: Optional[int] = None,
     auto_adjust_context: bool = True,
-    min_chunk_size: int = 5,
     max_tokens_per_chunk: Optional[int] = None,
     prompt_options: Optional[Dict[str, Any]] = None,
     bilingual_output: bool = False,
@@ -81,7 +80,6 @@ async def translate_file(
         nim_api_key: NVIDIA NIM API key
         context_window: Maximum context window size in tokens
         auto_adjust_context: Whether to automatically adjust context size
-        min_chunk_size: Minimum chunk size for text splitting
         prompt_options: Optional prompt customization options
         bilingual_output: If True, output will contain both original and translated text
         **additional_config: Additional configuration passed to the adapter
@@ -187,7 +185,6 @@ async def translate_file(
             nim_api_key=nim_api_key,
             context_window=context_window or 2048,
             auto_adjust_context=auto_adjust_context,
-            min_chunk_size=min_chunk_size,
             max_tokens_per_chunk=max_tokens_per_chunk,
             checkpoint_manager=checkpoint_manager,
             translation_id=translation_id,
@@ -258,7 +255,6 @@ async def translate_file(
     adapter_config = {
         'context_window': context_window,
         'auto_adjust_context': auto_adjust_context,
-        'min_chunk_size': min_chunk_size,
         'max_tokens_per_chunk': max_tokens_per_chunk,
         'prompt_options': prompt_options,
         **additional_config

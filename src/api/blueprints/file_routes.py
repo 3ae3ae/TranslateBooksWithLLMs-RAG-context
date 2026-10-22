@@ -234,7 +234,7 @@ def create_file_blueprint(output_dir):
     def open_output_folder():
         """Open the translations output folder in the system's file explorer."""
         try:
-            success, message, abs_path = file_service.open_output_folder()
+            success, message, abs_path = file_service.open_system_folder(output_dir)
             if success:
                 current_app.logger.info(f"Opened output folder: {abs_path}")
                 return jsonify({"success": True, "message": message, "folder_path": abs_path})

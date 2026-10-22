@@ -91,12 +91,6 @@ class Database:
                 )
             """)
 
-            # Add server_session_id column if it doesn't exist (migration for existing DBs)
-            cursor.execute("PRAGMA table_info(translation_jobs)")
-            columns = [row[1] for row in cursor.fetchall()]
-            if 'server_session_id' not in columns:
-                cursor.execute("ALTER TABLE translation_jobs ADD COLUMN server_session_id TEXT")
-
             # Checkpoint chunks table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS checkpoint_chunks (
@@ -158,8 +152,6 @@ class Database:
                     'start_time': time.time(),  # Use timestamp for compatibility with existing code
                     # Marks the uniform checkpoint convention: current_chunk_index
                     # is the LAST COMPLETED unit for every format (resume = +1).
-                    # Absent on pre-migration checkpoints, which load_checkpoint
-                    # still handles via the legacy per-format branch.
                     'resume_index_semantics': 'completed',
                 }
 
@@ -416,27 +408,6 @@ class Database:
                 return chunks
             except Exception as e:
                 print(f"Error getting chunks: {e}")
-                return []
-
-    def get_failed_chunk_indices(self, translation_id: str) -> List[int]:
-        """
-        Return the chunk_index of every chunk currently marked 'failed'.
-
-        Used by the resume path to retry chunks that previously errored,
-        instead of leaving them as untranslated holes in the output.
-        """
-        with self._lock:
-            try:
-                conn = self._get_connection()
-                cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT chunk_index FROM checkpoint_chunks
-                    WHERE translation_id = ? AND status = 'failed'
-                    ORDER BY chunk_index
-                """, (translation_id,))
-                return [row['chunk_index'] for row in cursor.fetchall()]
-            except Exception as e:
-                print(f"Error getting failed chunks: {e}")
                 return []
 
     def get_chunk_status_counts(self, translation_id: str) -> Dict[str, int]:

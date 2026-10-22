@@ -182,41 +182,6 @@ class TestCheckpointManagerXHTMLPartialState:
             loaded_state = manager.load_xhtml_partial_state(translation_id, file_href)
             assert loaded_state is not None
 
-    def test_list_xhtml_partial_states(self, temp_checkpoint_manager, sample_state):
-        """Test listing all partial states for a job."""
-        manager = temp_checkpoint_manager
-        translation_id = "test_trans_list"
-
-        # Initially empty
-        states = manager.list_xhtml_partial_states(translation_id)
-        assert states == []
-
-        # Save multiple states
-        file_hrefs = [
-            "OEBPS/chapter1.xhtml",
-            "OEBPS/chapter2.xhtml",
-            "OEBPS/Text/chapter3.xhtml",
-        ]
-
-        for file_href in file_hrefs:
-            manager.save_xhtml_partial_state(translation_id, file_href, sample_state)
-
-        # List states
-        states = manager.list_xhtml_partial_states(translation_id)
-        assert len(states) == 3
-
-        # Note: The list function reconstructs file_href by replacing _ with /
-        # This works for simple cases but may not perfectly reconstruct complex paths
-        # For now, just verify we get the right count
-        assert len(states) == len(file_hrefs)
-
-    def test_list_states_for_nonexistent_job(self, temp_checkpoint_manager):
-        """Test listing states for a job that doesn't exist."""
-        manager = temp_checkpoint_manager
-
-        states = manager.list_xhtml_partial_states("nonexistent_job")
-        assert states == []
-
     def test_invalid_state_not_loaded(self, temp_checkpoint_manager):
         """Test that invalid states are rejected during load."""
         manager = temp_checkpoint_manager

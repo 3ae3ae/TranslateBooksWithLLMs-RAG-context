@@ -37,31 +37,13 @@ if _debug_mode:
 # later by warn_env_config_missing(), which the entrypoints call AFTER they
 # have resolved their effective settings — so the warning shows the real CLI
 # arguments (provider, endpoint, model) instead of import-time defaults (#187).
-_is_frozen = getattr(sys, 'frozen', False)
-
-# Path to Novel_Contexts and Custom_Instructions directory.
-# In frozen mode, they live inside TranslateBook_Data next to the executable.
-# In development mode, we also want to read and write to TranslateBook_Data
-# to avoid polluting the root repository directory (the unbuilt folder).
-if _is_frozen:
-    _exe_dir = Path(sys.executable).parent
-    NOVEL_CONTEXTS_DIR = _exe_dir / 'TranslateBook_Data' / 'Novel_Contexts'
-    CUSTOM_INSTRUCTIONS_DIR = _exe_dir / 'TranslateBook_Data' / 'Custom_Instructions'
-    TRANSLATION_PROFILES_DIR = _exe_dir / 'TranslateBook_Data' / 'Translation_Profiles'
-    DATA_DIR = _exe_dir / 'TranslateBook_Data' / 'data'
-    UPLOADS_DIR = DATA_DIR / 'uploads'
-else:
-    _project_root = Path(__file__).parent.parent.resolve()
-    NOVEL_CONTEXTS_DIR = _project_root / 'TranslateBook_Data' / 'Novel_Contexts'
-    CUSTOM_INSTRUCTIONS_DIR = _project_root / 'TranslateBook_Data' / 'Custom_Instructions'
-    TRANSLATION_PROFILES_DIR = _project_root / 'TranslateBook_Data' / 'Translation_Profiles'
-    DATA_DIR = _project_root / 'data'
-    UPLOADS_DIR = DATA_DIR / 'uploads'
+_project_root = Path(__file__).parent.parent.resolve()
+NOVEL_CONTEXTS_DIR = _project_root / 'TranslateBook_Data' / 'Novel_Contexts'
+CUSTOM_INSTRUCTIONS_DIR = _project_root / 'TranslateBook_Data' / 'Custom_Instructions'
+TRANSLATION_PROFILES_DIR = _project_root / 'TranslateBook_Data' / 'Translation_Profiles'
+DATA_DIR = _project_root / 'data'
+UPLOADS_DIR = DATA_DIR / 'uploads'
 ENV_FILE_MISSING = not _env_exists
-
-if ENV_FILE_MISSING and _is_frozen and _debug_mode:
-    # Running as executable - silently use defaults
-    _config_logger.debug("⚠️  .env not found, using defaults (executable mode)")
 
 # Load .env file if it exists
 _dotenv_result = load_dotenv(_env_file)
@@ -90,9 +72,6 @@ _RELOADABLE_ENV_SETTINGS = (
     ('POE_MODEL',           'POE_MODEL',           'Claude-Sonnet-4'),
     ('NIM_API_KEY',         'NIM_API_KEY',         ''),
     ('NIM_MODEL',           'NIM_MODEL',           'meta/llama-3.1-8b-instruct'),
-    # LiteLLM gateway (CLI-only). Provider-prefixed model name, e.g.
-    # "anthropic/claude-sonnet-4-6". Keys are read from each provider's native
-    # env var (OPENAI_API_KEY, ANTHROPIC_API_KEY, ...), not from a single key.
     ('LITELLM_MODEL',       'LITELLM_MODEL',       ''),
     ('OUTPUT_FILENAME_PATTERN', 'OUTPUT_FILENAME_PATTERN', '{originalName} ({targetLang}).{ext}'),
     ('DISABLE_AUTO_PAUSE',   'DISABLE_AUTO_PAUSE',   'false'),
@@ -227,9 +206,9 @@ def warn_env_config_missing(provider=None, api_endpoint=None, model=None, port=N
     args for translate.py, config defaults for the web server), so the box
     reflects what the run will really use instead of hardcoded defaults (#187).
 
-    No-op when a .env exists or when running as a frozen executable.
+    No-op when a .env exists.
     """
-    if not ENV_FILE_MISSING or _is_frozen:
+    if not ENV_FILE_MISSING:
         return
 
     provider = LLM_PROVIDER if provider is None else provider
@@ -361,8 +340,6 @@ REPETITION_MIN_COUNT_THINKING = int(os.getenv("REPETITION_MIN_COUNT_THINKING", "
 REPETITION_MIN_COUNT_STREAMING = int(os.getenv("REPETITION_MIN_COUNT_STREAMING", "12"))  # Min repetitions during streaming (early detection)
 
 # Legacy settings (kept for compatibility)
-MIN_RECOMMENDED_NUM_CTX = 4096  # Minimum recommended context for chunk_size=25
-SAFETY_MARGIN = 1.1  # 10% safety margin for token estimation
 MIN_CHUNK_SIZE = int(os.getenv("MIN_CHUNK_SIZE", "5"))
 MAX_CHUNK_SIZE = int(os.getenv("MAX_CHUNK_SIZE", "100"))
 
@@ -370,25 +347,6 @@ MAX_CHUNK_SIZE = int(os.getenv("MAX_CHUNK_SIZE", "100"))
 # All file types use token-based chunking with tiktoken for consistent chunk sizes
 MAX_TOKENS_PER_CHUNK = int(os.getenv('MAX_TOKENS_PER_CHUNK', '450'))
 SOFT_LIMIT_RATIO = float(os.getenv('SOFT_LIMIT_RATIO', '0.8'))
-
-# === Translation Buffer Configuration ===
-TRANSLATION_OUTPUT_MULTIPLIER = 2
-"""Multiplicateur pour la longueur de sortie estimée (certaines langues cibles
-peuvent être 2x plus longues que la source)"""
-
-TRANSLATION_TAG_OVERHEAD = 50
-"""Tokens réservés pour les balises XML de traduction (<Translated>...</Translated>)"""
-
-# === Placeholder Validation ===
-MAX_PLACEHOLDER_RETRIES = 3
-"""Nombre maximum de tentatives de validation des placeholders"""
-
-MAX_PLACEHOLDER_CORRECTION_ATTEMPTS = 2
-"""Nombre maximum de tentatives de correction LLM pour les placeholders malformés"""
-
-# === Chunking Limits ===
-MIN_CHUNK_SIZE_TOKENS = 50
-"""Taille minimale d'un chunk pour éviter la sur-fragmentation"""
 
 # LLM Provider configuration
 # LLM_PROVIDER, GEMINI_*, OPENAI_*, OPENROUTER_API_KEY/MODEL, MISTRAL_API_KEY/MODEL,
@@ -433,24 +391,10 @@ METADATA_VERSION = "1.0"
 DEFAULT_SOURCE_LANGUAGE = os.getenv('DEFAULT_SOURCE_LANGUAGE', '')  # Empty = auto-detect
 DEFAULT_TARGET_LANGUAGE = os.getenv('DEFAULT_TARGET_LANGUAGE', '')  # Empty = use browser language
 
-# ============================================================================
-# PROMPT OPTIONS CONFIGURATION
-# ============================================================================
-# These options control which optional sections are included in the system prompt.
-# Each option can be enabled/disabled via the web interface or CLI.
-
-# Technical Content Preservation (always enabled)
-# Automatically detects and preserves code, paths, URLs, formulas, etc.
-# This is always active as it has no negative impact on literary texts.
-PROMPT_PRESERVE_TECHNICAL_CONTENT = True
-
-# Server configuration
-HOST = os.getenv('HOST', '127.0.0.1')
 # Resolve OUTPUT_DIR to an absolute path so downstream code (file listing, writes,
 # checkpoints) is independent of any later cwd change. A relative value still
 # anchors to the cwd at config-load time, which matches the previous behavior
-# (os.makedirs was already cwd-relative). The PyInstaller launcher chdir's to its
-# data folder before this module is imported, so .exe behavior is preserved.
+# (os.makedirs was already cwd-relative).
 OUTPUT_DIR = str(Path(os.getenv('OUTPUT_DIR', 'translated_files')).expanduser().resolve())
 
 # Output filename pattern
@@ -499,7 +443,6 @@ if DEBUG_MODE or _debug_mode:
     _config_logger.debug(f"   DEFAULT_MODEL: {DEFAULT_MODEL}")
     _config_logger.debug(f"   LLM_PROVIDER: {LLM_PROVIDER}")
     _config_logger.debug(f"   PORT: {PORT}")
-    _config_logger.debug(f"   HOST: {HOST}")
     _config_logger.debug(f"   DEFAULT_SOURCE_LANGUAGE: {DEFAULT_SOURCE_LANGUAGE}")
     _config_logger.debug(f"   DEFAULT_TARGET_LANGUAGE: {DEFAULT_TARGET_LANGUAGE}")
     _config_logger.debug(f"   OLLAMA_NUM_CTX: {OLLAMA_NUM_CTX}")
@@ -560,31 +503,11 @@ MAX_PLACEHOLDER_CORRECTION_ATTEMPTS = 0
 EPUB_TOKEN_ALIGNMENT_ENABLED = os.getenv('EPUB_TOKEN_ALIGNMENT_ENABLED', 'true').lower() == 'true'
 """Enable token alignment fallback for EPUB translation (Phase 2)"""
 
-EPUB_TOKEN_ALIGNMENT_METHOD = os.getenv('EPUB_TOKEN_ALIGNMENT_METHOD', 'proportional')
-"""
-Alignment method to use:
-- 'proportional': Simple position-based alignment (fast, no dependencies)
-- 'advanced': Future - could add ML-based alignment
-"""
-
 STRUCTURED_REFINEMENT_HIDE_PLACEHOLDERS = os.getenv(
     'STRUCTURED_REFINEMENT_HIDE_PLACEHOLDERS',
     os.getenv('EPUB_REFINEMENT_HIDE_PLACEHOLDERS', 'true'),
 ).lower() == 'true'
 """Hide structured-document placeholders during refinement and reinsert them deterministically."""
-
-
-def detect_placeholder_mode(text: str) -> tuple:
-    """
-    Returns the unified placeholder format [idN].
-
-    Args:
-        text: Text (parameter kept for backward compatibility but unused)
-
-    Returns:
-        Tuple of (prefix, suffix, pattern) for the [idN] format
-    """
-    return (PLACEHOLDER_PREFIX, PLACEHOLDER_SUFFIX, PLACEHOLDER_PATTERN)
 
 
 def create_placeholder(tag_num: int, prefix: str = None, suffix: str = None) -> str:
@@ -643,24 +566,6 @@ NAMESPACES = {
     'xhtml': 'http://www.w3.org/1999/xhtml',
     'epub': 'http://www.idpf.org/2007/ops'
 }
-
-IGNORED_TAGS_EPUB = [
-    '{http://www.w3.org/1999/xhtml}script',
-    '{http://www.w3.org/1999/xhtml}style',
-    '{http://www.w3.org/1999/xhtml}meta',
-    '{http://www.w3.org/1999/xhtml}link'
-]
-
-CONTENT_BLOCK_TAGS_EPUB = [
-    '{http://www.w3.org/1999/xhtml}p', '{http://www.w3.org/1999/xhtml}div',
-    '{http://www.w3.org/1999/xhtml}li', '{http://www.w3.org/1999/xhtml}h1',
-    '{http://www.w3.org/1999/xhtml}h2', '{http://www.w3.org/1999/xhtml}h3',
-    '{http://www.w3.org/1999/xhtml}h4', '{http://www.w3.org/1999/xhtml}h5',
-    '{http://www.w3.org/1999/xhtml}h6', '{http://www.w3.org/1999/xhtml}blockquote',
-    '{http://www.w3.org/1999/xhtml}td', '{http://www.w3.org/1999/xhtml}th',
-    '{http://www.w3.org/1999/xhtml}caption',
-    '{http://www.w3.org/1999/xhtml}dt', '{http://www.w3.org/1999/xhtml}dd'
-]
 
 # Model family context size defaults (shared across providers)
 # Used as fallback when context size cannot be detected from the server
@@ -832,20 +737,3 @@ def detect_placeholder_format_in_text(text: str) -> tuple:
         ("[id", "]")
     """
     return PLACEHOLDER_PREFIX, PLACEHOLDER_SUFFIX
-
-
-def detect_existing_placeholder_format(text: str) -> tuple:
-    """
-    Returns the unified placeholder format [idN].
-
-    Args:
-        text: Text (parameter kept for backward compatibility but unused)
-
-    Returns:
-        Tuple of (prefix, suffix, pattern) for the [idN] format
-
-    Example:
-        >>> detect_existing_placeholder_format("Hello [id0] world [id1]")
-        ("[id", "]", r'\\[id(\\d+)\\]')
-    """
-    return (PLACEHOLDER_PREFIX, PLACEHOLDER_SUFFIX, PLACEHOLDER_PATTERN)

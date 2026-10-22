@@ -17,7 +17,6 @@ _DEFAULT_COMPACT_ENV_VALUES = {
     "API_ENDPOINT": "http://localhost:11434/api/generate",
     "OLLAMA_API_ENDPOINT": "http://localhost:11434/api/generate",
     "PORT": "5000",
-    "HOST": "127.0.0.1",
     "OUTPUT_DIR": "translated_files",
     "DEFAULT_SOURCE_LANGUAGE": "",
     "DEFAULT_TARGET_LANGUAGE": "",
@@ -50,7 +49,6 @@ _COMPACT_ENV_LAYOUT = [
     "API_ENDPOINT",
     "OLLAMA_API_ENDPOINT",
     "PORT",
-    "HOST",
     "OUTPUT_DIR",
     "DEFAULT_SOURCE_LANGUAGE",
     "DEFAULT_TARGET_LANGUAGE",
@@ -139,11 +137,6 @@ def create_env_file(force: bool = False) -> bool:
     except Exception as e:
         print(f"❌ Failed to create .env: {e}")
         return False
-
-
-def create_env_from_template(force: bool = False) -> bool:
-    """Backward-compatible alias for create_env_file()."""
-    return create_env_file(force=force)
 
 
 def validate_env_config(verbose: bool = True) -> dict:

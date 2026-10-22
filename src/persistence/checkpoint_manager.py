@@ -287,25 +287,8 @@ class CheckpointManager:
         # Get chunks
         chunks = self.db.get_chunks(translation_id)
 
-        # Determine resume point.
-        #
-        # New (uniform) convention: every format stores current_chunk_index as
-        # the LAST COMPLETED unit, so resume is always current_chunk_index + 1.
-        # New checkpoints carry the 'resume_index_semantics' = 'completed' marker
-        # (set at job creation).
-        #
-        # Legacy fallback (pre-migration checkpoints, no marker): EPUB used to
-        # store file_idx + 1 (the next file), so it must NOT add +1; TXT/SRT
-        # stored the last completed chunk, so they add +1.
         progress = job['progress']
-        file_type = job.get('file_type', 'txt')
-
-        if progress.get('resume_index_semantics') == 'completed':
-            resume_from_index = progress['current_chunk_index'] + 1
-        elif file_type == 'epub':
-            resume_from_index = max(0, progress['current_chunk_index'])
-        else:
-            resume_from_index = progress['current_chunk_index'] + 1
+        resume_from_index = progress['current_chunk_index'] + 1
 
         failed_chunk_indices = [
             c['chunk_index'] for c in chunks if c.get('status') == 'failed'
@@ -1036,27 +1019,6 @@ class CheckpointManager:
                 print(f"Warning: Could not delete partial state: {e}")
                 return False
         return True
-
-    def list_xhtml_partial_states(self, translation_id: str) -> List[str]:
-        """
-        List all partial states for a translation job.
-
-        Args:
-            translation_id: Job identifier
-
-        Returns:
-            List of file_href strings that have partial states
-        """
-        states_dir = self.uploads_dir / translation_id / "xhtml_states"
-        if not states_dir.exists():
-            return []
-
-        states = []
-        for state_file in states_dir.glob("*.json"):
-            # Reconstruct original file_href (reverse the safe filename transformation)
-            file_href = state_file.stem.replace('_', '/')
-            states.append(file_href)
-        return states
 
     def close(self):
         """Close database connection."""

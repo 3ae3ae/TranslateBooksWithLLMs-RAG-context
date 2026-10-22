@@ -577,22 +577,6 @@ class SecureFileHandler:
         except Exception as e:
             logger.error(f"Unexpected error when cleaning up temporary file {temp_path.name}: {str(e)}")
 
-    def cleanup_old_files(self, max_age_hours: int = 24):
-        """Clean up old uploaded files"""
-        import time
-        
-        current_time = time.time()
-        max_age_seconds = max_age_hours * 3600
-        
-        for file_path in self.upload_dir.iterdir():
-            if file_path.is_file():
-                file_age = current_time - file_path.stat().st_mtime
-                if file_age > max_age_seconds:
-                    try:
-                        file_path.unlink()
-                        print(f"Cleaned up old file: {file_path.name}")
-                    except Exception as e:
-                        print(f"Failed to cleanup {file_path.name}: {e}")
 
 
 class RateLimiter:
@@ -640,13 +624,4 @@ rate_limiter = RateLimiter()
 
 def get_client_ip(request) -> str:
     """Get client IP address from Flask request"""
-    # Check for X-Forwarded-For header (proxy/load balancer)
-    if 'X-Forwarded-For' in request.headers:
-        return request.headers['X-Forwarded-For'].split(',')[0].strip()
-    
-    # Check for X-Real-IP header (nginx)
-    if 'X-Real-IP' in request.headers:
-        return request.headers['X-Real-IP']
-    
-    # Fallback to remote address
     return request.remote_addr or '127.0.0.1'

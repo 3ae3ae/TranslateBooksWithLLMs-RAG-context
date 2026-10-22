@@ -12,7 +12,7 @@ by analyzing their actual content.
 import os
 import re
 import zipfile
-from typing import Literal, Optional, Tuple
+from typing import Literal, Optional
 from pathlib import Path
 
 FileType = Literal["txt", "epub", "srt", "docx"]
@@ -322,43 +322,3 @@ def _is_readable_text(content: str) -> bool:
     # Text should be mostly printable with very few control characters
     # Threshold: 95% printable, less than 1% control characters
     return printable_ratio > 0.95 and control_ratio < 0.01
-
-
-def detect_file_type_safe(file_path: str) -> Tuple[Optional[FileType], Optional[str]]:
-    """
-    Safely detect file type, returning error message instead of raising.
-
-    This is useful for validation flows where you want to provide
-    user-friendly error messages.
-
-    Args:
-        file_path: Path to the file
-
-    Returns:
-        Tuple of (file_type, error_message)
-        - If successful: (file_type, None)
-        - If failed: (None, error_message)
-    """
-    try:
-        file_type = detect_file_type(file_path)
-        return file_type, None
-    except ValueError as e:
-        return None, str(e)
-    except Exception as e:
-        return None, f"Error detecting file type: {str(e)}"
-
-
-def generate_output_filename(input_path: str, target_language: str) -> str:
-    """
-    Generate output filename based on input and target language
-    
-    Args:
-        input_path: Input file path
-        target_language: Target language
-        
-    Returns:
-        Generated output filename
-    """
-    base, ext = os.path.splitext(input_path)
-    lang_suffix = target_language.lower().replace(' ', '_')
-    return f"{base}_{lang_suffix}{ext}"

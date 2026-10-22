@@ -9,7 +9,6 @@ into separate modules for better maintainability:
 - blueprints/translation_routes.py: Translation job management
 - blueprints/file_routes.py: File listing, download, delete operations
 - blueprints/security_routes.py: File upload and security endpoints
-- blueprints/tts_routes.py: TTS audio generation from existing files
 """
 from flask import jsonify
 
@@ -18,10 +17,8 @@ from .blueprints import (
     create_translation_blueprint,
     create_file_blueprint,
     create_security_blueprint,
-    create_tts_blueprint,
     create_glossary_blueprint,
     create_cost_blueprint,
-    create_version_blueprint,
     create_sample_blueprint,
     create_profile_blueprint,
 )
@@ -66,15 +63,6 @@ def configure_routes(app, state_manager, output_dir, start_translation_job, sock
     # connections across the blueprint and the translation handler.
     glossary_bp = create_glossary_blueprint(store=state_manager.get_glossary_store())
     app.register_blueprint(glossary_bp)
-
-    # Register TTS routes (requires socketio for progress updates)
-    if socketio:
-        tts_bp = create_tts_blueprint(output_dir, socketio)
-        app.register_blueprint(tts_bp)
-
-    # Register version check & self-update routes
-    version_bp = create_version_blueprint(state_manager)
-    app.register_blueprint(version_bp)
 
     # Register Sample & Compare routes (ephemeral, in-memory).
     # The sample state manager is owned by this blueprint — sample runs are

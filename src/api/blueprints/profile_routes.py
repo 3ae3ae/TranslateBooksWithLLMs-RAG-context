@@ -31,10 +31,6 @@ STRING_FIELDS = {
     "glossary": 100,
     "custom_instruction_file": 255,
     "novel_context_file": 255,
-    "tts_voice": 255,
-    "tts_rate": 20,
-    "tts_format": 20,
-    "tts_bitrate": 20,
     "output_filename_pattern": 500,
 }
 BOOLEAN_FIELDS = {
@@ -44,7 +40,6 @@ BOOLEAN_FIELDS = {
     "plain_text_mode",
     "chapter_mode",
     "auto_pause_on_rate_limit",
-    "tts_enabled",
 }
 INTEGER_FIELDS = {
     "parallel_workers": (1, 16),
