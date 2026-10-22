@@ -21,7 +21,6 @@ import logging
 import webbrowser
 import threading
 from pathlib import Path
-from datetime import datetime
 from urllib.parse import urlparse
 from flask import Flask
 from flask_socketio import SocketIO
@@ -48,6 +47,7 @@ from src.config import (
     DEFAULT_MODEL,
     PORT,
     OUTPUT_DIR,
+    INCOMING_DIR,
 )
 from src.api.routes import configure_routes
 from src.api.websocket import configure_websocket_handlers
@@ -57,9 +57,9 @@ from src.api.auth import register_auth
 
 
 # Initialize Flask app with static folder configuration
-base_path = os.getcwd()
-static_folder_path = os.path.join(base_path, 'src', 'web', 'static')
-template_folder_path = os.path.join(base_path, 'src', 'web', 'templates')
+web_path = Path(__file__).resolve().parent / 'web'
+static_folder_path = web_path / 'static'
+template_folder_path = web_path / 'templates'
 
 app = Flask(__name__,
             static_folder=static_folder_path,
@@ -96,7 +96,7 @@ def validate_configuration():
         for issue in issues:
             logger.error(f"   • {issue}")
         logger.error("\n💡 SOLUTION:")
-        logger.error("   1. Create a .env file from .env.example")
+        logger.error("   1. Configure TBL_HOME/.env")
         logger.error("   2. Configure the required settings")
         logger.error("   3. Restart the application")
         logger.error("="*70 + "\n")
@@ -153,7 +153,7 @@ def _log_output_dir_error(path, action, exc, permission_denied):
             logger.error("     - The folder is owned by another user or is read-only")
         logger.error("")
         logger.error("   How to fix:")
-        logger.error("     1. Move the project to a writable location (e.g. your home folder)")
+        logger.error("     1. Set TBL_HOME to a writable folder")
         logger.error("     2. Or set OUTPUT_DIR=<absolute path to a writable folder> in .env")
         if sys.platform == "win32":
             logger.error("     3. Or whitelist Python in Windows Defender / your antivirus")
@@ -165,30 +165,6 @@ def _log_output_dir_error(path, action, exc, permission_denied):
 
 _ensure_output_dir_writable(OUTPUT_DIR)
 logger.info(f"Output folder '{OUTPUT_DIR}' is ready")
-
-# Ensure Novel_Contexts directory exists.
-def _ensure_novel_contexts_dir_exists():
-    from src.config import NOVEL_CONTEXTS_DIR
-    import shutil
-    try:
-        # Seeding Novel_Contexts in dev mode from unbuilt folder if missing
-        if not NOVEL_CONTEXTS_DIR.exists():
-            from pathlib import Path
-            unbuilt_contexts = Path(__file__).parent.resolve() / 'Novel_Contexts'
-            if unbuilt_contexts.exists():
-                NOVEL_CONTEXTS_DIR.mkdir(parents=True, exist_ok=True)
-                # Copy existing files if any
-                for item in unbuilt_contexts.glob('*'):
-                    if item.is_file():
-                        shutil.copy2(item, NOVEL_CONTEXTS_DIR)
-        
-        NOVEL_CONTEXTS_DIR.mkdir(parents=True, exist_ok=True)
-    except Exception as e:
-        logger.warning(f"Unable to create Novel_Contexts directory: {e}")
-
-_ensure_novel_contexts_dir_exists()
-
-# Static files are now handled automatically by Flask
 
 # Wrapper function for starting translation jobs
 def start_job_wrapper(translation_id, config):
@@ -207,7 +183,7 @@ def restore_incomplete_jobs():
         from src.api.blueprints.security_routes import sweep_abandoned_uploads
         runner = get_job_runner(state_manager, OUTPUT_DIR, socketio)
         runner.restart_hold()
-        sweep_abandoned_uploads(Path(OUTPUT_DIR) / 'uploads', runner.db)
+        sweep_abandoned_uploads(INCOMING_DIR, runner.db)
         resumable_jobs = state_manager.get_resumable_jobs()
         if resumable_jobs:
             logger.info(f"📦 Found {len(resumable_jobs)} incomplete translation job(s) from previous session:")
@@ -284,8 +260,8 @@ def test_ollama_connection():
         return False
 
 
-def start_server():
-    """Start the translation server - can be called from launcher or directly"""
+def main():
+    """Start the local translation web app."""
     try:
         # Validate configuration before starting
         validate_configuration()
@@ -328,4 +304,4 @@ def start_server():
 
 
 if __name__ == '__main__':
-    start_server()
+    main()

@@ -163,6 +163,7 @@ def get_thinking_cache() -> ThinkingCache:
     """
     global _global_cache
     if _global_cache is None:
-        cache_file = Path("data/thinking_cache.json")
+        from src.config import DATA_DIR
+        cache_file = DATA_DIR / "thinking_cache.json"
         _global_cache = ThinkingCache(cache_file)
     return _global_cache

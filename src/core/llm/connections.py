@@ -16,9 +16,10 @@ import httpx
 
 from .base import normalize_api_keys
 from .thinking.parameters import REASONING_LEVELS, drop_rejected_parameters, reasoning_parameters
+from src.config import TBL_HOME
 
 
-CONNECTIONS_PATH = Path(__file__).resolve().parents[3] / "TranslateBook_Data" / "connections.json"
+CONNECTIONS_PATH = TBL_HOME / "connections.json"
 _lock = threading.RLock()
 _TYPES = {
     "ollama": ("Ollama", "http://localhost:11434", False, "levels"),

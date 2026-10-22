@@ -4949,7 +4949,7 @@ def save_novel_context(filename: str, novel_contexts_dir: Path, content: str) ->
 
 
 def resolve_novel_context_path(filename: str, novel_contexts_dir: Path) -> Path:
-    """Resolve novel context file path. Checks directory first, then absolute/relative."""
+    """Resolve notes paths relative to their data directory, allowing absolute paths."""
     if is_safe_filename(filename):
         resolved = _resolve_inside(novel_contexts_dir, filename)
         if resolved:
@@ -4969,8 +4969,7 @@ def resolve_novel_context_path(filename: str, novel_contexts_dir: Path) -> Path:
     if os.path.isabs(filename):
         return Path(filename).resolve()
     
-    # Try relative to current working directory
-    return Path(filename).resolve()
+    return (novel_contexts_dir / filename).resolve()
 
 def extract_dynamic_state_from_text(context_content: str) -> Optional[str]:
     start_tag = DYNAMIC_STATE_START

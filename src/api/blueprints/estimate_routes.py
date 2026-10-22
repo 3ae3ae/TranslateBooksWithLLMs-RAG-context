@@ -1,19 +1,19 @@
 """Estimate the same request shape accepted by job creation."""
-from pathlib import Path
 import zipfile
 from flask import Blueprint, jsonify, request
 
 from src.core.pricing.job_estimator import estimate_job
 
 
-def create_estimate_blueprint(output_dir):
+def create_estimate_blueprint():
     bp = Blueprint("estimate", __name__)
 
     @bp.post("/api/estimate")
     def estimate():
         from src.core.llm.connections import ConnectionNotFound
+        from src.config import INCOMING_DIR
         try:
-            return jsonify(estimate_job(request.get_json(silent=True), Path(output_dir) / "uploads"))
+            return jsonify(estimate_job(request.get_json(silent=True), INCOMING_DIR))
         except ConnectionNotFound:
             return jsonify(error={"code": "connection_not_found", "message": "Connection not found"}), 404
         except FileNotFoundError:

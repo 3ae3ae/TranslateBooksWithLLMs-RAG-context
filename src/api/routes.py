@@ -54,7 +54,7 @@ def configure_routes(app, state_manager, output_dir, start_translation_job, sock
     app.register_blueprint(file_bp)
 
     # Register security and upload routes
-    security_bp = create_security_blueprint(output_dir)
+    security_bp = create_security_blueprint()
     app.register_blueprint(security_bp)
 
     # Register Sample & Compare routes (ephemeral, in-memory).
@@ -62,13 +62,13 @@ def configure_routes(app, state_manager, output_dir, start_translation_job, sock
     # short-lived and not persisted, so they don't share storage with the
     # main translation state.
     sample_state_manager = SampleStateManager()
-    sample_bp = create_sample_blueprint(sample_state_manager, socketio, output_dir)
+    sample_bp = create_sample_blueprint(sample_state_manager, socketio)
     app.register_blueprint(sample_bp)
 
     app.register_blueprint(create_preferences_blueprint())
     app.register_blueprint(create_notes_blueprint())
     app.register_blueprint(create_styles_blueprint())
-    app.register_blueprint(create_estimate_blueprint(output_dir))
+    app.register_blueprint(create_estimate_blueprint())
     app.register_blueprint(create_connections_blueprint())
 
     app.register_blueprint(create_jobs_blueprint(state_manager, output_dir, socketio))

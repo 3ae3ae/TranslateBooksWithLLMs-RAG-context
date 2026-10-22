@@ -12,6 +12,7 @@ from src.api.blueprints.jobs_routes import create_jobs_blueprint, job_summary
 from src.api.job_runner import JobRunner
 from src.api.translation_state import TranslationStateManager
 from src.persistence.checkpoint_manager import CheckpointManager
+from src import config
 
 
 @pytest.fixture
@@ -37,8 +38,9 @@ def jobs(tmp_path, monkeypatch):
     manager.uploads_dir = tmp_path / 'preserved'
     manager.uploads_dir.mkdir()
     state = TranslationStateManager(manager)
-    output = tmp_path / 'output'
-    uploads = output / 'uploads'
+    output = Path(config.OUTPUT_DIR)
+    output.mkdir(parents=True)
+    uploads = config.INCOMING_DIR
     uploads.mkdir(parents=True)
     files = []
     for i in range(3):

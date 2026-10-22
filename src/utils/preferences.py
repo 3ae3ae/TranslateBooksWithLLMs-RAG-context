@@ -15,7 +15,7 @@ _lock = threading.RLock()
 
 
 def preferences_path() -> Path:
-    return Path(config.CUSTOM_INSTRUCTIONS_DIR).parent / "settings.json"
+    return config.TBL_HOME / "settings.json"
 
 
 def _field(kind, default, **constraints):

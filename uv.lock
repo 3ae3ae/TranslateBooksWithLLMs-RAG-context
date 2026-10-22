@@ -1099,7 +1099,7 @@ wheels = [
 [[package]]
 name = "translatebook"
 version = "0.0.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "aiofiles" },
     { name = "flask" },

@@ -89,14 +89,14 @@ def _integer(value, name, minimum=1, maximum=1000000):
     return value
 
 
-def build_configs(body, state_manager, output_dir):
+def build_configs(body, state_manager):
     from src.utils.preferences import get_preferences
     from src.core.llm.connections import resolve_for_pipeline
     from src.utils.notes_store import prepare_job_notes
     from src.utils.file_detector import detect_file_type
     from src.utils.language_detector import LanguageDetector
     from src.utils.custom_instructions import load_custom_instructions, is_safe_filename
-    from src.config import CUSTOM_INSTRUCTIONS_DIR, SOFT_LIMIT_RATIO, UNIT_VALIDATION_RETRIES, OLLAMA_NUM_CTX
+    from src.config import CUSTOM_INSTRUCTIONS_DIR, SOFT_LIMIT_RATIO, UNIT_VALIDATION_RETRIES, OLLAMA_NUM_CTX, INCOMING_DIR, THUMBNAILS_DIR
 
     if not isinstance(body, dict):
         raise ValueError('Expected a JSON object')
@@ -156,7 +156,7 @@ def build_configs(body, state_manager, output_dir):
     series_id = uuid.uuid4().hex if notes['series'] and notes['mode'] != 'off' else None
     configs = []
     for file in files:
-        path, error = PathValidator.validate_upload_path(file.get('file_path'), Path(output_dir) / 'uploads')
+        path, error = PathValidator.validate_upload_path(file.get('file_path'), INCOMING_DIR)
         if error or not path.is_file():
             raise ValueError(error or 'Upload is not a file')
         name = file.get('input_filename') or path.name
@@ -233,7 +233,7 @@ def build_configs(body, state_manager, output_dir):
     for config in configs:
         if config['file_type'] == 'epub':
             from src.core.epub.cover_extractor import EPUBCoverExtractor
-            thumbnails = Path(output_dir) / 'thumbnails'
+            thumbnails = THUMBNAILS_DIR
             thumbnails.mkdir(parents=True, exist_ok=True)
             cover = EPUBCoverExtractor.extract_cover(config['file_path'], thumbnails)
             if cover:
@@ -272,7 +272,7 @@ def create_jobs_blueprint(state_manager, output_dir, socketio=None):
             return jsonify(jobs=[job_summary(runner, j) for j in runner.db.list_jobs()])
         body = request.get_json(silent=True)
         try:
-            configs = build_configs(body, state_manager, output_dir)
+            configs = build_configs(body, state_manager)
         except FileNotFoundError as exc:
             raise ValueError(str(exc)) from exc
         except Exception as exc:
@@ -375,7 +375,8 @@ def create_jobs_blueprint(state_manager, output_dir, socketio=None):
         elif action == 'continue':
             if job['status'] != 'completed':
                 return jsonify(error='Only a completed job can accept new chapters'), 409
-            path, error = PathValidator.validate_upload_path(body.get('file_path'), Path(output_dir) / 'uploads')
+            from src.config import INCOMING_DIR
+            path, error = PathValidator.validate_upload_path(body.get('file_path'), INCOMING_DIR)
             if error or not path.is_file():
                 raise ValueError(error or 'Upload is not a file')
             from src.utils.file_detector import detect_file_type

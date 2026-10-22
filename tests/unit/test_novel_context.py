@@ -65,9 +65,11 @@ def test_novel_context_operations():
         assert resolved == tmp_path / "test_novel.txt"
 
         # Test normal absolute path
-        other_abs_path = r"C:\external_folder\my_test_context.txt"
+        other_abs_path = str(tmp_path.parent / "my_test_context.txt")
         resolved_other = resolve_novel_context_path(other_abs_path, tmp_path)
         assert resolved_other == Path(other_abs_path).resolve()
+
+        assert resolve_novel_context_path("nested/context.txt", tmp_path) == (tmp_path / "nested" / "context.txt").resolve()
 
 def test_prompt_injection_translation():
     novel_context = "Li Fan is Male.\nSibling: Elder Brother."

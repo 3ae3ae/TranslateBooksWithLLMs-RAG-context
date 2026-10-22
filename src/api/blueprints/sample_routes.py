@@ -608,19 +608,17 @@ def _public_column(column):
     return {k: v for k, v in column.items() if k != "api_key" and not k.startswith("_")}
 
 
-def create_sample_blueprint(sample_state_manager, socketio=None, output_dir="."):
+def create_sample_blueprint(sample_state_manager, socketio=None):
     """Create the sample blueprint.
 
     Args:
         sample_state_manager: Instance of SampleStateManager.
         socketio: SocketIO instance, used to emit `sample_update` events.
-        output_dir: Base directory for file operations; uploaded source files
-            live in '<output_dir>/uploads' and a client-supplied file_path must
-            resolve inside it.
     """
     bp = Blueprint("sample", __name__)
 
-    uploads_dir = Path(output_dir) / "uploads"
+    from src.config import INCOMING_DIR
+    uploads_dir = INCOMING_DIR
 
     def _validate_file(data: Dict[str, Any]) -> Tuple[Optional[str], Optional[str], Optional[Tuple[Any, int]]]:
         """Common file_path + file_type validation. Returns (path, type, err).
