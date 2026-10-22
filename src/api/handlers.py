@@ -1043,6 +1043,7 @@ def freeze_legacy_config(config, state_manager):
     import src.config as defaults
     from .api_keys import resolve_api_key
     config = copy.deepcopy(config)
+    config['parallel_workers'] = 1
     prompt = config.setdefault('prompt_options', {})
     for key, setting in (
         ('novel_context_update_interval', 'NOVEL_CONTEXT_UPDATE_INTERVAL'),
@@ -1071,7 +1072,6 @@ def freeze_legacy_config(config, state_manager):
             'request_timeout': config.get('request_timeout', defaults.REQUEST_TIMEOUT),
             'max_attempts': config.get('max_attempts', defaults.MAX_TRANSLATION_ATTEMPTS),
             'retry_delay': config.get('retry_delay', 2), 'temperature': config.get('temperature', defaults.TEMPERATURE),
-            'parallel_requests': config.get('parallel_workers', 1),
             'rate_limit_behavior': 'pause' if config.get('auto_pause_on_rate_limit', True) else 'retry',
             'rate_limit_retry_seconds': config.get('rate_limit_retry_seconds', defaults.RATE_LIMIT_AUTO_RESUME_DELAY),
         }

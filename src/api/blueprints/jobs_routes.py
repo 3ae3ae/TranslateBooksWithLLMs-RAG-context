@@ -216,7 +216,7 @@ def build_configs(body, state_manager, output_dir):
             'unit_validation_retries': UNIT_VALIDATION_RETRIES,
             'context_window': OLLAMA_NUM_CTX,
             'auto_adjust_context': connection['local'] and connection['connection_type'] == 'ollama',
-            'bilingual_output': data.get('bilingual', False), 'parallel_workers': 1 if connection['local'] else connection['parallel_requests'],
+            'bilingual_output': data.get('bilingual', False), 'parallel_workers': 1,
             'auto_pause_on_rate_limit': connection['rate_limit_behavior'] == 'pause',
             'retry_delay': connection.get('retry_delay', 2), 'status_reason': None,
             'ocr_cleanup': data.get('ocr_cleanup', False), 'simplify_formatting': data.get('simplify_formatting', False),
@@ -352,7 +352,7 @@ def create_jobs_blueprint(state_manager, output_dir, socketio=None):
                 except ConnectionNotFound:
                     return jsonify(error='Connection removed — choose a model', status_reason='connection_removed'), 400
                 safe = sanitize_config_secrets(resolved)
-                config.update(safe, connection=safe, reasoning=body.get('reasoning', config.get('reasoning', 'off')), parallel_workers=1 if safe['local'] else safe['parallel_requests'], auto_pause_on_rate_limit=safe['rate_limit_behavior'] == 'pause')
+                config.update(safe, connection=safe, reasoning=body.get('reasoning', config.get('reasoning', 'off')), parallel_workers=1, auto_pause_on_rate_limit=safe['rate_limit_behavior'] == 'pause')
             if config.get('_context_resync', {}).get('status') == 'paused':
                 from flask import current_app
                 runner.db.update_job_config(tid, config)

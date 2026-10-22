@@ -182,6 +182,7 @@ class JobRunner:
     def _run(self, tid):
         job = self.db.get_job(tid)
         config = copy.deepcopy(job['config'])
+        config['parallel_workers'] = 1
         if config.get('connection_id'):
             try:
                 config['connection'] = resolve_connection(config)

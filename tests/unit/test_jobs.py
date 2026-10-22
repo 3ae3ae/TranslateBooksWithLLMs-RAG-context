@@ -21,7 +21,7 @@ def jobs(tmp_path, monkeypatch):
     connection = dict(connection_id='local', connection_type='openai_compatible', connection_name='Test',
                       llm_provider='openai', llm_api_endpoint='http://localhost:8000/v1/chat/completions',
                       api_key='YOUR_API_KEY_HERE', model='test', reasoning_effort='off', local=False,
-                      request_timeout=17, max_attempts=3, temperature=0.2, parallel_requests=3,
+                      request_timeout=17, max_attempts=3, temperature=0.2,
                       rate_limit_behavior='pause', rate_limit_retry_seconds=8)
     resolve = Mock(side_effect=lambda cid, model, reasoning: {**connection, 'connection_id': cid, 'model': model, 'reasoning_effort': reasoning})
     preferences = dict(default_connection_id='local', default_model='test', source_language='English', target_language='Korean', notes_mode='build', passage_tokens=123)
@@ -111,7 +111,7 @@ def test_creation_freezes_defaults_without_keys(jobs):
     config = jobs.db.get_job(tid)['config']
     assert config['max_tokens_per_chunk'] == 123
     assert config['request_timeout'] == 17
-    assert config['parallel_workers'] == 3
+    assert config['parallel_workers'] == 1
     assert 'YOUR_API_KEY_HERE' not in json.dumps(config)
     jobs.prefs['passage_tokens'] = 999
     jobs.connection['request_timeout'] = 99
@@ -329,7 +329,6 @@ async def test_connection_knobs_reach_client_factory(jobs, monkeypatch, file_typ
     assert passed == connection
     assert passed['request_timeout'] == 17
     assert passed['max_attempts'] == 3
-    assert passed['parallel_requests'] == 3
     assert passed['temperature'] == 0.2
 
 
@@ -640,3 +639,31 @@ def test_default_save_failure_does_not_hide_created_jobs(jobs):
     tid = create(jobs)
     assert jobs.db.get_job(tid)
     assert jobs.client.get(f'/api/jobs/{tid}/log').json['items'][-1]['type'] == 'warning'
+
+
+@pytest.mark.parametrize('change_model', [False, True])
+def test_old_parallel_job_resumes_with_one_worker(jobs, change_model):
+    tid = create(jobs)
+    jobs.runner.pause(tid)
+    config = jobs.db.get_job(tid)['config']
+    config['parallel_workers'] = 8
+    config['glossary_snapshot'] = {'Alice': 'old glossary'}
+    config['prompt_options'].update(glossary_id=999, glossary_terms={'Alice': 'old glossary'})
+    jobs.db.update_job_config(tid, config)
+    body = {'model': 'replacement'} if change_model else {}
+    response = jobs.client.post(f'/api/jobs/{tid}/resume', json=body)
+    assert response.status_code == 200
+    def execute(tid, config):
+        assert config['parallel_workers'] == 1
+        jobs.state.set_translation_field(tid, 'status', 'completed')
+    jobs.runner.execute = execute
+    assert jobs.runner.run_next()
+    assert jobs.db.get_job(tid)['config']['parallel_workers'] == 1
+
+
+def test_legacy_config_freezes_one_worker(jobs):
+    from src.api.handlers import freeze_legacy_config
+    config = {'model': 'test', 'connection': jobs.connection, 'parallel_workers': 8}
+    frozen = freeze_legacy_config(config, jobs.state)
+    assert frozen['parallel_workers'] == 1
+    assert config['parallel_workers'] == 8
