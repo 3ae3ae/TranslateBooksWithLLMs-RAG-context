@@ -11,7 +11,6 @@ from typing import Optional, Callable, Dict, Any
 
 from src.config import (
     DEFAULT_MODEL,
-    API_ENDPOINT,
     SRT_LINES_PER_BLOCK,
 )
 
@@ -62,7 +61,7 @@ async def refine_srt_file(
     output_filepath: str,
     target_language: str,
     model_name: str = DEFAULT_MODEL,
-    cli_api_endpoint: str = API_ENDPOINT,
+    cli_api_endpoint: Optional[str] = None,
     log_callback: Optional[Callable] = None,
     stats_callback: Optional[Callable] = None,
     check_interruption_callback: Optional[Callable] = None,

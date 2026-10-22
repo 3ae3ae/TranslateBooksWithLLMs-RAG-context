@@ -20,7 +20,7 @@ from urllib.parse import unquote
 from lxml import etree
 
 from src.config import (
-    NAMESPACES, DEFAULT_MODEL, API_ENDPOINT,
+    NAMESPACES, DEFAULT_MODEL,
     MAX_TOKENS_PER_CHUNK, THINKING_MODELS, ADAPTIVE_CONTEXT_INITIAL_THINKING,
     MAX_TRANSLATION_ATTEMPTS
 )
@@ -38,7 +38,7 @@ async def translate_epub_file(
     source_language: str = "English",
     target_language: str = "Chinese",
     model_name: str = DEFAULT_MODEL,
-    cli_api_endpoint: str = API_ENDPOINT,
+    cli_api_endpoint: Optional[str] = None,
     log_callback: Optional[Callable] = None,
     stats_callback: Optional[Callable] = None,
     check_interruption_callback: Optional[Callable] = None,

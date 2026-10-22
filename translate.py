@@ -36,7 +36,7 @@ if __name__ == "__main__":
     parser.add_argument("-sl", "--source_lang", default=DEFAULT_SOURCE_LANGUAGE, help=f"Source language (default: {DEFAULT_SOURCE_LANGUAGE}).")
     parser.add_argument("-tl", "--target_lang", default=DEFAULT_TARGET_LANGUAGE, help=f"Target language (default: {DEFAULT_TARGET_LANGUAGE}).")
     parser.add_argument("-m", "--model", default=DEFAULT_MODEL, help=f"LLM model (default: {DEFAULT_MODEL}).")
-    parser.add_argument("--api_endpoint", default=API_ENDPOINT, help=f"API endpoint for Ollama or OpenAI-compatible servers (llama.cpp, LM Studio, vLLM, etc.) (default: {API_ENDPOINT}).")
+    parser.add_argument("--api_endpoint", default=None, help=f"Override the provider API endpoint. Ollama and OpenAI-compatible servers default to {API_ENDPOINT}; other providers use their configured endpoints.")
     parser.add_argument("--provider", default=LLM_PROVIDER, choices=["ollama", "gemini", "openai", "openrouter", "mistral", "deepseek", "poe", "nim"], help=f"LLM provider (default: {LLM_PROVIDER}). Use 'openai' for any OpenAI-compatible server.")
     parser.add_argument("--gemini_api_key", default=GEMINI_API_KEY, help="Google Gemini API key (required if using gemini provider).")
     parser.add_argument("--openai_api_key", default=OPENAI_API_KEY, help="OpenAI API key (required for OpenAI cloud, not needed for local servers).")
@@ -58,6 +58,9 @@ if __name__ == "__main__":
     prompt_group.add_argument("--auto-update-context", action="store_true", dest="auto_update_context", help="Auto-update the novel context file with new characters, genders, and relationships after each chunk translation.")
 
     args = parser.parse_args()
+
+    if args.api_endpoint is None and args.provider in {"ollama", "openai"}:
+        args.api_endpoint = API_ENDPOINT
 
     # Auto-select default model based on provider if not explicitly set
     from src.config import NIM_MODEL, MISTRAL_MODEL, DEEPSEEK_MODEL, POE_MODEL, OPENROUTER_MODEL, GEMINI_MODEL
@@ -81,7 +84,7 @@ if __name__ == "__main__":
     from src.config import warn_env_config_missing, PORT
     warn_env_config_missing(
         provider=args.provider,
-        api_endpoint=args.api_endpoint,
+        api_endpoint=args.api_endpoint or "provider default",
         model=args.model,
         port=PORT,
     )
