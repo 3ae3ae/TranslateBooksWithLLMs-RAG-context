@@ -137,6 +137,14 @@ def test_notes_round_trip_dry_run_matches_saved_normalization(resources):
     assert "- 爱丽丝: Alice" in dry.get_json()["normalized_sections"][2]["body"]
 
 
+def test_notes_dry_run_does_not_report_reformatted_lines_as_removed():
+    sections = notes.parse_sections(notes.serialize_sections([]))
+    sections[0]["body"] = "- Carol: Female, librarian, scolds Alice for being late"
+    normalized, removed = notes.normalize_sections(sections)
+    assert "Carol" in normalized[0]["body"]
+    assert removed == []
+
+
 def test_notes_read_only_map_and_section_injection(resources):
     client, _ = resources
     notes.create_notes("book.txt")

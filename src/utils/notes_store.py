@@ -62,18 +62,23 @@ def serialize_sections(sections) -> str:
     return "# GLOBAL LORE\n\n" + "\n\n".join(book) + "\n\n" + context.DYNAMIC_STATE_START + "\n# DYNAMIC RELATIONSHIP STATE\n" + "\n\n".join(story) + "\n" + context.DYNAMIC_STATE_END
 
 
+def _line_key(line):
+    # Normalization rewrites bullets, brackets and trailing periods; only lost words count as removed.
+    return re.sub(r"\W+", "", line).casefold()
+
+
 def normalize_sections(sections) -> tuple[list[dict], list[str]]:
     original = serialize_sections(sections)
     normalized = parse_sections(context.normalize_novel_context_content(original))
-    retained = Counter(line.strip() for section in normalized for line in section["body"].splitlines() if line.strip())
+    retained = Counter(_line_key(line) for section in normalized for line in section["body"].splitlines() if line.strip())
     removed = []
     for section in sections:
         for line in section["body"].splitlines():
             line = line.strip()
             if not line:
                 continue
-            if retained[line]:
-                retained[line] -= 1
+            if retained[_line_key(line)]:
+                retained[_line_key(line)] -= 1
             else:
                 removed.append(line)
     return normalized, removed
