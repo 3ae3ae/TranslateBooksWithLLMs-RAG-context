@@ -26,12 +26,12 @@ import uuid
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Translate a text, EPUB or SRT file using an LLM.",
+        description="Translate an EPUB, DOCX, TXT or SRT file using an LLM.",
         epilog="Tip: any --*_api_key flag also accepts comma-separated keys "
                "(e.g. --gemini_api_key key1,key2,key3) for automatic rotation "
                "on HTTP 429 — useful to chain free-tier accounts.",
     )
-    parser.add_argument("-i", "--input", required=True, help="Path to the input file (text, EPUB, or SRT).")
+    parser.add_argument("-i", "--input", required=True, help="Path to the input file (EPUB, DOCX, TXT or SRT).")
     parser.add_argument("-o", "--output", default=None, help="Path to the output file. If not specified, uses input filename with suffix.")
     parser.add_argument("-sl", "--source_lang", default=DEFAULT_SOURCE_LANGUAGE, help="Source language (required for translation unless DEFAULT_SOURCE_LANGUAGE is set).")
     parser.add_argument("-tl", "--target_lang", default=DEFAULT_TARGET_LANGUAGE, help="Target language (required, including --refine-only, unless DEFAULT_TARGET_LANGUAGE is set).")
