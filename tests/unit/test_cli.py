@@ -73,3 +73,26 @@ def test_cli_preserves_provider_endpoints(cli, monkeypatch, provider, constructo
     for client in clients:
         client._get_provider()
         assert provider_factory.call_args.kwargs["api_endpoint"] == (endpoint if endpoint is not None else default_endpoint)
+
+
+@pytest.mark.parametrize("refine_only", [False, True])
+@pytest.mark.parametrize("language", ["source", "target"])
+@pytest.mark.parametrize("value", [None, "", "   "])
+def test_cli_validates_languages_before_starting(cli, monkeypatch, capsys, refine_only, language, value):
+    args = ["--refine-only"] if refine_only else []
+    if value is None:
+        monkeypatch.setattr(config, f"DEFAULT_{language.upper()}_LANGUAGE", "")
+    else:
+        args += [f"--{language}_lang", value]
+
+    if refine_only and language == "source":
+        cli.run(*args)
+        cli.refine.assert_awaited_once()
+    else:
+        with pytest.raises(SystemExit) as exc:
+            cli.run(*args)
+        assert exc.value.code == 2
+        assert f"--{language}_lang is required" in capsys.readouterr().err
+        cli.translate.assert_not_awaited()
+        cli.refine.assert_not_awaited()
+        config.warn_env_config_missing.assert_not_called()

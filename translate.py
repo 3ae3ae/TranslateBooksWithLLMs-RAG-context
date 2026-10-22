@@ -33,8 +33,8 @@ if __name__ == "__main__":
     )
     parser.add_argument("-i", "--input", required=True, help="Path to the input file (text, EPUB, or SRT).")
     parser.add_argument("-o", "--output", default=None, help="Path to the output file. If not specified, uses input filename with suffix.")
-    parser.add_argument("-sl", "--source_lang", default=DEFAULT_SOURCE_LANGUAGE, help=f"Source language (default: {DEFAULT_SOURCE_LANGUAGE}).")
-    parser.add_argument("-tl", "--target_lang", default=DEFAULT_TARGET_LANGUAGE, help=f"Target language (default: {DEFAULT_TARGET_LANGUAGE}).")
+    parser.add_argument("-sl", "--source_lang", default=DEFAULT_SOURCE_LANGUAGE, help="Source language (required for translation unless DEFAULT_SOURCE_LANGUAGE is set).")
+    parser.add_argument("-tl", "--target_lang", default=DEFAULT_TARGET_LANGUAGE, help="Target language (required, including --refine-only, unless DEFAULT_TARGET_LANGUAGE is set).")
     parser.add_argument("-m", "--model", default=DEFAULT_MODEL, help=f"LLM model (default: {DEFAULT_MODEL}).")
     parser.add_argument("--api_endpoint", default=None, help=f"Override the provider API endpoint. Ollama and OpenAI-compatible servers default to {API_ENDPOINT}; other providers use their configured endpoints.")
     parser.add_argument("--provider", default=LLM_PROVIDER, choices=["ollama", "gemini", "openai", "openrouter", "mistral", "deepseek", "poe", "nim"], help=f"LLM provider (default: {LLM_PROVIDER}). Use 'openai' for any OpenAI-compatible server.")
@@ -58,6 +58,11 @@ if __name__ == "__main__":
     prompt_group.add_argument("--auto-update-context", action="store_true", dest="auto_update_context", help="Auto-update the novel context file with new characters, genders, and relationships after each chunk translation.")
 
     args = parser.parse_args()
+
+    if not args.target_lang.strip():
+        parser.error("--target_lang is required; pass a non-empty language or set DEFAULT_TARGET_LANGUAGE")
+    if not args.refine_only and not args.source_lang.strip():
+        parser.error("--source_lang is required for translation; pass a non-empty language or set DEFAULT_SOURCE_LANGUAGE")
 
     if args.api_endpoint is None and args.provider in {"ollama", "openai"}:
         args.api_endpoint = API_ENDPOINT
