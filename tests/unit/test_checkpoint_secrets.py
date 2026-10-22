@@ -15,7 +15,6 @@ from src.api.blueprints.translation_routes import (
     _available_context_chunk_indices,
     _apply_resume_overrides,
     _rehydrate_resume_credentials,
-    _strip_api_keys,
 )
 
 
@@ -168,17 +167,6 @@ class TestResumeCredentialValidation:
         assert result is not None
         _response, status = result
         assert status == 400
-
-
-class TestResponseStripping:
-    def test_strip_api_keys_removes_all_keys_in_place(self):
-        config = dict(SECRET_CONFIG)
-        _strip_api_keys(config)
-        _assert_no_secrets(config)
-        assert config['model'] == 'gemini-2.0-flash'
-
-    def test_strip_api_keys_tolerates_none(self):
-        assert _strip_api_keys(None) is None
 
 
 def test_available_context_indices_come_from_real_checkpoint_rows():

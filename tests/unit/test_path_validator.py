@@ -138,40 +138,6 @@ class TestPathValidator:
             is_valid, error = PathValidator.validate_filename(filename)
             assert is_valid is True, f"Failed for: {filename}, error: {error}"
 
-    def test_validate_filenames_list(self):
-        """Test validation of a list of filenames."""
-        filenames = [
-            "file1.txt",
-            "file2.docx",
-            "file...with...dots.txt"
-        ]
-        is_valid, error = PathValidator.validate_filenames(filenames)
-        assert is_valid is True
-        assert error == ""
-
-    def test_reject_filenames_list_with_invalid(self):
-        """Test rejection of a list containing invalid filenames."""
-        filenames = [
-            "file1.txt",
-            "../../../etc/passwd",
-            "file3.docx"
-        ]
-        is_valid, error = PathValidator.validate_filenames(filenames)
-        assert is_valid is False
-        assert "passwd" in error
-
-    def test_reject_filenames_not_list(self):
-        """Test rejection when filenames parameter is not a list."""
-        is_valid, error = PathValidator.validate_filenames("not_a_list")
-        assert is_valid is False
-        assert "must be a list" in error.lower()
-
-    def test_reject_empty_filenames_list(self):
-        """Test rejection of empty filenames list."""
-        is_valid, error = PathValidator.validate_filenames([])
-        assert is_valid is False
-        assert "no filenames" in error.lower()
-
     def test_validate_filename_with_unicode(self):
         """Test validation of filenames with Unicode characters."""
         test_cases = [

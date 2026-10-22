@@ -117,40 +117,6 @@ class TranslationStateManager:
         with self._lock:
             return translation_id in self._translations
     
-    def get_all_translations(self) -> Dict[str, Dict[str, Any]]:
-        """Get all translations (returns a deep copy)"""
-        with self._lock:
-            return copy.deepcopy(self._translations)
-    
-    def get_translation_summaries(self) -> list:
-        """Get summaries of all translations for listing"""
-        with self._lock:
-            summaries = []
-            for tid, data in self._translations.items():
-                config = data.get('config', {})
-                stats = data.get('stats', {})
-                summaries.append({
-                    "translation_id": tid,
-                    "status": data.get('status'),
-                    "progress": data.get('progress'),
-                    "start_time": stats.get('start_time'),
-                    "output_filename": config.get('output_filename'),
-                    "input_filename": config.get('input_filename'),
-                    "file_type": config.get('file_type', 'txt'),
-                    # Include stats for UI restoration
-                    "total_chunks": stats.get('total_chunks', 0),
-                    "completed_chunks": stats.get('completed_chunks', 0),
-                    "progress_percent": stats.get('progress_percent'),
-                    "current_phase": stats.get('current_phase'),
-                    "enable_refinement": stats.get('enable_refinement', False),
-                    # Canonical progress contract (Step 2 seam), alongside the
-                    # legacy fields above for back-compat.
-                    "percent": stats.get('percent'),
-                    "phase": stats.get('phase'),
-                    "last_translation": data.get('last_translation')
-                })
-            return sorted(summaries, key=lambda x: x.get('start_time', 0), reverse=True)
-
     def set_interrupted(self, translation_id: str, interrupted: bool = True) -> bool:
         """Set interrupted flag for translation"""
         with self._lock:

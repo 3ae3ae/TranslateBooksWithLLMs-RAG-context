@@ -857,13 +857,6 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
             # Mark checkpoint as interrupted in database
             checkpoint_manager.mark_interrupted(translation_id)
 
-            # Emit checkpoint_created event to trigger UI update
-            socketio.emit('checkpoint_created', {
-                'translation_id': translation_id,
-                'status': 'interrupted',
-                'message': 'Translation paused - checkpoint created'
-            }, namespace='/')
-
             # DON'T clean up uploaded file on interruption - keep it for resume capability
             # The file will be preserved in the job-specific directory by checkpoint_manager
             # Only clean up if the preserved file exists (meaning backup was successful)
@@ -980,13 +973,6 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
         final_status_payload['stats'] = state_manager.get_translation_field(translation_id, 'stats') or {}
         emit_update(socketio, translation_id, final_status_payload, state_manager)
 
-        # Trigger file list refresh in the frontend if a file was saved
-        if os.path.exists(output_filepath_on_server) and final_status_payload['status'] in ['completed', 'interrupted', 'partial']:
-            socketio.emit('file_list_changed', {
-                'reason': final_status_payload['status'],
-                'filename': config.get('output_filename', 'unknown')
-            }, namespace='/')
-
     except RateLimitError as e:
         auto_pause = config.get('auto_pause_on_rate_limit', AUTO_PAUSE_ON_RATE_LIMIT)
         retry_msg = f" Retry suggested after ~{e.retry_after}s." if e.retry_after else ""
@@ -1102,19 +1088,6 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
             'log': pause_msg,
             'result': state_manager.get_translation_field(translation_id, 'result') or f"Translation paused (rate limited)"
         }, state_manager)
-
-        socketio.emit('checkpoint_created', {
-            'translation_id': translation_id,
-            'status': 'rate_limited',
-            'message': pause_msg
-        }, namespace='/')
-
-        output_filepath = state_manager.get_translation_field(translation_id, 'output_filepath')
-        if output_filepath and os.path.exists(output_filepath):
-            socketio.emit('file_list_changed', {
-                'reason': 'rate_limited',
-                'filename': config.get('output_filename', 'unknown')
-            }, namespace='/')
 
     except Exception as e:
         critical_error_msg = f"Critical error during translation task ({translation_id}): {str(e)}"

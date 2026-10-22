@@ -6,7 +6,7 @@ This package provides a modular system for interacting with various LLM provider
 Public API:
     - Exceptions: ContextOverflowError, RepetitionLoopError
     - Base classes: LLMProvider, LLMResponse
-    - Thinking system: ThinkingBehavior, get_thinking_behavior_sync, get_model_warning_message, detect_repetition_loop
+    - Thinking system: ThinkingBehavior, get_thinking_behavior_sync, detect_repetition_loop
     - Utilities: ContextDetector, TranslationExtractor
     - Providers: OllamaProvider, OpenAICompatibleProvider, OpenRouterProvider, GeminiProvider
     - Factory: create_llm_provider
@@ -24,7 +24,7 @@ from .exceptions import ContextOverflowError, RepetitionLoopError, RateLimitErro
 from .base import LLMProvider, LLMResponse
 
 # Thinking system
-from .thinking.behavior import ThinkingBehavior, get_thinking_behavior_sync, get_model_warning_message
+from .thinking.behavior import ThinkingBehavior, get_thinking_behavior_sync
 from .thinking.cache import ThinkingCache, get_thinking_cache
 from .thinking.detection import detect_repetition_loop
 
@@ -59,7 +59,6 @@ __all__ = [
     'ThinkingCache',
     'get_thinking_cache',
     'get_thinking_behavior_sync',
-    'get_model_warning_message',
     'detect_repetition_loop',
 
     # Utilities

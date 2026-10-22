@@ -91,9 +91,6 @@ async def refine_file(
             if log_callback:
                 log_callback("novel_context_error", f"Error loading novel context '{novel_context_file}': {str(e)}")
 
-    # Resolve max_tokens_per_chunk lazily so a reload_config() between calls is
-    # honoured for subsequent runs (the .env value can change at runtime via
-    # the /api/settings endpoint).
     if max_tokens_per_chunk is None:
         from src.config import MAX_TOKENS_PER_CHUNK as _DEFAULT_MAX_TOKENS
         max_tokens_per_chunk = _DEFAULT_MAX_TOKENS

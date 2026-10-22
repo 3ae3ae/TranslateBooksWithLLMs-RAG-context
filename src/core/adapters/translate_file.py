@@ -115,9 +115,6 @@ async def translate_file(
     if connection is not None:
         prompt_options['parallel_workers'] = 1 if connection['local'] else parallel_workers
 
-    # Resolve max_tokens_per_chunk: when the caller passed nothing, read the
-    # current .env-backed default. Doing it here (not at function definition)
-    # means a reload_config() between calls is honoured for subsequent runs.
     if max_tokens_per_chunk is None:
         from src.config import MAX_TOKENS_PER_CHUNK as _DEFAULT_MAX_TOKENS
         max_tokens_per_chunk = _DEFAULT_MAX_TOKENS

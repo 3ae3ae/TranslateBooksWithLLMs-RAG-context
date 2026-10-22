@@ -1066,21 +1066,4 @@ def create_sample_blueprint(sample_state_manager, socketio=None, output_dir=".")
         sample_state_manager.cancel(sample_id)
         return jsonify({"message": "Sample run stopped"}), 200
 
-    @bp.route("/api/sample/<sample_id>", methods=["GET"])
-    def get_sample_run(sample_id):
-        snapshot = sample_state_manager.get(sample_id)
-        if snapshot is None:
-            return jsonify({"error": "Sample run not found"}), 404
-        # Strip API keys defensively before returning
-        snapshot["columns"] = [
-            _public_column(col)
-            for col in snapshot.get("columns", [])
-        ]
-        # Strip server-only context fields from items
-        snapshot["items"] = [
-            {"index": it["index"], "source_text": it["source_text"], "truncated": it["truncated"]}
-            for it in snapshot.get("items", [])
-        ]
-        return jsonify(snapshot)
-
     return bp

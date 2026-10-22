@@ -7,7 +7,3 @@ authoritative definition.
 
 # The single channel carrying translation progress/status/log payloads.
 EVENT_TRANSLATION_UPDATE = "translation_update"
-
-# log_entry.type values whose payload carries displayable LLM output (used to
-# keep the "last translation" preview in sync across translate and refine).
-LLM_RESPONSE_TYPES = ("llm_response", "refinement_response")

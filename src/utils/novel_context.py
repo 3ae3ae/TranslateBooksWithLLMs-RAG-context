@@ -4887,38 +4887,6 @@ def _resolve_inside(directory: Path, filename: str) -> Optional[Path]:
     return candidate
 
 
-def list_novel_contexts(novel_contexts_dir: Path) -> List[Dict[str, Any]]:
-    """List text files in the directory.
-
-    Returns a list of dicts:
-        {
-            "filename": "my_novel.txt",
-            "display_name": "my_novel",
-            "format": "txt"
-        }
-    """
-    if not novel_contexts_dir.exists():
-        return []
-
-    entries: List[Dict[str, Any]] = []
-    for file_path in novel_contexts_dir.glob("*.txt"):
-        try:
-            file_path.resolve().relative_to(novel_contexts_dir.resolve())
-        except ValueError:
-            continue
-
-        entries.append(
-            {
-                "filename": file_path.name,
-                "display_name": file_path.stem,
-                "format": "txt",
-            }
-        )
-
-    entries.sort(key=lambda e: e["display_name"].lower())
-    return entries
-
-
 def load_novel_context(filename: str, novel_contexts_dir: Path) -> str:
     """Load context content from a safe filename. Creates empty template if missing."""
     if not is_safe_filename(filename):

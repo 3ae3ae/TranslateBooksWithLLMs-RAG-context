@@ -161,44 +161,6 @@ class TestTranslationStateManager:
         state_manager.create_translation("trans_001", {})
         assert state_manager.exists("trans_001") is True
 
-    def test_get_all_translations_returns_deep_copy(self, state_manager):
-        """Getting all translations should return deep copies."""
-        state_manager.create_translation("trans_001", {"key": "value1"})
-        state_manager.create_translation("trans_002", {"key": "value2"})
-
-        all_translations = state_manager.get_all_translations()
-        assert len(all_translations) == 2
-
-        # Mutate the copy
-        all_translations["trans_001"]["config"]["key"] = "mutated"
-
-        # Original should be unchanged
-        state = state_manager.get_translation("trans_001")
-        assert state["config"]["key"] == "value1"
-
-    def test_get_translation_summaries(self, state_manager):
-        """Summaries should include key fields for UI."""
-        config = {
-            "input_filename": "book.epub",
-            "output_filename": "book_fr.epub",
-            "file_type": "epub"
-        }
-        state_manager.create_translation("trans_001", config)
-        state_manager.update_stats("trans_001", {
-            'total_chunks': 100,
-            'completed_chunks': 50
-        })
-
-        summaries = state_manager.get_translation_summaries()
-        assert len(summaries) == 1
-        summary = summaries[0]
-        assert summary['translation_id'] == "trans_001"
-        assert summary['input_filename'] == "book.epub"
-        assert summary['output_filename'] == "book_fr.epub"
-        assert summary['total_chunks'] == 100
-        assert summary['completed_chunks'] == 50
-
-
 class TestTranslationStateManagerThreadSafety:
     """Tests for thread safety of TranslationStateManager."""
 
@@ -260,8 +222,7 @@ class TestTranslationStateManagerThreadSafety:
         def read_translations():
             try:
                 for _ in range(50):
-                    state_manager.get_all_translations()
-                    state_manager.get_translation_summaries()
+                    state_manager.get_translation("trans_1_0")
             except Exception as e:
                 errors.append(e)
 

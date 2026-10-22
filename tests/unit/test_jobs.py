@@ -276,7 +276,6 @@ def test_handler_classifies_failed_or_untranslated_output_as_partial(jobs, monke
         assert kwargs['retry_delay'] == 2
         return failed == 0
     monkeypatch.setattr('src.api.handlers.translate_file', translate)
-    monkeypatch.setattr('src.config.reload_config', Mock(side_effect=AssertionError('must not reload')))
     tid = create(jobs)
     config = jobs.db.get_job(tid)['config']
     config.update(file_type=file_type, output_filename=f'output.{file_type}')
@@ -351,7 +350,7 @@ def test_notes_sections_dry_run_is_read_only(jobs, monkeypatch):
     assert response.json['removed_lines'] == ['duplicate']
     assert jobs.db.get_job(tid) == before
     assert jobs.db.get_chunks(tid) == chunks
-    get = client.get(f'/api/jobs/{tid}/notes/latest?format=sections')
+    get = client.get(f'/api/translation/{tid}/context/latest?format=sections')
     assert get.json['index'] == 2
     assert get.json['snapshot_indices'] == [0,1,2]
 
@@ -446,19 +445,6 @@ def test_restart_pauses_a_queued_notes_rebuild(jobs):
     assert job['status'] == 'interrupted'
     assert job['config']['_context_resync']['status'] == 'paused'
     assert tid not in jobs.db.queue_state()['order']
-
-
-def test_legacy_status_also_strips_nested_credentials(jobs):
-    from src.api.blueprints.translation_routes import create_translation_blueprint
-    tid = create(jobs)
-    config = jobs.state.get_translation_field(tid, 'config')
-    config['connection']['api_key'] = 'YOUR_API_KEY_HERE'
-    jobs.state.set_translation_field(tid, 'config', config)
-    app = Flask(__name__)
-    app.register_blueprint(create_translation_blueprint(jobs.state, lambda *_: None, jobs.output, jobs.socket))
-    response = app.test_client().get(f'/api/translation/{tid}')
-    assert 'YOUR_API_KEY_HERE' not in json.dumps(response.json)
-    assert jobs.state.get_translation_field(tid, 'config')['connection']['api_key'] == 'YOUR_API_KEY_HERE'
 
 
 def test_translate_only_notes_rebuild_can_queue_corrective_polish(jobs, monkeypatch):

@@ -2,7 +2,6 @@
 Default pricing data for providers without a public pricing API.
 
 Prices are in USD per 1 million tokens.
-Users can override these values via the UI (sent in /api/cost/estimate payload).
 
 Last updated: 2026-05-09
 Sources: official provider documentation pages.

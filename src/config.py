@@ -39,7 +39,6 @@ if _debug_mode:
 _project_root = Path(__file__).parent.parent.resolve()
 NOVEL_CONTEXTS_DIR = _project_root / 'TranslateBook_Data' / 'Novel_Contexts'
 CUSTOM_INSTRUCTIONS_DIR = _project_root / 'TranslateBook_Data' / 'Custom_Instructions'
-TRANSLATION_PROFILES_DIR = _project_root / 'TranslateBook_Data' / 'Translation_Profiles'
 DATA_DIR = _project_root / 'data'
 UPLOADS_DIR = DATA_DIR / 'uploads'
 ENV_FILE_MISSING = not _env_exists
@@ -50,8 +49,6 @@ if _debug_mode:
     _config_logger.debug(f"📁 load_dotenv() returned: {_dotenv_result}")
     _config_logger.debug(f"📁 Loaded .env from: {_env_file.absolute()}")
 
-# Settings that the web UI can update at runtime via /api/settings.
-# Listed once so the initial load and reload_config() stay in lockstep.
 # Format: (attribute_name, env_var_name, default_value)
 _RELOADABLE_ENV_SETTINGS = (
     ('OLLAMA_API_ENDPOINT', 'OLLAMA_API_ENDPOINT', 'http://localhost:11434/api/generate'),
@@ -73,9 +70,6 @@ _RELOADABLE_ENV_SETTINGS = (
     ('NIM_MODEL',           'NIM_MODEL',           'meta/llama-3.1-8b-instruct'),
     ('OUTPUT_FILENAME_PATTERN', 'OUTPUT_FILENAME_PATTERN', '{originalName} ({targetLang}).{ext}'),
     ('DISABLE_AUTO_PAUSE',   'DISABLE_AUTO_PAUSE',   'false'),
-    # Webhook notifications — kept here so the web UI can change them at runtime
-    # via /api/settings without a server restart. notifier.py reads these via
-    # `import src.config as cfg; cfg.NOTIFY_*` so reload_config() takes effect.
     ('NOTIFY_WEBHOOK_URL',     'NOTIFY_WEBHOOK_URL',     ''),
     ('NOTIFY_WEBHOOK_METHOD',  'NOTIFY_WEBHOOK_METHOD',  'POST'),
     ('NOTIFY_WEBHOOK_HEADERS', 'NOTIFY_WEBHOOK_HEADERS', ''),
@@ -84,12 +78,7 @@ _RELOADABLE_ENV_SETTINGS = (
     ('NOTIFY_ON_FAILURE',      'NOTIFY_ON_FAILURE',      'true'),
     ('NOTIFY_ON_INTERRUPTION', 'NOTIFY_ON_INTERRUPTION', 'false'),
     ('NOTIFY_TIMEOUT_SECONDS', 'NOTIFY_TIMEOUT_SECONDS', '5'),
-    # Parallel translation default (web UI seeds its input from this and can
-    # save it back via /api/settings; reloadable so changes apply without a
-    # server restart).
     ('PARALLEL_TRANSLATIONS', 'PARALLEL_TRANSLATIONS', '1'),
-    # Token chunk budget is editable in the web UI. The next job must use the
-    # value saved to .env without requiring a server restart.
     ('MAX_TOKENS_PER_CHUNK', 'MAX_TOKENS_PER_CHUNK', '450'),
     # Novel context prompt rendering. The full context file remains durable;
     # this limits only the selected context block injected into each prompt.
@@ -160,8 +149,6 @@ OLLAMA_NUM_CTX = int(os.getenv('OLLAMA_NUM_CTX', '4096'))
 # Only cloud providers benefit: a single local Ollama instance serializes
 # requests anyway, so resolve_parallel_workers() forces local providers back to
 # 1 regardless of this setting. See is_local_provider().
-# PARALLEL_TRANSLATIONS is set via _apply_reloadable_env_settings() (above) so
-# the web UI can change it at runtime through /api/settings.
 
 # Upper bound for the parallel worker count, both as a sanity cap and to keep
 # the web UI slider/CLI within a reasonable range. Cloud rate limits make very
@@ -343,9 +330,6 @@ MAX_TOKENS_PER_CHUNK = int(os.getenv('MAX_TOKENS_PER_CHUNK', '450'))
 SOFT_LIMIT_RATIO = float(os.getenv('SOFT_LIMIT_RATIO', '0.8'))
 
 # LLM Provider configuration
-# LLM_PROVIDER, GEMINI_*, OPENAI_*, OPENROUTER_API_KEY/MODEL, MISTRAL_API_KEY/MODEL,
-# DEEPSEEK_API_KEY/MODEL, POE_API_KEY/MODEL, NIM_API_KEY/MODEL are loaded via
-# _apply_reloadable_env_settings() so reload_config() can refresh them at runtime.
 OPENROUTER_API_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions'
 MISTRAL_API_ENDPOINT = os.getenv('MISTRAL_API_ENDPOINT', 'https://api.mistral.ai/v1/chat/completions')
 DEEPSEEK_API_ENDPOINT = os.getenv('DEEPSEEK_API_ENDPOINT', 'https://api.deepseek.com/chat/completions')
@@ -393,30 +377,11 @@ OUTPUT_DIR = str(Path(os.getenv('OUTPUT_DIR', 'translated_files')).expanduser().
 # Healthchecks, custom curl-like endpoint) when a translation reaches a
 # terminal state. Disabled by default; set NOTIFY_WEBHOOK_URL to enable.
 #
-# Loaded via _apply_reloadable_env_settings() so the web UI can edit them at
-# runtime via /api/settings (reload_config() refreshes them without restart).
 # notifier.py reads them with `import src.config as cfg; cfg.NOTIFY_*`.
 
 # Debug mode (reload after .env is loaded)
 DEBUG_MODE = os.getenv('DEBUG_MODE', 'false').lower() == 'true'
 
-
-def reload_config():
-    """Re-read .env and refresh runtime-mutable settings.
-
-    Call this after the web UI saves to .env so subsequent reads of
-    src.config.X (e.g. from config_routes.py) reflect the new values
-    without restarting the server.
-
-    Only settings listed in _RELOADABLE_ENV_SETTINGS are refreshed.
-    Static settings (namespaces, prompts) and modules that
-    did `from src.config import X` snapshot at import time and are not
-    affected — read via `import src.config as cfg; cfg.X` for live values.
-    """
-    load_dotenv(_env_file, override=True)
-    _apply_reloadable_env_settings()
-    if _debug_mode or os.getenv('DEBUG_MODE', 'false').lower() == 'true':
-        _config_logger.debug("📋 Configuration reloaded from .env")
 
 # Log loaded configuration in debug mode
 if DEBUG_MODE or _debug_mode:

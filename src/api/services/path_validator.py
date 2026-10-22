@@ -99,27 +99,3 @@ class PathValidator:
             return False, "Absolute paths not allowed"
 
         return True, ""
-
-    @staticmethod
-    def validate_filenames(filenames: list) -> Tuple[bool, str]:
-        """
-        Validate a list of filenames
-
-        Args:
-            filenames: List of filenames to validate
-
-        Returns:
-            Tuple of (is_valid, error_message)
-        """
-        if not isinstance(filenames, list):
-            return False, "Filenames must be a list"
-
-        if len(filenames) == 0:
-            return False, "No filenames provided"
-
-        for filename in filenames:
-            is_valid, error = PathValidator.validate_filename(filename)
-            if not is_valid:
-                return False, f"Invalid filename '{filename}': {error}"
-
-        return True, ""

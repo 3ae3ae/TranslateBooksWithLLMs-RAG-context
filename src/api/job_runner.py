@@ -1,4 +1,3 @@
-"""One durable FIFO shared by the legacy API and the jobs facade."""
 import copy
 import threading
 import time

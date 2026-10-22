@@ -248,7 +248,6 @@ def test_compare_snapshots_resources_and_changes_revision(resources, monkeypatch
     assert context["target_language"] == "Korean"
     assert context["columns"][0]["_prompt_options"]["custom_instructions"] == "First style"
     assert "_connection" not in first["columns"][0]
-    assert "_connection" not in client.get("/api/sample/" + first["sample_id"]).get_data(as_text=True)
     styles.save_style("noir", {"translation": "Second style"})
     second = client.post("/api/sample/run", json=payload).get_json()
     assert first["columns"][0]["cache_key"] != second["columns"][0]["cache_key"]

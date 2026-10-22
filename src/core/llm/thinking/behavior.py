@@ -5,10 +5,8 @@ This module handles:
 - ThinkingBehavior enum for model classification
 - Pattern matching for model names
 - Synchronous behavior detection (cache-based)
-- Warning message generation for uncontrollable models
 """
 
-import re
 from enum import Enum
 from typing import Optional
 
@@ -121,42 +119,3 @@ def get_thinking_behavior_sync(model: str, endpoint: str = "") -> Optional[Think
 
     # Check known lists as fallback
     return get_thinking_behavior_from_known_lists(model)
-
-
-def get_model_warning_message(model: str, endpoint: str = "") -> Optional[str]:
-    """
-    Get warning message for a model if it's uncontrollable (for UI display).
-
-    Args:
-        model: Model name
-        endpoint: Optional endpoint
-
-    Returns:
-        Warning message string if uncontrollable, None otherwise
-    """
-    behavior = get_thinking_behavior_sync(model, endpoint)
-
-    if behavior == ThinkingBehavior.UNCONTROLLABLE:
-        model_lower = model.lower()
-
-        # Build recommendation based on model
-        recommendation = ""
-        if "qwen3" in model_lower and "instruct" not in model_lower:
-            size_match = re.search(r':(\d+b)', model_lower)
-            size = size_match.group(1) if size_match else ""
-            if size:
-                recommendation = f"Recommended: qwen3:{size}-instruct"
-            else:
-                recommendation = "Recommended: Use a Qwen3 instruct variant"
-        elif "phi4-reasoning" in model_lower:
-            recommendation = "Recommended: phi4:latest"
-        elif "deepseek" in model_lower or "qwq" in model_lower:
-            recommendation = "Recommended: Use a non-reasoning model"
-
-        warning = "⚠️ This model cannot disable thinking mode (slower, uses more tokens)"
-        if recommendation:
-            warning += f"\n{recommendation}"
-
-        return warning
-
-    return None
