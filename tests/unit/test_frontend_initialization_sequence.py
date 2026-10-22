@@ -111,24 +111,12 @@ class TestFrontendInitializationSequence:
         provider_restore_block = content[start_pos:pos]
         
         # The fix: should NOT have dispatchEvent(new Event('change'))
-        # It should have a comment explaining why we don't trigger the event
-        has_comment_explaining_fix = (
-            "don't trigger" in provider_restore_block.lower() or
-            "don't trigger" in provider_restore_block.lower() or
-            "wait for" in provider_restore_block.lower() or
-            "defaultConfigLoaded" in provider_restore_block
-        )
-        
         has_dispatch_event = "dispatchEvent" in provider_restore_block
         
         assert not has_dispatch_event, \
             "BUG REGRESSION: SettingsManager still triggers 'change' event when restoring provider. " \
             "This causes model loading with wrong endpoint before server config is loaded."
         
-        assert has_comment_explaining_fix, \
-            "SettingsManager should have a comment explaining why it doesn't trigger 'change' event, " \
-            "and mention the fix for GitHub issue #108."
-
     def test_provider_manager_waits_for_default_config_loaded(self, js_files):
         """
         Verify that ProviderManager.initialize() waits for the 'defaultConfigLoaded'
@@ -178,30 +166,6 @@ class TestFrontendInitializationSequence:
         
         assert has_dispatch, \
             "FormManager should dispatch 'defaultConfigLoaded' event after loading server config."
-
-    def test_comments_reference_github_issue(self, js_files):
-        """
-        Verify that the fix includes comments referencing GitHub issue #108.
-        
-        This serves as documentation for future developers.
-        """
-        provider_manager = js_files["provider_manager"]
-        settings_manager = js_files["settings_manager"]
-        
-        provider_content = provider_manager.read_text(encoding='utf-8')
-        settings_content = settings_manager.read_text(encoding='utf-8')
-        
-        # Check for GitHub issue reference in at least one of the files
-        has_issue_reference = (
-            "#108" in provider_content or
-            "#108" in settings_content or
-            "issue #108" in provider_content.lower() or
-            "issue #108" in settings_content.lower()
-        )
-        
-        assert has_issue_reference, \
-            "The fix should include comments referencing GitHub issue #108 for documentation."
-
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

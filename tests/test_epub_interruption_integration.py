@@ -242,36 +242,6 @@ class TestMultipleFilesInterruption:
     """Tests for multiple XHTML files with interruption."""
 
     @pytest.mark.asyncio
-    async def test_interrupt_between_files(
-        self, temp_epub_dir, mock_llm_client, temp_checkpoint_manager
-    ):
-        """Test interruption between different XHTML files."""
-        translation_id = "test_multi_file_001"
-
-        # Create content files list
-        content_files = [
-            "OEBPS/chapter1.xhtml",
-            "OEBPS/chapter2.xhtml",
-            "OEBPS/chapter3.xhtml",
-        ]
-
-        files_processed = []
-
-        # Mock log callback to track file processing
-        def log_callback(event_type, message):
-            if "Starting file" in str(message):
-                files_processed.append(event_type)
-
-        # Interrupt after first file
-        def interrupt_after_first_file():
-            return len(files_processed) >= 1
-
-        # First pass - should process first file then interrupt
-        # Note: This is a simplified test - actual _process_all_content_files
-        # would need to be tested with full EPUB structure
-        # For now, we test individual file handling
-
-    @pytest.mark.asyncio
     async def test_each_file_has_independent_state(
         self, temp_epub_dir, mock_llm_client, temp_checkpoint_manager
     ):

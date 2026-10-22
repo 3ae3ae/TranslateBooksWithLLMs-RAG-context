@@ -5,13 +5,11 @@ This test verifies that HTML entities are properly protected throughout
 the entire EPUB translation pipeline when --preserve-technical is enabled.
 """
 
-import pytest
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.core.epub.tag_preservation import TagPreserver
-from src.core.epub.html_chunker import HtmlChunker
 
 
 def test_epub_entity_protection_e2e():
@@ -137,36 +135,6 @@ def test_epub_entity_without_protection():
     print("\n✓ Without --preserve-technical: HTML entities are exposed (expected)")
 
 
-def test_comparison():
-    """Side-by-side comparison of with/without protection."""
-
-    text = "<p>&lt;code&gt;example&lt;/code&gt; is a tag.</p>"
-
-    print("\n" + "=" * 80)
-    print("COMPARISON: With vs Without Protection")
-    print("=" * 80)
-
-    # Without protection
-    preserver_off = TagPreserver(protect_technical=False)
-    processed_off, _ = preserver_off.preserve_tags(text)
-
-    print(f"\nWITHOUT protection (protect_technical=False):")
-    print(f"  Input:  {text}")
-    print(f"  Output: {processed_off}")
-    print(f"  Entities exposed: {'&lt;' in processed_off}")
-
-    # With protection
-    preserver_on = TagPreserver(protect_technical=True)
-    processed_on, map_on = preserver_on.preserve_tags_and_technical_content(text)
-
-    print(f"\nWITH protection (protect_technical=True):")
-    print(f"  Input:  {text}")
-    print(f"  Output: {processed_on}")
-    print(f"  Entities exposed: {'&lt;' in processed_on}")
-    print(f"  Entities in map: {any('&lt;' in c for c in map_on.values())}")
-
-
 if __name__ == "__main__":
     test_epub_entity_protection_e2e()
     test_epub_entity_without_protection()
-    test_comparison()

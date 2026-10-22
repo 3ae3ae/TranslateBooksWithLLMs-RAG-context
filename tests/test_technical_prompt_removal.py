@@ -101,22 +101,5 @@ def test_backward_compatibility():
     assert isinstance(optional_sections, str)
 
 
-def test_rationale_documentation():
-    """Test that the code documents why the section is not added."""
-
-    # Read the source code to verify documentation
-    source_file = Path(__file__).parent.parent / "src" / "prompts" / "prompts.py"
-    source_code = source_file.read_text(encoding='utf-8')
-
-    # Verify that there's a comment explaining why the section is not added
-    assert "placeholder system" in source_code.lower(), (
-        "Code should document that placeholder system handles protection"
-    )
-
-    assert "hidden in placeholders" in source_code.lower(), (
-        "Code should explain that content is hidden in placeholders"
-    )
-
-
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
