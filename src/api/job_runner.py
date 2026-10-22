@@ -25,7 +25,6 @@ class JobRunner:
         self.tasks = {}
         self.thread = None
         self.stopped = False
-        self.had_work = bool(self.db.queue_state()['order'])
         state_manager.job_runner = self
         self.db.passage_callback = self.passage_completed
 
@@ -59,8 +58,6 @@ class JobRunner:
                     config['status_reason'] = 'server_restart'
                     self.db.update_job_config(job['translation_id'], config)
                     self.db.update_job_progress(job['translation_id'], status='interrupted')
-                    from src.utils.notifier import notify
-                    notify('system_paused', {'translation_id': job['translation_id'], 'error': 'Server restarted'})
                 if self.state.exists(job['translation_id']):
                     continue
                 self.state.create_translation(job['translation_id'], config)
@@ -108,7 +105,6 @@ class JobRunner:
             self.db.set_queue_order(order)
             if task:
                 self.tasks[tid] = task
-            self.had_work = True
             self.condition.notify_all()
             self._emit_queue()
             for queued in order:
@@ -180,10 +176,6 @@ class JobRunner:
             with self.condition:
                 self.active = None
                 self.condition.notify_all()
-                if not self.db.queue_state()['order'] and self.had_work:
-                    self.had_work = False
-                    from src.utils.notifier import notify
-                    notify('queue_finished', {'translation_id': tid})
             self.emit_job(tid)
         return True
 

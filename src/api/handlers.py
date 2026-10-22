@@ -23,23 +23,6 @@ from src.core.progress import snapshot_from_legacy_stats
 from .websocket import emit_update
 
 
-def _notification_context(config, translation_id, elapsed_time, error=None):
-    """Build the context dict passed to webhook notifications."""
-    ctx = {
-        'translation_id': translation_id,
-        'file': config.get('original_filename') or config.get('input_filename') or config.get('file_path'),
-        'output': config.get('output_filename'),
-        'duration_seconds': elapsed_time,
-        'provider': config.get('llm_provider'),
-        'model': config.get('model'),
-        'source_lang': config.get('source_language'),
-        'target_lang': config.get('target_language'),
-    }
-    if error:
-        ctx['error'] = error
-    return ctx
-
-
 def run_translation_async_wrapper(translation_id, config, state_manager, output_dir, socketio):
     """
     Wrapper for running translation in async context
@@ -81,8 +64,6 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
         output_dir (str): Output directory path
         socketio: SocketIO instance
     """
-    from src.utils.notifier import notify, EVENT_SUCCESS, EVENT_FAILURE
-
     if not state_manager.exists(translation_id):
         return
 
@@ -851,7 +832,6 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
             state_manager.set_translation_field(translation_id, 'status', 'interrupted')
             _log_message_callback("summary_interrupted", f"🛑 Translation interrupted - partial result saved ({elapsed_time:.2f}s)")
             final_status_payload['status'] = 'interrupted'
-            # User pauses do not send notifications.
 
             # Mark checkpoint as interrupted in database
             checkpoint_manager.mark_interrupted(translation_id)
@@ -919,8 +899,6 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                     f"✅ {completion_label} completed in {elapsed_time:.2f}s{stats_summary}",
                 )
                 final_status_payload['status'] = 'completed'
-                await asyncio.to_thread(notify, EVENT_SUCCESS,
-                    _notification_context(config, translation_id, elapsed_time))
 
                 # Retain job history; the checkpoint manager handles legacy source cleanup.
                 checkpoint_manager.cleanup_completed_job(translation_id)
@@ -949,9 +927,6 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
             _log_message_callback("summary_error_final", f"❌ Translation finished with errors ({elapsed_time:.2f}s)")
             final_status_payload['status'] = 'error'
             final_status_payload['error'] = state_manager.get_translation_field(translation_id, 'error') or 'Unknown error during finalization.'
-            await asyncio.to_thread(notify, EVENT_FAILURE,
-                _notification_context(config, translation_id, elapsed_time,
-                                      error=final_status_payload['error']))
 
         # Stats are now included in the consolidated completion message above
 
@@ -982,7 +957,6 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
 
         config['status_reason'] = 'rate_limit'
         checkpoint_manager.update_job_config(translation_id, config)
-        await asyncio.to_thread(notify, 'system_paused', _notification_context(config, translation_id, 0, error='Rate limited'))
 
         # Auto-resume mode keeps the job running: wait, then re-enter from the checkpoint.
         if not auto_pause:
@@ -1104,12 +1078,6 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                 'status': 'error',
                 'result': state_manager.get_translation_field(translation_id, 'result') or f"Translation failed: {critical_error_msg}"
             }, state_manager)
-
-            stats = state_manager.get_translation_field(translation_id, 'stats') or {}
-            elapsed_time = time.time() - stats.get('start_time', time.time())
-            await asyncio.to_thread(notify, EVENT_FAILURE,
-                _notification_context(config, translation_id, elapsed_time,
-                                      error=critical_error_msg))
 
 
 def freeze_legacy_config(config, state_manager):

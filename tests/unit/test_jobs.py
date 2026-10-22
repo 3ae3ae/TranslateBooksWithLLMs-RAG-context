@@ -33,7 +33,6 @@ def jobs(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, 'src.core.llm.connections', types.SimpleNamespace(resolve_for_pipeline=resolve, ConnectionNotFound=ConnectionNotFound))
     monkeypatch.setitem(sys.modules, 'src.utils.preferences', types.SimpleNamespace(get_preferences=lambda: preferences.copy(), remember_job_defaults=remember))
     monkeypatch.setitem(sys.modules, 'src.utils.notes_store', types.SimpleNamespace(prepare_job_notes=prepare))
-    monkeypatch.setattr('src.utils.notifier.notify', Mock())
     manager = CheckpointManager(str(tmp_path / 'jobs.db'))
     manager.uploads_dir = tmp_path / 'preserved'
     manager.uploads_dir.mkdir()
@@ -446,16 +445,6 @@ async def test_polish_parallel_bilingual_checkpoint_resume(jobs, monkeypatch, fi
     assert factory.call_args.kwargs['connection']['request_timeout'] == 17
 
 
-def test_queue_notifications_exclude_user_pauses(jobs, monkeypatch):
-    notify = Mock()
-    monkeypatch.setattr('src.utils.notifier.notify', notify)
-    tid = create(jobs)
-    jobs.runner.pause(tid)
-    notify.assert_not_called()
-    jobs.client.post(f'/api/jobs/{tid}/resume')
-    jobs.runner.run_next()
-    assert notify.call_args.args[0] == 'queue_finished'
-
 
 def test_queue_order_survives_another_runner(jobs):
     ids = [item['id'] for item in jobs.client.post('/api/jobs', json={'files':jobs.files}).json['jobs']]
@@ -549,8 +538,6 @@ def test_foreign_keys_and_orphan_cleanup(tmp_path):
 
 def test_rate_limit_waiting_keeps_the_worker_slot(jobs, monkeypatch):
     from src.core.llm.exceptions import RateLimitError
-    notified = Mock()
-    monkeypatch.setattr('src.utils.notifier.notify', notified)
     calls = []
     async def translate(**kwargs):
         calls.append(kwargs['translation_id'])
@@ -572,7 +559,6 @@ def test_rate_limit_waiting_keeps_the_worker_slot(jobs, monkeypatch):
     assert calls == [tid, tid]
     assert jobs.db.queue_state()['order'] == [next_id]
     assert jobs.client.get(f'/api/jobs/{tid}').json['status'] == 'completed'
-    assert any(call.args[0] == 'system_paused' for call in notified.call_args_list)
 
 
 def test_epub_partial_name_tracks_saved_output_and_clears_on_resume(jobs, monkeypatch):

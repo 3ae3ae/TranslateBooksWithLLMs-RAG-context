@@ -17,7 +17,7 @@ from src.api.blueprints.notes_routes import create_notes_blueprint
 from src.api.blueprints.preferences_routes import create_preferences_blueprint
 from src.api.blueprints.styles_routes import create_styles_blueprint
 from src.core.pricing import job_estimator
-from src.utils import custom_instructions as styles, notes_store as notes, notifier, preferences
+from src.utils import custom_instructions as styles, notes_store as notes, preferences
 
 
 @pytest.fixture
@@ -27,8 +27,6 @@ def resources(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "NOVEL_CONTEXTS_DIR", runtime / "Novel_Contexts")
     monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
     monkeypatch.setattr(config, "OUTPUT_DIR", str(tmp_path / "output"))
-    for attr in ("NOTIFY_WEBHOOK_URL", "NOTIFY_WEBHOOK_HEADERS", "NOTIFY_WEBHOOK_PAYLOAD"):
-        monkeypatch.setattr(config, attr, "")
     connection = dict(connection_id="test", llm_provider="openai", model="test-model", reasoning_effort="off", connection_type="openai", local=False, request_timeout=30, api_key="", llm_api_endpoint="https://example.test/v1/chat/completions")
     connections = ModuleType("src.core.llm.connections")
     connections.ConnectionNotFound = type("ConnectionNotFound", (ValueError,), {})
@@ -73,33 +71,16 @@ def test_preferences_seed_schema_permissions_and_connection_authority(resources,
     connections.set_default.assert_not_called()
 
 
-def test_preferences_validation_is_atomic_and_masks_secrets(resources):
+def test_preferences_validation_is_atomic(resources):
     client, _ = resources
     before = client.get("/api/preferences").get_json()["values"]
     result = client.patch("/api/preferences", json={"passage_tokens": 2, "bilingual": 1, "notes_update_interval": 0, "task": "other", "unknown": True})
     assert result.status_code == 400
     assert set(result.get_json()["error"]["details"]) == {"passage_tokens", "bilingual", "notes_update_interval", "task", "unknown"}
     assert client.get("/api/preferences").get_json()["values"] == before
-    patch = {"notifications": {"url": "https://example.test/YOUR_API_KEY_HERE", "headers": {"X-Key": "YOUR_API_KEY_HERE"}, "enabled": True}}
-    result = client.patch("/api/preferences", json=patch)
-    assert result.status_code == 200
-    public = result.get_json()["values"]["notifications"]
-    assert public["url"] == {"set": True, "hint": "…/HERE"}
-    assert public["headers"] == {"set": True, "hint": ""}
-    assert "YOUR_API_KEY_HERE" not in result.get_data(as_text=True)
-    result = client.patch("/api/preferences", json={"notifications": {"url": None, "headers": None}, "passage_tokens": None})
-    assert result.status_code == 200
-    assert preferences.get_preferences()["notifications"]["headers"] == patch["notifications"]["headers"]
-    assert stat.S_IMODE(preferences.preferences_path().stat().st_mode) == 0o600
 
 
 @pytest.mark.parametrize("patch", [
-    {"notifications": {"headers": {"X-Key": {"set": True}}}},
-    {"notifications": {"headers": {"X-Key": "bad\nheader"}}},
-    {"notifications": {"url": {"set": True}}},
-    {"notifications": {"events": ["other"]}},
-    {"notifications": {"timeout_seconds": 121}},
-    {"notifications": {"payload": "not json"}},
     {"price_overrides": {"test:model": {"input_per_m": -1, "output_per_m": 1}}},
     {"price_overrides": {"test:model": {"input_per_m": True, "output_per_m": 1}}},
 ])
@@ -331,34 +312,21 @@ def test_estimate_rich_formats_use_pipeline_chunkers(resources, tmp_path, sample
     assert all(unit["main_content"] for unit in epub_units)
 
 
-def test_notifier_legacy_fallback_new_events_and_secret_safe_logs(resources, monkeypatch, caplog):
-    monkeypatch.setattr(config, "NOTIFY_WEBHOOK_URL", "https://example.test/YOUR_API_KEY_HERE")
-    monkeypatch.setattr(config, "NOTIFY_ON_INTERRUPTION", True)
-    request = Mock(return_value=Mock(raise_for_status=Mock()))
-    monkeypatch.setattr(notifier.requests, "request", request)
-    assert notifier.notify("system_paused", {"file": "book.txt"})
-    preferences.patch_preferences({"notifications": {"enabled": True, "url": "https://example.test/YOUR_API_KEY_HERE", "headers": {"X-Key": "YOUR_API_KEY_HERE"}, "events": ["system_paused", "queue_finished"]}})
-    assert notifier.notify("queue_finished", {})
-    assert not notifier.notify("success", {})
-    request.side_effect = requests.ConnectionError("https://example.test/YOUR_API_KEY_HERE")
-    assert not notifier.notify("system_paused", {})
-    assert "YOUR_API_KEY_HERE" not in caplog.text
-    assert not notifier.notify("queue_finished", {"duration_seconds": "invalid"})
+def test_preferences_ignore_removed_saved_keys(resources):
+    client, _ = resources
+    preferences._atomic_write({"notifications": {"enabled": True}, "unknown": True, "bilingual": True})
+    result = client.get("/api/preferences")
+    assert result.status_code == 200
+    assert result.json["values"]["bilingual"] is True
+    assert "notifications" not in result.json["values"]
+    assert "unknown" not in result.json["values"]
 
 
-def test_notification_test_route_uses_preferences_and_new_events(resources, monkeypatch):
+def test_notification_test_route_is_removed(resources):
     from src.api.blueprints.config_routes import create_config_blueprint
-    app = Flask("notification-test")
+    app = Flask("removed-notifications")
     app.register_blueprint(create_config_blueprint())
-    client = app.test_client()
-    monkeypatch.setattr(notifier.requests, "request", Mock(return_value=Mock(raise_for_status=Mock())))
-    assert client.post("/api/notifications/test", json={"event": "system_paused"}).status_code == 400
-    preferences.patch_preferences({"notifications": {"url": "https://example.test/YOUR_API_KEY_HERE", "enabled": True, "events": ["system_paused", "queue_finished"]}})
-    for event in ("system_paused", "queue_finished"):
-        response = client.post("/api/notifications/test", json={"event": event})
-        assert response.status_code == 200 and response.get_json()["success"] is True
-    assert client.post("/api/notifications/test", json={"event": "success"}).status_code == 400
-    assert client.post("/api/notifications/test", json={"event": "unknown"}).status_code == 400
+    assert app.test_client().post("/api/notifications/test").status_code == 404
 
 
 @pytest.fixture
