@@ -457,7 +457,6 @@
   "connection.status.ready_one": "사용 가능 · 모델 {{n}}개",
   "connection.status.ready_other": "사용 가능 · 모델 {{n}}개",
   "connection.status.testing": "테스트 중…",
-  "connection.status.untested": "아직 테스트하지 않음",
   "connection.toast.added": "연결을 추가했어요",
   "connection.toast.saved": "연결을 저장했어요",
   "connection.toast.deleted": "연결을 삭제했어요",

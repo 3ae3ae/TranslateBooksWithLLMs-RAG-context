@@ -457,7 +457,6 @@
   "connection.status.ready_one": "Ready · {{n}} model",
   "connection.status.ready_other": "Ready · {{n}} models",
   "connection.status.testing": "Testing…",
-  "connection.status.untested": "Not tested yet",
   "connection.toast.added": "Connection added",
   "connection.toast.saved": "Connection saved",
   "connection.toast.deleted": "Connection deleted",

@@ -36,7 +36,7 @@ function ConnectionCard({ c, onEdit }) {
     try { await connectionsApi.remove(c.id); await loadConnections(); toast({ tone: 'success', title: t('connection.toast.deleted') }); }
     catch (e) { toast({ tone: 'error', title: t('errors.action_failed'), message: e.message }); }
   };
-  let statusEl = html`<span class="faint">${t('connection.status.untested')}</span>`;
+  let statusEl = null;
   if (testing) statusEl = html`<span class="row" style="--gap:4px"><${Spinner} size="sm" />${t('connection.status.testing')}</span>`;
   else if (status && status.ok) statusEl = html`<span class="row" style="--gap:4px;color:var(--success)"><span class="status-dot status-dot--ok" />${t('connection.status.ready', { count: status.model_count || 0, n: formatNumber(status.model_count || 0) })}</span>`;
   else if (status && status.ok === false) statusEl = html`<span class="row" style="--gap:4px;color:var(--danger)" title=${status.error}><span class="status-dot status-dot--err" /><span class="truncate" style="max-width:360px">${status.error || t('connection.test_failed')}</span></span>`;
@@ -55,7 +55,7 @@ function ConnectionCard({ c, onEdit }) {
         ${c.default_model && html`<span>${t('connection.default_model', { model: c.default_model })}</span>`}
         ${c.key_count > 0 && html`<span>${t('connection.keys_count', { count: c.key_count, n: formatNumber(c.key_count) })}</span>`}
       </div>
-      <div class="small">${statusEl}</div>
+      ${statusEl && html`<div class="small">${statusEl}</div>`}
     </div>
     <div class="row">
       <${Button} size="sm" icon="plug" onClick=${test} disabled=${testing}>${t('connection.test')}<//>
