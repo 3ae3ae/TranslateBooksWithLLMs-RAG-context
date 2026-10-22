@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="{{ initial_locale|default('en') }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TBL</title>
+  <link rel="icon" type="image/png" href="/static/TBL-Logo-alpha.png">
+  <script>
+    // Apply the saved theme before first paint to avoid a flash.
+    (function () {
+      var pref = 'system';
+      try { pref = localStorage.getItem('tbl.theme') || 'system'; } catch (e) {}
+      var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      if (dark) document.documentElement.setAttribute('data-theme', 'dark');
+    })();
+    window.__INITIAL_LOCALE__ = {{ initial_locale|default('en')|tojson }};
+    window.__TBL_TOKEN__ = {{ api_token|default('')|tojson }};
+  </script>
+  <script type="importmap">
+    {
+      "imports": {
+        "preact": "/static/vendor/preact.mjs",
+        "preact/hooks": "/static/vendor/preact-hooks.mjs",
+        "htm": "/static/vendor/htm.mjs",
+        "@preact/signals-core": "/static/vendor/signals-core.mjs",
+        "@preact/signals": "/static/vendor/signals.mjs"
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="/static/app/styles/app.css">
+  <script src="/static/vendor/socket.io.min.js" defer></script>
+  <script type="module" src="/static/app/main.js"></script>
+</head>
+<body>
+  <div id="app"></div>
+  <noscript>TBL needs JavaScript.</noscript>
+</body>
+</html>

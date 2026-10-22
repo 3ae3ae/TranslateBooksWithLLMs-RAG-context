@@ -11,14 +11,21 @@ window.history = { replaceState: (_state, _title, hash) => {
 const { route, navigate, defineRoutes } = await import('../../src/web/static/app/lib/router.js');
 
 test('default and all design routes match', () => {
-    assert.equal(route.value.name, 'library');
+    defineRoutes([
+        { name: 'translations', pattern: '/translations' }, { name: 'new', pattern: '/new' },
+        { name: 'job', pattern: '/job/:id' }, { name: 'job_tab', pattern: '/job/:id/:tab' },
+        { name: 'compare', pattern: '/compare' }, { name: 'glossaries', pattern: '/glossaries' },
+        { name: 'glossary', pattern: '/glossaries/:id' }, { name: 'notes', pattern: '/notes' },
+        { name: 'note', pattern: '/notes/:name' }, { name: 'styles', pattern: '/styles' },
+        { name: 'style', pattern: '/styles/:name' }, { name: 'settings', pattern: '/settings/:section' },
+    ]);
+    navigate('');
+    assert.equal(route.value.name, 'translations');
     const examples = [
-        ['/library', 'library'], ['/new', 'new'], ['/job/42', 'job'], ['/compare', 'compare'],
-        ['/glossaries', 'glossaries'], ['/glossaries/7', 'glossary'], ['/notes', 'notes'],
+        ['/translations', 'translations'], ['/new', 'new'], ['/job/42', 'job'], ['/job/42/log', 'job_tab'],
+        ['/compare', 'compare'], ['/glossaries', 'glossaries'], ['/glossaries/7', 'glossary'], ['/notes', 'notes'],
         ['/notes/book', 'note'], ['/styles', 'styles'], ['/styles/book', 'style'],
-        ...['connections', 'translation', 'notifications', 'storage', 'appearance']
-            .map(page => [`/settings/${page}`, `settings_${page}`]),
-        ['/settings', 'settings_connections'],
+        ['/settings/notifications', 'settings'], ['/settings', 'settings'],
     ];
     for (const [path, name] of examples) {
         navigate(path);
@@ -35,7 +42,7 @@ test('parameters and queries decode without treating encoded slashes as segments
 });
 
 test('unknown routes, missing parameters and malformed escapes are not_found', () => {
-    for (const path of ['/missing', '/job', '/job/', '/job/42/extra', '/notes/%ZZ']) {
+    for (const path of ['/missing', '/job', '/job/', '/job/42/log/extra', '/notes/%ZZ']) {
         navigate(path);
         assert.equal(route.value.name, 'not_found', path);
         assert.deepEqual(route.value.params, {});
@@ -46,9 +53,9 @@ test('replace navigation and browser hashchange both update the signal', () => {
     navigate('#/job/123', { replace: true });
     assert.equal(replaced, '#/job/123');
     assert.equal(route.value.params.id, '123');
-    window.location.hash = '#/library/?q=book';
+    window.location.hash = '#/translations/?q=book';
     window.dispatchEvent(new Event('hashchange'));
-    assert.equal(route.value.name, 'library');
+    assert.equal(route.value.name, 'translations');
     assert.deepEqual(route.value.query, { q: 'book' });
 });
 
@@ -59,6 +66,6 @@ test('defineRoutes replaces route definitions and matches literal punctuation', 
     assert.deepEqual(route.value.params, { id: 'abc' });
     navigate('/customXv1/abc');
     assert.equal(route.value.name, 'not_found');
-    navigate('/library');
+    navigate('/translations');
     assert.equal(route.value.name, 'not_found');
 });

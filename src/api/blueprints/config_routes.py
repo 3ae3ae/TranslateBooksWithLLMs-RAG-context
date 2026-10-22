@@ -91,6 +91,16 @@ def create_config_blueprint(server_session_id=None):
             api_token=API_TOKEN,
         )
 
+    @bp.route('/next')
+    def serve_next_interface():
+        """Serve the redesigned app shell (all UI is rendered client-side)."""
+        from src.api.auth import API_TOKEN
+        return render_template(
+            'app.html',
+            initial_locale=resolve_ui_locale(request),
+            api_token=API_TOKEN,
+        )
+
     @bp.route('/api/ui-locale', methods=['POST'])
     def set_ui_locale():
         """Persist the user's UI locale choice in a long-lived cookie.

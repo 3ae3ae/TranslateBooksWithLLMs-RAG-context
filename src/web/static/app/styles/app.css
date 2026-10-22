@@ -9,21 +9,21 @@
   --surface-3: #e7e6e2;
   --sidebar: #efefec;
   --border: #e3e2de;
-  --border-strong: #cfcdc7;
+  --border-strong: #8f8e89;
   --text: #1b1b1a;
   --text-2: #5f5e5a;
-  --text-3: #8a8984;
+  --text-3: #6b6a66;
   --accent: #3b5bdb;
   --accent-hover: #3250c7;
   --accent-text: #ffffff;
   --accent-weak: #e8edfd;
   --accent-weak-text: #2f4bb8;
-  --success: #2f9e44;
+  --success: #2b7a3b;
   --success-weak: #e6f4e9;
-  --warning: #d9480f;
+  --warning: #b34700;
   --warning-weak: #fdefe6;
-  --danger: #e03131;
-  --danger-hover: #c92a2a;
+  --danger: #c92a2a;
+  --danger-hover: #a51d1d;
   --danger-weak: #fdeaea;
   --focus-ring: rgba(59, 91, 219, 0.28);
   --overlay: rgba(20, 20, 18, 0.42);
@@ -32,7 +32,8 @@
   --shadow-lg: 0 16px 48px rgba(20, 20, 18, 0.16), 0 2px 8px rgba(20, 20, 18, 0.08);
 
   --font-ui: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", "Noto Sans KR", "Noto Sans", sans-serif;
-  --font-book: "Iowan Old Style", "Apple Myungjo", "AppleMyungjo", "Noto Serif KR", Georgia, serif;
+  --font-serif: "Iowan Old Style", "AppleMyungjo", "Noto Serif KR", Georgia, serif;
+  --font-book: var(--font-ui);
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   --r-sm: 6px;
@@ -43,6 +44,8 @@
   --dur: 150ms;
 }
 
+:root[data-book-font="serif"] { --font-book: var(--font-serif); }
+
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #111214;
@@ -51,10 +54,10 @@
   --surface-3: #2b2c31;
   --sidebar: #16171a;
   --border: #2d2e33;
-  --border-strong: #3d3e45;
+  --border-strong: #6c6b70;
   --text: #ececea;
   --text-2: #a3a29e;
-  --text-3: #75746f;
+  --text-3: #908f8a;
   --accent: #7b93f7;
   --accent-hover: #93a7f9;
   --accent-text: #0f1424;
@@ -271,7 +274,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 0; }
 }
 .input, .select { height: 36px; padding: 0 10px; }
 .textarea { padding: 10px 12px; resize: vertical; min-height: 96px; line-height: 1.55; }
-.textarea--book { font-family: var(--font-book); font-size: 15px; line-height: 1.7; }
+.textarea--book { font-family: var(--font-book); font-size: 16px; line-height: 1.7; }
 .textarea--mono { font-family: var(--font-mono); font-size: 12.5px; }
 .input::placeholder, .textarea::placeholder { color: var(--text-3); }
 .input:focus, .select:focus, .textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
@@ -639,7 +642,7 @@ button.chip:hover { color: var(--text); border-color: var(--text-3); }
 .passage__col { padding: 16px 20px; min-width: 0; }
 .passage__col + .passage__col { border-left: 1px solid var(--border); }
 .passage__lang { font-size: 12px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
-.passage__text { font-family: var(--font-book); font-size: 15px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; }
+.passage__text { font-family: var(--font-book); font-size: 16px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; }
 @media (max-width: 760px) { .passage { grid-template-columns: minmax(0, 1fr); } .passage__col + .passage__col { border-left: 0; border-top: 1px solid var(--border); } }
 
 .log { max-height: 560px; overflow: auto; padding: 8px 0; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); font-family: var(--font-mono); font-size: 12px; }
@@ -666,7 +669,7 @@ button.chip:hover { color: var(--text); border-color: var(--text-3); }
 .compare-cell { padding: 14px 16px; border-top: 1px solid var(--border); border-left: 1px solid var(--border); min-width: 260px; }
 .compare-cell--source { border-left: 0; background: var(--surface-2); }
 .compare-cell--head { border-top: 0; position: sticky; top: 0; background: var(--surface); }
-.compare-cell__text { font-family: var(--font-book); font-size: 14.5px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.compare-cell__text { font-family: var(--font-book); font-size: 15px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
 .compare-cell__metrics { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 10px; color: var(--text-3); font-size: 12px; font-variant-numeric: tabular-nums; }
 .diff-ins { background: var(--success-weak); color: var(--success); text-decoration: none; }
 .diff-del { background: var(--danger-weak); color: var(--danger); }
