@@ -74,7 +74,7 @@ export function Dropzone({ onFiles, accept, multiple = true, title, hint, compac
     onKeyDown=${(e) => { if (!disabled && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); inputRef.current.click(); } }}
     onDragOver=${(e) => { e.preventDefault(); e.stopPropagation(); if (!disabled) setActive(true); }}
     onDragLeave=${() => setActive(false)}
-    onDrop=${(e) => { e.preventDefault(); e.stopPropagation(); setActive(false); if (!disabled) take(e.dataTransfer.files); }}
+    onDrop=${(e) => { e.preventDefault(); setActive(false); if (!disabled) take(e.dataTransfer.files); }}
   >
     <div class="dropzone__icon"><${Icon} name="file-up" /></div>
     <div class=${compact ? 'stack' : 'stack'} style="--gap:2px">
