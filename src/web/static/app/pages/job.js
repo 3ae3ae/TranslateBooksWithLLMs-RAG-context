@@ -1,5 +1,5 @@
-import { html, useState, useEffect, useRef, useMemo } from '../ui/html.js';
-import { Button, Icon, Progress, Callout, Cover, Spinner, Pill, EmptyState } from '../ui/core.js';
+import { html, useState, useEffect, useRef, useMemo, cx } from '../ui/html.js';
+import { Button, Icon, IconButton, Progress, Callout, Cover, Spinner, Pill, EmptyState } from '../ui/core.js';
 import { Field, Select, Segmented, NumberInput } from '../ui/forms.js';
 import { Tabs, Disclosure } from '../ui/layout.js';
 import { Menu, Dialog, toast } from '../ui/overlays.js';
@@ -12,7 +12,7 @@ import { navigate, route } from '../lib/router.js';
 import { t } from '../lib/i18n.js';
 import { formatDuration, formatCost, formatNumber, formatDate } from '../lib/format.js';
 
-const TABS = ['progress', 'passages', 'notes', 'log'];
+const TABS = ['review', 'notes', 'log'];
 
 function useJobDetail(id) {
   const [detail, setDetail] = useState(null);
@@ -46,17 +46,6 @@ function Stat({ label, value }) {
   return html`<div class="stat"><span class="stat__label">${label}</span><span class="stat__value">${value}</span></div>`;
 }
 
-function PassagePair({ preview, job }) {
-  if (!preview) return html`<p class="muted small">${t('job.live.waiting')}</p>`;
-  return html`<div class="stack" style="--gap:8px">
-    <div class="small muted">${t('job.live.passage', { n: formatNumber((preview.unit ?? 0) + 1) })}</div>
-    <div class="passage">
-      <div class="passage__col"><div class="passage__lang">${job.source_language || t('job.live.original')}</div><div class="passage__text">${preview.source}</div></div>
-      <div class="passage__col"><div class="passage__lang">${job.target_language}</div><div class="passage__text">${preview.translation}</div></div>
-    </div>
-  </div>`;
-}
-
 function SettingsUsed({ config, job }) {
   if (!config) return null;
   const rows = [
@@ -78,7 +67,7 @@ function SettingsUsed({ config, job }) {
   return html`<dl class="dl">${rows.map(([k, v]) => html`<dt>${k}</dt><dd>${v || '—'}</dd>`)}</dl>`;
 }
 
-function ProgressTab({ job, detail, preview }) {
+function StatusPanel({ job, detail }) {
   const countdown = useCountdown(job.status === 'waiting' ? job.resume_at : null);
   const running = job.status === 'running';
   const done = job.status === 'completed';
@@ -131,61 +120,180 @@ function ProgressTab({ job, detail, preview }) {
       <//>`}
     </div>`}
 
-    ${job.status !== 'queued' && html`<section class="stack" style="--gap:10px">
-      <h2>${done ? t('job.live.last') : t('job.live.title')}</h2>
-      <${PassagePair} preview=${preview || (detail && detail.latest_preview)} job=${job} />
-    </section>`}
-
     <${Disclosure} title=${t('job.used.title')}>
       <${SettingsUsed} config=${detail && detail.config} job=${job} />
     <//>
   </div>`;
 }
 
-// ---------------------------------------------------------------- passages
+// ------------------------------------------------------------------ review
 
-function PassagesTab({ job }) {
-  const PAGE = 40;
+const WINDOW = 40;
+const KEEP_WHILE_FOLLOWING = 150;
+
+/** Checked and flagged passages, per job. shortcut: kept in this browser only; move to the server if reviews must follow the user. */
+function useReviewMarks(jobId) {
+  const storageKey = `tbl.review.${jobId}`;
+  const read = () => {
+    try {
+      const v = JSON.parse(localStorage.getItem(storageKey) || '{}');
+      return { checked: new Set(v.checked || []), flagged: new Set(v.flagged || []) };
+    } catch { return { checked: new Set(), flagged: new Set() }; }
+  };
+  const [marks, setMarks] = useState(read);
+  useEffect(() => { setMarks(read()); }, [jobId]);
+  const toggle = (kind, index) => setMarks((cur) => {
+    const next = { checked: new Set(cur.checked), flagged: new Set(cur.flagged) };
+    if (next[kind].has(index)) next[kind].delete(index); else next[kind].add(index);
+    localStorage.setItem(storageKey, JSON.stringify({ checked: [...next.checked], flagged: [...next.flagged] }));
+    return next;
+  });
+  return [marks, toggle];
+}
+
+const nearBottom = () => window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 160;
+const scrollToEnd = () => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+
+function ReviewRow({ p, job, marks, onToggle }) {
+  const checked = marks.checked.has(p.index);
+  const flagged = marks.flagged.has(p.index);
+  return html`<article id=${`passage-${p.index}`} class=${cx('review-row', checked && 'review-row--checked', flagged && 'review-row--flagged')}>
+    <header class="review-row__head">
+      <span class="review-row__num">${t('job.live.passage', { n: formatNumber(p.index + 1) })}</span>
+      ${p.status && p.status !== 'completed' && html`<${Pill} tone=${p.status === 'failed' ? 'danger' : 'warning'}>${t(`job.passages.status.${p.status}`)}<//>`}
+      <span class="grow" />
+      ${job.notes_name && html`<a class="small" href=${`#/job/${encodeURIComponent(job.id)}/notes?at=${p.index}`}>${t('job.passages.notes_here')}</a>`}
+      <${IconButton} size="sm" icon="flag" label=${t('job.review.flag')} pressed=${flagged} onClick=${() => onToggle('flagged', p.index)} />
+      <${IconButton} size="sm" icon="check" label=${t('job.review.check')} pressed=${checked} onClick=${() => onToggle('checked', p.index)} />
+    </header>
+    <div class="passage passage--review">
+      <div class="passage__col"><div class="passage__text">${p.source}</div></div>
+      <div class="passage__col"><div class="passage__text">${p.translation || html`<span class="faint">${t('job.passages.not_yet')}</span>`}</div></div>
+    </div>
+  </article>`;
+}
+
+/**
+ * Every finished passage, source next to translation, growing as the job runs.
+ * Sticks to the newest passage only while the reader is at the bottom, like a chat.
+ */
+function ReviewStream({ job }) {
+  const [marks, toggle] = useReviewMarks(job.id);
+  const [items, setItems] = useState([]);
+  const [start, setStart] = useState(null); // offset of items[0] among finished passages
+  const [total, setTotal] = useState(0);
+  const [fresh, setFresh] = useState(0);
   const [q, setQ] = useState('');
   const [query, setQuery] = useState('');
-  const [offset, setOffset] = useState(0);
-  const [data, setData] = useState(null);
+  const [results, setResults] = useState(null);
   const [error, setError] = useState(null);
-  useEffect(() => { const h = setTimeout(() => { setQuery(q.trim()); setOffset(0); }, 300); return () => clearTimeout(h); }, [q]);
+  const running = job.status === 'running';
+
+  // Open on the newest passages while translating, at the beginning once finished.
   useEffect(() => {
     let alive = true;
-    jobsApi.passages(job.id, { offset, limit: PAGE, q: query || undefined })
-      .then((d) => { if (alive) { setData(d); setError(null); } })
+    const first = running ? Math.max(0, (job.units_done || 0) - WINDOW / 2) : 0;
+    jobsApi.passages(job.id, { offset: first, limit: WINDOW })
+      .then((d) => { if (alive) { setItems(d.items); setStart(first); setTotal(d.total); setError(null); } })
       .catch((e) => { if (alive) setError(e); });
     return () => { alive = false; };
-  }, [job.id, offset, query, job.units_done]);
-  const total = (data && data.total) || 0;
-  return html`<div class="stack" style="--gap:16px">
-    <div class="toolbar" style="margin:0">
-      <div class="input-affix toolbar__search" style="width:320px">
+  }, [job.id]);
+
+  // A passage finished (or was polished or retried): refresh the window and extend it to the end.
+  useEffect(() => {
+    if (start === null) return undefined;
+    let alive = true;
+    const following = nearBottom();
+    const from = following && items.length > KEEP_WHILE_FOLLOWING * 1.5 ? start + items.length - KEEP_WHILE_FOLLOWING : start;
+    jobsApi.passages(job.id, { offset: from, limit: Math.min(500, start + items.length - from + WINDOW) }).then((d) => {
+      if (!alive) return;
+      const added = d.total - total;
+      setItems(d.items); setStart(from); setTotal(d.total);
+      if (added > 0 && total > 0) {
+        if (following) requestAnimationFrame(scrollToEnd);
+        else setFresh((n) => n + added);
+      }
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [job.units_done, job.status, job.phase]);
+
+  useEffect(() => {
+    const onScroll = () => { if (nearBottom()) setFresh(0); };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  useEffect(() => { const h = setTimeout(() => setQuery(q.trim()), 300); return () => clearTimeout(h); }, [q]);
+  useEffect(() => {
+    if (!query) { setResults(null); return undefined; }
+    let alive = true;
+    jobsApi.passages(job.id, { q: query, limit: 200 })
+      .then((d) => { if (alive) setResults(d); })
+      .catch((e) => { if (alive) setError(e); });
+    return () => { alive = false; };
+  }, [query, job.id]);
+
+  const loadEarlier = async () => {
+    const from = Math.max(0, start - WINDOW);
+    const d = await jobsApi.passages(job.id, { offset: from, limit: start - from });
+    const height = document.documentElement.scrollHeight;
+    setItems((cur) => [...d.items, ...cur]);
+    setStart(from);
+    // Keep the passage the reader was looking at in place.
+    requestAnimationFrame(() => window.scrollBy(0, document.documentElement.scrollHeight - height));
+  };
+
+  const jumpTo = async (index) => {
+    if (q) setQ('');
+    if (!items.some((p) => p.index === index)) {
+      const from = Math.max(0, index - 5);
+      const d = await jobsApi.passages(job.id, { offset: from, limit: WINDOW });
+      setItems(d.items); setStart(from); setTotal(d.total);
+    }
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`passage-${index}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const flagged = [...marks.flagged].sort((a, b) => a - b);
+  const atEnd = start !== null && start + items.length >= total;
+  const rows = results ? results.items : items;
+
+  return html`<section class="review" aria-label=${t('job.review.title')}>
+    <div class="review-bar">
+      <div class="input-affix review-bar__search">
         <${Icon} name="search" size="sm" />
-        <input class="input" type="search" placeholder=${t('job.passages.search')} aria-label=${t('job.passages.search')} value=${q} onInput=${(e) => setQ(e.currentTarget.value)} />
+        <input class="input" type="search" placeholder=${t('job.passages.search')} aria-label=${t('job.passages.search')}
+          value=${q} onInput=${(e) => setQ(e.currentTarget.value)} />
       </div>
-      <span class="small muted">${data ? t('job.passages.count', { count: total, n: formatNumber(total) }) : ''}</span>
+      <span class="small muted num">${t('job.review.checked', { n: formatNumber(marks.checked.size), total: formatNumber(total) })}</span>
+      <span class="grow" />
+      ${running && job.units_total > 0 && html`<span class="small muted num">
+        ${t('job.units', { done: formatNumber(job.units_done || 0), total: formatNumber(job.units_total) })}${job.eta_seconds ? ` · ${t('job.eta', { time: formatDuration(job.eta_seconds) })}` : ''}
+      </span>`}
+      ${flagged.length > 0 && html`<${Menu} icon="flag" label=${t('job.review.flagged_list', { count: flagged.length, n: formatNumber(flagged.length) })}
+        items=${flagged.map((i) => ({ label: t('job.live.passage', { n: formatNumber(i + 1) }), icon: 'flag', onSelect: () => jumpTo(i) }))} />`}
+      ${flagged.length > 0 && html`<span class="small muted num">${t('job.review.flagged_list', { count: flagged.length, n: formatNumber(flagged.length) })}</span>`}
     </div>
     ${error && html`<${Callout} tone="danger">${error.message}<//>`}
-    ${data && !data.items.length && html`<p class="muted">${query ? t('job.passages.no_match') : t('job.passages.none_yet')}</p>`}
-    ${data && data.items.map((p) => html`<div class="stack" style="--gap:6px" key=${p.index}>
-      <div class="row small muted">
-        <span class="strong">${t('job.live.passage', { n: formatNumber(p.index + 1) })}</span>
-        ${p.status && p.status !== 'completed' && html`<${Pill} tone=${p.status === 'failed' ? 'danger' : 'warning'}>${t(`job.passages.status.${p.status}`)}<//>`}
-        ${job.notes_name && html`<a href=${`#/job/${encodeURIComponent(job.id)}/notes?at=${p.index}`} class="small">${t('job.passages.notes_here')}</a>`}
-      </div>
-      <div class="passage">
-        <div class="passage__col"><div class="passage__text" style="font-size:15px">${p.source}</div></div>
-        <div class="passage__col"><div class="passage__text" style="font-size:15px">${p.translation || html`<span class="faint">${t('job.passages.not_yet')}</span>`}</div></div>
-      </div>
-    </div>`)}
-    ${total > PAGE && html`<div class="row row--between">
-      <${Button} icon="chevron-left" disabled=${offset === 0} onClick=${() => setOffset(Math.max(0, offset - PAGE))}>${t('common.previous')}<//>
-      <span class="small muted">${t('job.passages.range', { from: formatNumber(offset + 1), to: formatNumber(Math.min(total, offset + PAGE)), total: formatNumber(total) })}</span>
-      <${Button} iconRight="chevron-right" disabled=${offset + PAGE >= total} onClick=${() => setOffset(offset + PAGE)}>${t('common.next')}<//>
+    ${results && html`<p class="small muted">${t('job.passages.count', { count: results.total, n: formatNumber(results.total) })}</p>`}
+    ${!results && start > 0 && html`<${Button} block icon="chevron-up" onClick=${loadEarlier}>${t('job.review.load_earlier', { n: formatNumber(start) })}<//>`}
+    ${rows.length === 0 && !running && html`<p class="muted">${results ? t('job.passages.no_match') : t('job.review.empty')}</p>`}
+    ${rows.map((p) => html`<${ReviewRow} key=${p.index} p=${p} job=${job} marks=${marks} onToggle=${toggle} />`)}
+    ${!results && running && atEnd && html`<div class="review-row review-row--pending" role="status">
+      <${Spinner} size="sm" />${t(job.phase === 'polishing' ? 'job.review.polishing' : 'job.review.translating', { n: formatNumber((job.units_done || 0) + 1) })}
     </div>`}
+    ${!results && fresh > 0 && html`<button type="button" class="jump-pill" onClick=${() => { setFresh(0); scrollToEnd(); }}>
+      <${Icon} name="arrow-down" size="sm" />${t('job.review.new_below', { count: fresh, n: formatNumber(fresh) })}
+    </button>`}
+  </section>`;
+}
+
+function ReviewTab({ job, detail }) {
+  return html`<div class="stack" style="--gap:24px">
+    <${StatusPanel} job=${job} detail=${detail} />
+    ${job.status !== 'queued' && html`<${ReviewStream} job=${job} />`}
   </div>`;
 }
 
@@ -363,12 +471,7 @@ function LogTab({ job }) {
 export function JobPage({ id, tab }) {
   const job = jobsById.value[id];
   const { detail, error } = useJobDetail(id);
-  const [preview, setPreview] = useState(null);
   const [dialog, setDialog] = useState(null);
-  useEffect(() => onSocket('job_update', (msg) => {
-    if (msg && msg.preview && msg.job && msg.job.id === id) setPreview(msg.preview);
-  }), [id]);
-  useEffect(() => { setPreview(null); }, [id]);
 
   if (!job) {
     if (error && error.status === 404) {
@@ -378,11 +481,10 @@ export function JobPage({ id, tab }) {
     return html`<div class="page"><p class="muted">${jobsLoaded.value ? t('common.loading') : t('common.loading')}</p></div>`;
   }
 
-  const current = TABS.includes(tab) ? tab : 'progress';
+  const current = TABS.includes(tab) ? tab : 'review';
   const action = primaryAction(job);
   const tabs = [
-    { id: 'progress', label: t('job.tab.progress'), href: `#/job/${encodeURIComponent(id)}` },
-    { id: 'passages', label: t('job.tab.passages'), href: `#/job/${encodeURIComponent(id)}/passages` },
+    { id: 'review', label: t('job.tab.review'), href: `#/job/${encodeURIComponent(id)}` },
     job.notes_name && { id: 'notes', label: t('job.tab.notes'), href: `#/job/${encodeURIComponent(id)}/notes` },
     { id: 'log', label: t('job.tab.log'), href: `#/job/${encodeURIComponent(id)}/log` },
   ].filter(Boolean);
@@ -409,8 +511,7 @@ export function JobPage({ id, tab }) {
       </div>
     </header>
     <${Tabs} label=${t('job.tabs_label')} current=${current} items=${tabs} />
-    ${current === 'progress' && html`<${ProgressTab} job=${job} detail=${detail} preview=${preview} />`}
-    ${current === 'passages' && html`<${PassagesTab} job=${job} />`}
+    ${current === 'review' && html`<${ReviewTab} job=${job} detail=${detail} />`}
     ${current === 'notes' && html`<${NotesTab} job=${job} detail=${detail} />`}
     ${current === 'log' && html`<${LogTab} job=${job} />`}
     ${dialog === 'model' && html`<${ChangeModelDialog} job=${job} onClose=${() => setDialog(null)} />`}

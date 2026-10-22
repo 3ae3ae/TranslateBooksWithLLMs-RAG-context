@@ -645,6 +645,32 @@ button.chip:hover { color: var(--text); border-color: var(--text-3); }
 .passage__text { font-family: var(--font-book); font-size: 16px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; }
 @media (max-width: 760px) { .passage { grid-template-columns: minmax(0, 1fr); } .passage__col + .passage__col { border-left: 0; border-top: 1px solid var(--border); } }
 
+/* Review: every finished passage, readable at the reader's own pace while the job runs. */
+.review { display: flex; flex-direction: column; gap: 14px; }
+.review-bar {
+  position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 0; background: var(--bg); border-bottom: 1px solid var(--border);
+}
+@media (max-width: 900px) { .review-bar { top: 52px; } }
+.review-bar__search { width: 280px; }
+.review-row { display: flex; flex-direction: column; gap: 6px; scroll-margin-top: 72px; }
+.review-row__head { display: flex; align-items: center; gap: 8px; min-height: 28px; }
+.review-row__num { font-size: 13px; font-weight: 600; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.passage--review .passage__text { max-height: none; font-size: 15.5px; }
+.review-row--checked .passage { border-color: var(--success); }
+.review-row--checked .review-row__num { color: var(--success); }
+.review-row--flagged .passage { border-color: var(--warning); box-shadow: inset 3px 0 0 var(--warning); }
+.review-row--pending {
+  flex-direction: row; align-items: center; gap: 10px; padding: 16px 20px;
+  border: 1px dashed var(--border-strong); border-radius: var(--r-md); color: var(--text-2);
+}
+.jump-pill {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 20;
+  display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border: 0; border-radius: 999px;
+  background: var(--accent); color: var(--accent-text); font: inherit; font-weight: 600; box-shadow: var(--shadow-md); cursor: pointer;
+}
+.jump-pill:hover { background: var(--accent-hover); }
+
 .log { max-height: 560px; overflow: auto; padding: 8px 0; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); font-family: var(--font-mono); font-size: 12px; }
 .log__line { display: grid; grid-template-columns: 74px 16px minmax(0, 1fr); gap: 8px; padding: 3px 12px; }
 .log__time { color: var(--text-3); }
@@ -697,3 +723,4 @@ button.chip:hover { color: var(--text); border-color: var(--text-3); }
 @keyframes pop-in { from { opacity: 0; transform: translateY(6px) scale(0.98); } }
 @keyframes slide-in { from { transform: translateX(24px); opacity: 0; } }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
+@media (min-width: 901px) { .jump-pill { left: calc(50% + var(--sidebar-w) / 2); } }
