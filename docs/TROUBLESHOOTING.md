@@ -1,414 +1,64 @@
-# Troubleshooting Guide
+# Troubleshooting
 
-Solutions to common problems with TranslateBookWithLLM.
+When something goes wrong, the translation's **Log** tab usually says why. The same log is kept in `data/logs/<translation id>.jsonl`. For more detail in the terminal, add `DEBUG_MODE=true` to `.env` and restart.
 
----
+## The app
 
-## Table of Contents
+**Port 5000 is already in use.** Start on another port: `PORT=8080 uv run translation_api.py`, or put `PORT=8080` in `.env`.
 
-- [Connection Issues](#connection-issues)
-- [Model Issues](#model-issues)
-- [Performance Issues](#performance-issues)
-- [Thinking Models](#thinking-models)
-- [EPUB Issues](#epub-issues)
-- [SRT Issues](#srt-issues)
-- [Web Interface Issues](#web-interface-issues)
-- [Configuration Issues](#configuration-issues)
-- [Language Detection Issues](#language-detection-issues)
-- [Checkpoint & Resume Issues](#checkpoint--resume-issues)
-- [Quick Reference](#quick-reference)
-- [Debugging](#debugging)
+**The app exits right after starting with a folder error.** It checks that it can write to the output folder (`translated_files/`, or `OUTPUT_DIR` in `.env`) and stops if it can't. Pick a folder you can write to; on Windows, Controlled Folder Access or antivirus software can block it.
 
----
+**The page shows "Unauthorized" or stops updating.** The app makes a new access token each time it starts, and an open page reloads itself when it notices. If it doesn't, refresh the page.
 
-## Connection Issues
+**Translations stopped when I closed the terminal.** The terminal is the app; keep it running. Closing only the browser tab is fine. After a restart, a translation that was running is paused and the queue is held until you act: **Resume** on that translation continues it first, or **Resume queue** starts the next one.
 
-### "Connection refused" / "Cannot connect to Ollama"
+**A warning about Ollama at startup.** The app checks for a local Ollama when it starts. If you only use cloud services, ignore it.
 
-**Cause**: Ollama is not running or unreachable.
+## Connecting to a model
 
-**Solutions**:
-1. Check Ollama icon in system tray
-2. Test connection: `curl http://localhost:11434/api/tags`
-3. Restart Ollama from Start Menu
-4. Check firewall (allow port 11434)
-5. Verify endpoint in `.env`: `API_ENDPOINT=http://localhost:11434/api/generate`
+**Can't reach Local Ollama.** Make sure Ollama is running (`ollama serve`, or the Ollama app) and answers at `http://localhost:11434/api/tags`. Then click **Try again** next to the model, or **Test connection** in Settings.
 
-### "Invalid API key" (cloud providers)
+**My model isn't in the list.** For Ollama, download it first: `ollama pull qwen3:14b`, and check the exact name with `ollama list`. For other services, check the name on the service's site. You can type a model name that isn't listed.
 
-**Cause**: Wrong, expired, or missing API key.
+**Test connection works but translations fail.** The test lists models with the first key and, if you chose a model, sends it one tiny message. A translation can still fail because of the specific model or another key. Check the log for the HTTP status:
 
-**Solutions**:
-1. Verify key is copied correctly (no extra spaces)
-2. Check key is active on provider's website
-3. Verify you have credits/quota remaining
-4. Check the correct environment variable is set:
-   - Gemini: `GEMINI_API_KEY`
-   - OpenAI: `OPENAI_API_KEY`
-   - OpenRouter: `OPENROUTER_API_KEY`
-   - Mistral: `MISTRAL_API_KEY`
-   - DeepSeek: `DEEPSEEK_API_KEY`
-   - Poe: `POE_API_KEY`
-   - NVIDIA NIM: `NIM_API_KEY`
+| Status | Usually means | What to do |
+|---|---|---|
+| 401, 403 | Invalid or revoked key | Replace the key in the connection. |
+| 402 | No credit left | Top up, or switch models with **Change model and resume…**. |
+| 404 | The model name doesn't exist (any more) | Pick another model. |
+| 429 | Rate limit | See below. |
 
-### "Rate limit exceeded"
+**OpenAI-compatible server isn't found.** Enter the base address, for example `http://localhost:1234/v1` for LM Studio or `http://localhost:8080` for llama.cpp. You don't need `/chat/completions`. Some local servers also need a key.
 
-**Cause**: Too many requests to the API.
+## During a translation
 
-**Solutions**:
-1. Wait a few minutes before retrying
-2. The system will automatically retry with exponential backoff
-3. Consider using a local model (Ollama) for large files
-4. Check your API plan limits
+**It keeps hitting rate limits.** Add more API keys from different accounts to the connection (one per line), lower **Requests at once**, or set **When the service limits requests** to *Wait and continue automatically*. On a daily quota, automatic waiting can last until the quota resets; pause it or use **Change model and resume…** instead. See [MODEL_CONNECTIONS.md](MODEL_CONNECTIONS.md#rate-limits).
 
----
+**It's slow.** Local models translate one passage at a time. Story notes that update while translating also force one request at a time, and each update is an extra request; raise **Update every** to update less often. For cloud services without story-note updates, raise **Requests at once** in the connection.
 
-## Model Issues
+**Passages were left untranslated, or formatting is slightly off.** The translation finishes as *Done · some passages failed* and lists the passages. **Retry failed passages** redoes only those. If the same passages keep failing, they often have complex inline formatting: start again with **Simplify formatting**, a smaller **Passage size**, or a different model.
 
-### "Model not found"
+**The local model runs out of context or repeats itself.** Each request holds the passage, the instructions, the relevant story notes and glossary entries, and room for the answer. Lower **Passage size** or **Notes sent per request** under **Advanced**, or use a model with a larger context. For Ollama, `OLLAMA_NUM_CTX` in `.env` sets the context size, and the app enlarges it when a request needs more.
 
-**Cause**: Model not downloaded or wrong name.
+**Reasoning "Off" seems ignored.** Some models always reason, and some services ignore the setting. The app sends the closest thing each service has; see [MODEL_CONNECTIONS.md](MODEL_CONNECTIONS.md#reasoning).
 
-**Solutions**:
-1. List installed models: `ollama list`
-2. Download missing model: `ollama pull model-name`
-3. Check exact model name (case-sensitive)
-4. For cloud providers, verify the model ID is correct
+**I changed a connection, glossary or style guide, but the translation didn't change.** A translation keeps the settings it started with. Only API keys are read fresh when it resumes. To use different settings, start a new translation, or use **Change model and resume…** for the model.
 
-### "Context length exceeded"
+**A translation shows "Paused (connection removed)".** Its connection was deleted. Pick another model with **Change model and resume…**.
 
-**Cause**: Chunk is too large for model's context window.
+**The story notes are wrong.** Fix them on the translation's **Story notes** tab; see [STORY_NOTES.md](STORY_NOTES.md#checking-and-fixing-notes-during-a-translation). Notes in the library that a running translation uses are locked for the same reason.
 
-**Solutions**:
-1. Reduce chunk size: `MAX_TOKENS_PER_CHUNK=200` (default: 450 — see [src/config.py](../src/config.py))
-2. Increase context window: `OLLAMA_NUM_CTX=8192`
-3. Enable adaptive context: `AUTO_ADJUST_CONTEXT=true` (default)
-4. Use a model with larger context window
+**Translate new chapters redid more than expected.** Passages are reused only while the new source matches the old one from the start. An edit early in the book means everything after it is translated again.
 
-**Formula**: `required_context = prompt_tokens + (MAX_TOKENS_PER_CHUNK * 2) + 50`
+## Files
 
-### "Out of memory" / OOM errors
+**My file is rejected.** The app accepts EPUB, DOCX, TXT and SRT up to 100 MB each. Empty files, renamed executables, EPUB or DOCX files that aren't valid ZIP archives (or have more than 10,000 entries), and subtitles with more than 10,000 cues are refused.
 
-**Cause**: Not enough RAM/VRAM for the model.
+**Scanned PDFs or images.** The app doesn't read PDFs or images. Extract the text first; **Fix scan errors (OCR)** then fixes recognition errors and broken lines while translating.
 
-**Solutions**:
-1. Use a smaller model (8B instead of 14B)
-2. Reduce context window: `OLLAMA_NUM_CTX=2048`
-3. Close other applications
-4. Try a cloud provider (OpenRouter, Gemini, OpenAI)
+**Where is my translation?** In `translated_files/`, or the folder set with `OUTPUT_DIR`. **Open output folder** on the translation list opens it. An interrupted EPUB is saved with a `[partial]` prefix.
 
----
+## Notifications
 
-## Performance Issues
-
-### "Request timeout"
-
-**Cause**: Request taking too long.
-
-**Solutions**:
-1. Increase timeout: `REQUEST_TIMEOUT=1800` (30 min, default: 900)
-2. Reduce chunk size: `MAX_TOKENS_PER_CHUNK=200`
-3. Try a smaller/faster model
-4. Try a cloud provider
-
-### Model enters repetition loop
-
-**Symptoms**: Model repeats the same phrase endlessly (e.g., "I'm not sure. I'm not sure...")
-
-**Cause**: Context window exceeded, model confusion, or thinking model issues.
-
-**Solutions**:
-1. The system automatically detects repetition loops and will retry
-2. Increase context window: `OLLAMA_NUM_CTX=8192`
-3. Reduce chunk size for simpler content
-4. Use a different model
-5. For thinking models, see [Thinking Models](#thinking-models) section
-
-**Detection thresholds** (configurable):
-- Standard models: 10 repetitions (`REPETITION_MIN_COUNT`)
-- Thinking models: 15 repetitions (`REPETITION_MIN_COUNT_THINKING`)
-
----
-
-## Thinking Models
-
-### What are thinking models?
-
-Some models (DeepSeek R1, Qwen3, QwQ, etc.) produce internal reasoning within `<think>` tags before responding. This is normal behavior.
-
-### Classifications
-
-| Type | Models | Behavior |
-|------|--------|----------|
-| **Controllable** | qwen3:8b, qwen3:14b, qwen3:4b | Can disable thinking with `think=false` |
-| **Uncontrollable** | qwen3:30b, deepseek-r1, qwq, marco-o1, phi4-reasoning | Always thinks, cannot be disabled |
-| **Standard** | Most other models | No thinking capability |
-
-### "Thinking model produces very long responses"
-
-**Cause**: Uncontrollable thinking models always include reasoning.
-
-**Solutions**:
-1. This is expected behavior - the system filters out `<think>` content
-2. Use a controllable thinking model (qwen3:8b, qwen3:14b)
-3. Use a standard (non-thinking) model
-4. Increase context for thinking models: `ADAPTIVE_CONTEXT_INITIAL_THINKING=6144`
-
-### "Model not detected as thinking model"
-
-**Cause**: Model not in known lists or auto-detection failed.
-
-**Solutions**:
-1. Enable debug mode to see detection logs: `DEBUG_MODE=true`
-2. The system auto-detects thinking behavior at runtime
-3. Check if model name matches known patterns in `src/config.py`
-
----
-
-## EPUB Issues
-
-### "EPUB won't open" / "Invalid EPUB"
-
-**Cause**: Reader rejects the EPUB format.
-
-**Solutions**:
-1. Test with Calibre (most permissive reader)
-2. Validate EPUB: [validator.idpf.org](http://validator.idpf.org/)
-3. Try a larger model (better at preserving structure)
-4. Enable debug mode to see parsing errors
-
-### "Placeholders visible in text" (`[id0]`, `[id1]`)
-
-**Cause**: Model did not preserve placeholders during translation.
-
-**Note**: The placeholder format is now `[id0]`, `[id1]`, etc. (not `⟦TAG0⟧`).
-
-**Solutions**:
-1. The system has a 3-phase fallback that handles most cases automatically:
-   - **Phase 1**: Normal translation with placeholder preservation
-   - **Phase 2**: Token alignment to reinsert missing placeholders
-   - **Phase 3**: Proportional fallback based on position
-2. If there are many formatting errors in the output file, use a more capable LLM
-3. Enable adaptive context: `AUTO_ADJUST_CONTEXT=true`
-
-### "Formatting lost" (bold, italic, styles)
-
-**Cause**: Style tags not properly preserved.
-
-**Solutions**:
-1. The 3-phase fallback system handles this automatically
-2. Try a larger model for better HTML handling
-3. Enable debug mode to see tag preservation details
-
-### "Technical content corrupted" (code, formulas, measurements)
-
-**Cause**: Model translated content that should be preserved.
-
-**Note**: Technical content protection is **always enabled** and automatic.
-
-**Protected content includes**:
-- Code blocks (` ```python ``` `)
-- Inline code (`` `variable` ``)
-- LaTeX formulas (`$E=mc^2$`, `$$\int_0^1 x dx$$`)
-- Measurements (`10 Mbps`, `5V`, `100 mA`)
-- Technical IDs (`TIA/EIA-485-A`, `DS1487`)
-
-**Solutions**:
-1. This should work automatically - check if content matches expected patterns
-2. Enable debug mode to see what's being protected
-
----
-
-## SRT Issues
-
-### "Timing desynchronized"
-
-**Cause**: Subtitle timing metadata corrupted.
-
-**Solutions**:
-1. SRT uses fixed-count grouping: every block contains exactly `SRT_LINES_PER_BLOCK` subtitles (default 10), shared by translate and refine
-2. Tune via `SRT_LINES_PER_BLOCK=10` in `.env` — lower for tiny models (e.g. 5 for 4B params), higher for big-context models
-3. Try a smaller block size for better timing preservation
-
-### "Subtitle numbers wrong"
-
-**Cause**: Subtitle index corruption during translation.
-
-**Solutions**:
-1. The system preserves subtitle structure automatically
-2. Try a larger model with better instruction-following
-3. Reduce `SRT_LINES_PER_BLOCK` for simpler chunks
-
----
-
-## Web Interface Issues
-
-### "Port already in use"
-
-**Cause**: Port 5000 is used by another application.
-
-**Solutions**:
-1. Find what's using it:
-   - Windows: `netstat -an | find "5000"`
-   - Mac/Linux: `lsof -i :5000`
-2. Change port in `.env`: `PORT=8080`
-3. Kill the other process
-
-### "File upload fails"
-
-**Cause**: File too large or wrong format.
-
-**Solutions**:
-1. Check file format: `.txt`, `.epub`, `.srt`, `.docx`
-2. Check file size limits
-3. Try a smaller file first
-4. Check directory permissions: `data/uploads/` must be writable
-
-### "WebSocket connection fails" / "No real-time updates"
-
-**Cause**: Network issue, CORS, or proxy problem.
-
-**Solutions**:
-1. Check browser console for WebSocket errors
-3. Check firewall allows WebSocket connections
-4. Try a different browser
-5. Disable proxy/VPN temporarily
-
----
-
-## Configuration Issues
-
-### ".env file not found" warning
-
-**Cause**: Missing `.env` file on first run.
-
-**Solutions**:
-1. Copy template: `cp .env.example .env` (or `copy` on Windows)
-2. Edit with your configuration
-3. Restart application
-4. The system will prompt you with a 5-second grace period on first run
-
-### "DEBUG_MODE not working"
-
-**Cause**: Environment variable not loaded.
-
-**Solutions**:
-1. Set in `.env`: `DEBUG_MODE=true`
-2. Set before running: `export DEBUG_MODE=true` (Mac/Linux) or `set DEBUG_MODE=true` (Windows)
-3. Verify `.env` is in the working directory
-4. Restart the application
-
-### "Provider not recognized"
-
-**Cause**: Invalid provider name in configuration.
-
-**Valid providers**: `ollama`, `gemini`, `openai`, `openrouter`, `mistral`, `deepseek`, `poe`, `nim`
-
-**Solutions**:
-1. Check spelling in `.env`: `LLM_PROVIDER=ollama`
-2. Provider names are case-insensitive
-3. For Gemini models with Ollama, the system auto-switches if model starts with "gemini"
-
----
-
-## Language Detection Issues
-
-### "Wrong source language detected"
-
-**Cause**: Too short text, mixed languages, or ambiguous content.
-
-**Solutions**:
-1. Use file with at least 50+ characters of text
-2. Explicitly specify source language:
-   - CLI: `-sl English`
-   - Web: Select in dropdown
-3. Ensure file content is primarily in one language
-4. Detection confidence threshold is 70% for auto-fill
-
-### "Language not supported"
-
-**Cause**: Language not in the 40+ supported languages.
-
-**Solutions**:
-1. Check supported languages in `src/utils/language_detector.py`
-2. Use ISO 639-1 language codes or full language names
-3. For rare languages, specify manually instead of auto-detect
-
----
-
-## Checkpoint & Resume Issues
-
-### "Cannot resume translation"
-
-**Cause**: Checkpoint data corrupted or session mismatch.
-
-**Solutions**:
-1. Check database exists: `data/jobs.db`
-2. Verify uploaded file exists: `data/uploads/{job_id}/`
-3. Start a new translation if checkpoint is corrupted
-4. Check logs for specific checkpoint errors
-
-### "Progress lost after restart"
-
-**Cause**: Translation was interrupted before checkpoint was saved.
-
-**Solutions**:
-1. Checkpoints are saved periodically during translation
-2. Very short translations may not have checkpoints
-3. For long translations, progress should be preserved
-4. Ensure `data/` directory is writable
-
----
-
-## Quick Reference
-
-| Problem | Quick Fix |
-|---------|-----------|
-| Ollama not connecting | Restart Ollama |
-| Model not found | `ollama pull model-name` |
-| Context exceeded | `MAX_TOKENS_PER_CHUNK=200` |
-| Timeouts | `REQUEST_TIMEOUT=1800` |
-| Out of memory | Try smaller model |
-| Repetition loop | Increase `OLLAMA_NUM_CTX` |
-| EPUB broken | Try larger model |
-| Placeholders visible | System auto-recovers (3-phase fallback) |
-| Thinking model slow | Use controllable model (qwen3:14b) |
-| Port in use | Set `PORT=8080` in .env |
-| No debug logs | Set `DEBUG_MODE=true` in .env |
-
----
-
-## Debugging
-
-### Enable Debug Mode
-
-Set in `.env`:
-```
-DEBUG_MODE=true
-```
-
-This enables:
-- Verbose configuration logging
-- API request/response details
-- Model detection logs
-- Context window calculations
-- Token counting details
-- Tag preservation logs
-
-### Log Types
-
-The system uses structured logging with types:
-- `TRANSLATION_START` - Translation job started
-- `TRANSLATION_PROGRESS` - Progress updates
-- `TRANSLATION_COMPLETE` - Job finished
-- `ERROR` - Error occurred
-- `WARNING` - Non-fatal issues
-- `DEBUG` - Detailed debug info
-
-### Key Debug Points
-
-1. **Model Detection**: Look for "Testing thinking behavior"
-2. **Context Calculation**: Context size detection logs
-3. **Chunking**: Token count per chunk
-4. **API Calls**: Request/response logging
-5. **Error Recovery**: Retry attempts and strategies
+**The test notification doesn't arrive.** Save first: the test uses the saved settings. Make sure **Send notifications** is on and the address is right. The app logs only that a notification failed, not why; try the address with `curl` to see the service's answer. Placeholders must sit inside JSON strings; see [NOTIFICATIONS.md](NOTIFICATIONS.md#placeholders).

@@ -1,22 +1,12 @@
-<div align="center">
-  <h1>TBL - Translate Books with LLMs</h1>
-</div>
+# TBL — Translate Books with LLMs
 
-A local web app that translates **books**, **subtitles**, and **documents** with AI - local or cloud. Drop a file, pick a language, get the result.
+A web app that runs on your own computer and translates **EPUB, DOCX, TXT and SRT** files with a language model: a local one through Ollama or LM Studio, or a cloud service such as OpenAI, Gemini, OpenRouter, Ollama Cloud or Neuralwatt.
 
-**Formats:** EPUB, SRT, DOCX, TXT
+It is built for long fiction. As it translates, it keeps **story notes** on characters, genders, nicknames, terms and how people address each other, and the model reads them before every passage, so chapter 40 still matches chapter 1. Glossaries pin down names that must never change, style guides add your own instructions, and a queue runs whole series overnight.
 
-- **No size limit.** Process documents of any length - from a single page to thousand-page novels. The intelligent chunking system handles unlimited content while preserving context between segments.
-- **Perfect preservation.** Your documents come out exactly as they went in: EPUB formatting, styles, and structure remain intact. SRT timecodes stay perfectly synchronized. Every tag, every timestamp, every formatting detail is preserved.
-- **Resume anytime.** Interrupted translation? Pick up exactly where you left off. The checkpoint system saves progress automatically.
+## Quick start
 
-[<img width="867" height="861" alt="image" src="https://github.com/user-attachments/assets/3efcb2a4-e1f0-4d18-ac90-1068a694a2da">](https://github.com/user-attachments/assets/3efcb2a4-e1f0-4d18-ac90-1068a694a2da)
-
----
-
-## Quick Start
-
-**Prerequisites:** [uv](https://docs.astral.sh/uv/getting-started/installation/) and [Git](https://git-scm.com/). You don't need to install Python yourself: uv downloads a matching version if none is found.
+You need [uv](https://docs.astral.sh/uv/getting-started/installation/) and Git. uv installs a matching Python (3.11 or newer) if you don't have one.
 
 ```bash
 git clone https://github.com/3ae3ae/TranslateBooksWithLLMs-RAG-context.git
@@ -24,162 +14,90 @@ cd TranslateBooksWithLLMs-RAG-context
 uv run translation_api.py
 ```
 
-The first run creates `.venv/` and installs the dependencies pinned in `uv.lock`. Later runs re-sync automatically when `uv.lock` changes. The web interface opens at **http://localhost:5000**.
+The first run installs the dependencies pinned in `uv.lock`. The app then opens **http://127.0.0.1:5000** in your browser. It only listens on this computer.
 
-On first launch, you choose a translation provider:
+- Use another port: `PORT=8080 uv run translation_api.py`
+- Don't open a browser: `TBL_NO_BROWSER=1 uv run translation_api.py`
 
-- **Free & local** - Install [Ollama](https://ollama.com/) and pull a model (e.g. `ollama pull qwen3:14b`). Nothing leaves your machine.
-- **Cloud (often free tier available)** - Paste an API key from one of the providers below.
+Keep the terminal running. Closing the browser tab doesn't stop a translation. Stopping the server pauses it, and after the next start you continue it from the translation list.
 
----
+## Your first translation
 
-## Providers
+1. **Connect a model.** Open **Settings → Model connections**. A *Local Ollama* connection is always there. For a cloud service, click **Add a connection**, choose the service, paste your API key and click **Test connection**, which lists the available models. For LM Studio, llama.cpp, vLLM and similar servers, choose *OpenAI-compatible* and enter the server address.
+2. **Start a translation.** Click **New translation**, drop one or more files, pick the target language and a model, and choose how story notes should work. The summary on the right estimates the number of requests, the time and the cost before you start.
+3. **Follow it.** **Translations** lists running, queued and finished work. Each translation's page shows live progress, every passage side by side with its source, the story notes, and a log. Download the result from there.
 
-<p align="center">
-<a href="https://ollama.com/"><img src="src/web/static/img/providers/ollama.png" alt="Ollama" height="32"></a>&nbsp;&nbsp;
-<a href="https://poe.com/"><img src="src/web/static/img/providers/poe.png" alt="Poe" height="32"></a>&nbsp;&nbsp;
-<a href="https://openrouter.ai/"><img src="src/web/static/img/providers/openrouter.png" alt="OpenRouter" height="32"></a>&nbsp;&nbsp;
-<a href="https://openai.com/"><img src="src/web/static/img/providers/openai.png" alt="OpenAI" height="32"></a>&nbsp;&nbsp;
-<a href="https://mistral.ai/"><img src="src/web/static/img/providers/mistral.png" alt="Mistral" height="32"></a>&nbsp;&nbsp;
-<a href="https://www.deepseek.com/"><img src="src/web/static/img/providers/deepseek.png" alt="DeepSeek" height="32"></a>&nbsp;&nbsp;
-<a href="https://deepmind.google/technologies/gemini/"><img src="src/web/static/img/providers/gemini.png" alt="Gemini" height="32"></a>&nbsp;&nbsp;
-<a href="https://build.nvidia.com/"><img src="src/web/static/img/providers/nvidia.png" alt="NVIDIA NIM" height="32"></a>
-</p>
+The interface is in English and Korean; switch with the language button at the bottom of the sidebar.
 
-| Provider | Type | Get started |
-|----------|------|-------------|
-| **DeepSeek** | Cloud | [platform.deepseek.com](https://platform.deepseek.com/api_keys) |
-| **Gemini** | Cloud | [Google AI Studio](https://aistudio.google.com/apikey) |
-| **Mistral** | Cloud | [console.mistral.ai](https://console.mistral.ai/api-keys) |
-| **NVIDIA NIM** | Cloud | [build.nvidia.com](https://build.nvidia.com/) |
-| **Ollama** | Local | [ollama.com](https://ollama.com/) |
-| **OpenAI** | Cloud | [platform.openai.com](https://platform.openai.com/api-keys) |
-| **OpenAI-Compatible** | Local (llama.cpp, LM Studio, vLLM, LocalAI...) | Point to your server's endpoint |
-| **OpenRouter** | Cloud (200+ models) | [openrouter.ai/keys](https://openrouter.ai/keys) |
-| **Poe** | Cloud (multi-model) | [poe.com/api_key](https://poe.com/api_key) |
+## What it can do
 
-See [docs/PROVIDERS.md](docs/PROVIDERS.md) for detailed setup instructions.
+| Feature | What it does |
+|---|---|
+| Translate, or polish | Translate a book, polish an existing translation, or translate and then polish in a second pass. |
+| Formatting | EPUB and DOCX keep their formatting, or you can simplify it so far fewer passages fail. SRT timings are kept. An optional bilingual output puts the original under each paragraph. |
+| [Story notes](docs/STORY_NOTES.md) | Notes the model builds and updates while translating. Start from an earlier volume's notes, view the notes as of any passage, and correct them mid-book. |
+| [Glossaries](docs/GLOSSARY.md) | Fixed translations for names and terms, enforced on every passage. Import, export, or extract candidates from a book with a model. |
+| Style guides | Your own instructions for translating and for polishing, such as keeping honorifics or how friends talk to each other. |
+| Compare models | Run several models on the same excerpts of your book and compare quality, speed and price before committing to one. |
+| Queue | Translations run one at a time in the order you choose. They survive restarts, can switch to another model halfway, and can translate the new chapters of an updated book without redoing the rest. |
+| Reasoning control | Set how much each model thinks before answering (off, low, medium, high, or the service default), mapped to each service's own parameter. |
+| [Notifications](docs/NOTIFICATIONS.md) | A message to your phone (ntfy, gotify), Discord, Slack or any web address when a translation finishes, fails or pauses. |
 
----
+## Model services
 
-## Troubleshooting
+| Service | Address | API key |
+|---|---|---|
+| Ollama | `http://localhost:11434` | Not needed |
+| Ollama Cloud | `https://ollama.com` | Required |
+| OpenAI | `https://api.openai.com/v1` | Required |
+| OpenAI-compatible (LM Studio, llama.cpp, vLLM, …) | Your server | Optional |
+| Gemini | `https://generativelanguage.googleapis.com/v1beta` | Required |
+| OpenRouter | `https://openrouter.ai/api/v1` | Required |
+| Neuralwatt | `https://api.neuralwatt.com/v1` | Required |
+| Mistral | `https://api.mistral.ai/v1` | Required |
+| DeepSeek | `https://api.deepseek.com` | Required |
+| Poe | `https://api.poe.com/v1` | Required |
+| NVIDIA NIM | `https://integrate.api.nvidia.com/v1` | Required |
 
-| Problem | Solution |
-|---------|----------|
-| Ollama won't connect | Check Ollama is running, test `curl http://localhost:11434/api/tags` |
-| Model not found | Run `ollama list`, then `ollama pull model-name` |
+A connection can hold several API keys and switches to the next one when a key hits its rate limit. See [docs/MODEL_CONNECTIONS.md](docs/MODEL_CONNECTIONS.md) for addresses, keys, reasoning, rate limits and costs.
 
-See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for more solutions.
+If you used this project before and have API keys in a `.env` file, they are imported into connections once, the first time the app starts.
 
----
+## Where your data lives
 
-## Advanced
+| Path | Contents |
+|---|---|
+| `TranslateBook_Data/connections.json` | Model connections, **including API keys in plain text** |
+| `TranslateBook_Data/settings.json` | New-translation defaults and notification settings, including the webhook address |
+| `TranslateBook_Data/Novel_Contexts/` | Story notes, one `.txt` file each |
+| `TranslateBook_Data/Custom_Instructions/` | Style guides, one `.yaml` file each |
+| `data/jobs.db`, `data/uploads/`, `data/logs/` | Translation jobs, their source copies and passages, and logs |
+| `data/glossaries.db` | Glossaries |
+| `translated_files/` | Finished translations (change with `OUTPUT_DIR` in `.env`) |
 
-<details>
-<summary><b>Command line</b></summary>
+All of these are git-ignored. Back up `TranslateBook_Data/` and `data/` together. The two JSON files hold secrets: they are written readable by your user only, and should not be shared.
 
-```bash
-# Basic (auto-generates "book (Chinese).epub")
-uv run translate.py -i book.epub -sl English -tl Chinese
+## Command line
 
-# With OpenRouter
-uv run translate.py -i book.txt --provider openrouter \
-    --openrouter_api_key YOUR_KEY -m anthropic/claude-sonnet-4 -tl French
-
-# With OpenAI
-uv run translate.py -i book.txt --provider openai \
-    --openai_api_key YOUR_KEY -m gpt-4o -tl French
-
-# With Gemini
-uv run translate.py -i book.txt --provider gemini \
-    --gemini_api_key YOUR_KEY -m gemini-2.0-flash -tl French
-
-# With Mistral
-uv run translate.py -i book.txt --provider mistral \
-    --mistral_api_key YOUR_KEY -m mistral-large-latest -tl French
-
-# With DeepSeek
-uv run translate.py -i book.txt --provider deepseek \
-    --deepseek_api_key YOUR_KEY -m deepseek-v4-pro -tl French
-
-# With Poe
-uv run translate.py -i book.txt --provider poe \
-    --poe_api_key YOUR_KEY -m Claude-Sonnet-4 -tl French
-
-# With NVIDIA NIM
-uv run translate.py -i book.txt --provider nim \
-    --nim_api_key YOUR_KEY -m meta/llama-3.1-8b-instruct -tl French
-
-# With local OpenAI-compatible server (llama.cpp, LM Studio, vLLM, etc.)
-uv run translate.py -i book.txt --provider openai \
-    --api_endpoint http://localhost:8080/v1/chat/completions -m your-model -tl French
-```
-
-### Main options
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `-i, --input` | Input file | Required |
-| `-o, --output` | Output file | Auto: `{name} ({lang}).{ext}` |
-| `-sl, --source_lang` | Source language | English |
-| `-tl, --target_lang` | Target language | Chinese |
-| `-m, --model` | Model name | qwen3:14b |
-| `--provider` | ollama/openrouter/openai/gemini/mistral/deepseek/poe/nim | ollama |
-| `--parallel` | Chunks translated concurrently (cloud only; Ollama stays at 1) | 1 |
-| `--text-cleanup` | OCR/typographic cleanup | disabled |
-| `--refine` | Second pass for literary polish | disabled |
-
-</details>
-
-<details>
-    <summary><b>Configuration (.env)</b></summary>
-
-Generate a compact `.env`, then edit it. Use `.env.example` only when you want
-the full option reference:
+`translate.py` translates a single file without the web app:
 
 ```bash
-uv run python -m src.utils.env_helper create
+uv run translate.py -i book.epub -sl English -tl Korean -m qwen3:14b
 ```
 
-The generated file is intentionally short:
-
-```bash
-# TranslateBook configuration. Full reference: .env.example
-LLM_PROVIDER=ollama
-DEFAULT_MODEL=qwen3:14b
-API_ENDPOINT=http://localhost:11434/api/generate
-MAX_TOKENS_PER_CHUNK=450
-NOVEL_CONTEXT_PROMPT_MAX_TOKENS=1800
-NOVEL_CONTEXT_UPDATE_INTERVAL=1
-NOVEL_CONTEXT_SOURCE_MEMORY_CHARS=6000
-GEMINI_API_KEY=
-OPENAI_API_KEY=
-OPENROUTER_API_KEY=
-```
-
-**Faster on cloud providers?** Set `PARALLEL_TRANSLATIONS` (or `--parallel N`, or the "Parallel requests" field in the web UI) above 1 to translate several chunks at once. Local providers (Ollama) ignore it since a single instance serializes requests. Higher values are faster but can hit provider rate limits.
-
-**Using auto novel context?** The full context file remains editable and durable, but prompts receive a selected, budgeted context block in the user prompt so the system prompt stays cacheable. Keep `NOVEL_CONTEXT_UPDATE_INTERVAL=1` for maximum consistency, or raise it to reduce extra context-analysis calls. `NOVEL_CONTEXT_SOURCE_MEMORY_CHARS` gives the analyzer a bounded tail of previous source chunks so facts split across chunk boundaries can still be resolved.
-
-**Multiple API keys?** Any `*_API_KEY` variable accepts a comma-separated list (e.g. `GEMINI_API_KEY=key1,key2,key3`). The system rotates between keys automatically when one hits a rate limit - useful to chain free-tier accounts. See [docs/API_KEY_ROTATION.md](docs/API_KEY_ROTATION.md).
-
-**Long jobs?** Get a push notification on your phone (via ntfy), Discord, Slack, gotify, or any HTTP endpoint when a translation finishes. Set `NOTIFY_WEBHOOK_URL` in `.env`. See [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md).
-
-</details>
-
----
+The CLI reads its provider, model and keys from flags and `.env`, not from the web app's connections. See [docs/CLI.md](docs/CLI.md).
 
 ## Documentation
 
-| Guide | Description |
-|-------|-------------|
-| [docs/PROVIDERS.md](docs/PROVIDERS.md) | Detailed provider setup (Ollama, LM Studio, OpenRouter, OpenAI, Gemini) |
-| [docs/API_KEY_ROTATION.md](docs/API_KEY_ROTATION.md) | Use multiple API keys per provider with automatic failover on rate-limit |
-| [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md) | Webhook notifications on completion (ntfy, gotify, Discord, Slack, custom) |
-| [docs/GLOSSARY.md](docs/GLOSSARY.md) | Force consistent term translations across a book (Web UI + CLI, auto-extract via NER) |
-| [docs/CLI.md](docs/CLI.md) | Complete CLI reference |
-| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Problem solutions |
+| Guide | Covers |
+|---|---|
+| [docs/MODEL_CONNECTIONS.md](docs/MODEL_CONNECTIONS.md) | Services, addresses, multiple keys, reasoning, rate limits, costs |
+| [docs/STORY_NOTES.md](docs/STORY_NOTES.md) | How story notes work, the options, and fixing them mid-book |
+| [docs/GLOSSARY.md](docs/GLOSSARY.md) | Glossaries: matching rules, import and export, extracting terms from a book |
+| [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md) | Webhook notifications |
+| [docs/CLI.md](docs/CLI.md) | Command-line reference |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common problems and fixes |
 
----
+## License
 
-**License:** AGPL-3.0
+AGPL-3.0

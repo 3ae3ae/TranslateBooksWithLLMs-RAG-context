@@ -91,7 +91,7 @@ const PRESETS = {
   gotify: { url: 'https://gotify.example.com/message?token=YOUR_TOKEN_HERE', method: 'POST', headers: '', payload: '' },
   discord: { url: 'https://discord.com/api/webhooks/XXXXX/YYYYY', method: 'POST', headers: '', payload: '{"content":"Translation **{event}**: `{file}` in {duration_seconds:.0f}s"}' },
   slack: { url: 'https://hooks.slack.com/services/XXX/YYY/ZZZ', method: 'POST', headers: '', payload: '{"text":"Translation {event}: {file} ({duration_seconds:.0f}s)"}' },
-  healthchecks: { url: 'https://hc-ping.com/your-uuid-here/{event}', method: 'GET', headers: '', payload: '' },
+  healthchecks: { url: 'https://hc-ping.com/your-uuid-here', method: 'GET', headers: '', payload: '' },
 };
 const EVENTS = ['success', 'failure', 'system_paused', 'queue_finished'];
 
