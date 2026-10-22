@@ -372,6 +372,9 @@ class DocxHtmlConverter:
             self._convert_list(doc, element, metadata)
         elif tag == 'table':
             self._convert_table(doc, element, metadata)
+        elif tag == 'div':
+            for child in element:
+                self._convert_html_element_to_docx(doc, child, metadata)
         elif tag == 'br':
             doc.add_paragraph()  # Empty paragraph for line break
         elif tag == 'img':

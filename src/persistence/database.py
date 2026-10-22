@@ -10,20 +10,16 @@ from typing import Optional, Dict, List, Any
 import threading
 
 
-def sanitize_config_secrets(config: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Return a copy of a job config with every API key removed.
-
-    The jobs database must never be a secret-bearing artifact (issue #213):
-    it lives on disk unencrypted. Keys
-    are therefore stripped before persistence and re-resolved at resume time
-    from the environment (the LLM factory falls back to <PROVIDER>_API_KEY
-    when the config value is empty) or from the resume request body.
-    """
-    return {
-        k: v for k, v in config.items()
-        if not (k == 'api_key' or k.endswith('_api_key'))
-    }
+def sanitize_config_secrets(config: Any) -> Any:
+    """Copy job data without API keys, including nested connection snapshots."""
+    if isinstance(config, dict):
+        return {
+            k: sanitize_config_secrets(v) for k, v in config.items()
+            if not (k == 'api_key' or k.endswith('_api_key'))
+        }
+    if isinstance(config, list):
+        return [sanitize_config_secrets(v) for v in config]
+    return config
 
 
 class Database:
@@ -63,6 +59,7 @@ class Database:
                 timeout=30.0
             )
             conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys=ON")
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA busy_timeout=30000")
             self._local.connection = conn
@@ -118,7 +115,36 @@ class Database:
                 ON checkpoint_chunks(translation_id)
             """)
 
+            cursor.execute("DELETE FROM checkpoint_chunks WHERE translation_id NOT IN (SELECT translation_id FROM translation_jobs)")
+            cursor.execute("CREATE TABLE IF NOT EXISTS job_queue (translation_id TEXT PRIMARY KEY REFERENCES translation_jobs(translation_id) ON DELETE CASCADE, position INTEGER NOT NULL)")
+            cursor.execute("CREATE TABLE IF NOT EXISTS queue_state (id INTEGER PRIMARY KEY CHECK(id = 1), paused INTEGER NOT NULL, reason TEXT)")
+            cursor.execute("INSERT OR IGNORE INTO queue_state VALUES (1, 0, NULL)")
             conn.commit()
+
+    def list_jobs(self):
+        with self._lock:
+            ids = self._get_connection().execute("SELECT translation_id FROM translation_jobs ORDER BY created_at, rowid").fetchall()
+            return [self.get_job(row[0]) for row in ids]
+
+    def queue_state(self):
+        with self._lock:
+            conn = self._get_connection()
+            row = conn.execute("SELECT paused, reason FROM queue_state WHERE id = 1").fetchone()
+            order = [r[0] for r in conn.execute("SELECT translation_id FROM job_queue ORDER BY position, rowid")]
+            return {"paused": bool(row[0]), "reason": row[1], "order": order}
+
+    def set_queue_paused(self, paused, reason=None):
+        with self._lock:
+            conn = self._get_connection()
+            conn.execute("UPDATE queue_state SET paused = ?, reason = ? WHERE id = 1", (bool(paused), reason))
+            conn.commit()
+
+    def set_queue_order(self, order):
+        with self._lock:
+            conn = self._get_connection()
+            with conn:
+                conn.execute("DELETE FROM job_queue")
+                conn.executemany("INSERT INTO job_queue VALUES (?, ?)", [(tid, i) for i, tid in enumerate(order)])
 
     def create_job(
         self,
@@ -302,6 +328,9 @@ class Database:
                 ))
 
                 conn.commit()
+                callback = getattr(self, 'passage_callback', None)
+                if callback and status == 'completed':
+                    callback(translation_id, chunk_index, original_text, translated_text)
                 return True
             except Exception as e:
                 print(f"Error saving chunk: {e}")

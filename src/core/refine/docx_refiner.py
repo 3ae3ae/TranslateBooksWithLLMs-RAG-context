@@ -44,6 +44,9 @@ async def refine_docx_file(
     max_tokens_per_chunk: int = MAX_TOKENS_PER_CHUNK,
     checkpoint_manager: Optional[Any] = None,
     translation_id: Optional[str] = None,
+    connection: Optional[Dict] = None,
+    parallel_workers: int = 1,
+    srt_lines_per_block: Optional[int] = None,
 ) -> bool:
     """Run a refinement-only pass on an already-translated DOCX file."""
     if not os.path.exists(input_filepath):
@@ -66,6 +69,7 @@ async def refine_docx_file(
         poe_api_key=poe_api_key,
         nim_api_key=nim_api_key,
         log_callback=log_callback,
+        connection=connection,
     )
     if llm_client is None:
         return False
@@ -157,6 +161,8 @@ async def refine_docx_file(
             stats_callback=stats_callback,
             context_tracker=context_tracker,
             check_interruption_callback=check_interruption_callback,
+            checkpoint_manager=checkpoint_manager,
+            translation_id=translation_id,
         )
 
         if check_interruption_callback and check_interruption_callback():
@@ -168,6 +174,9 @@ async def refine_docx_file(
         full_text = ''.join(refined_chunks)
         full_text = _escape_stray_angle_brackets(full_text)
         final_html = tag_preserver.restore_tags(full_text, tag_map)
+        if (prompt_options or {}).get('bilingual'):
+            from src.core.epub.xhtml_translator import _interleave_bilingual
+            final_html = _interleave_bilingual(html_content, final_html) or f'<div>{final_html}</div><div>{html_content}</div>'
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.docx', delete=False, encoding='utf-8') as tmp:
             tmp_path = tmp.name

@@ -407,6 +407,12 @@ class DocxTranslationAdapter(TranslationAdapter[str, bytes]):
             context
         )
 
+        if (prompt_options or {}).get('bilingual'):
+            from src.core.epub.xhtml_translator import _interleave_bilingual
+            if not html_content:
+                html_content, _ = self.converter.to_html(source_path)
+            reconstructed_html = _interleave_bilingual(html_content, reconstructed_html) or f'<div>{reconstructed_html}</div><div>{html_content}</div>'
+
         # 6. Finalize output
         docx_bytes = self.finalize_output(
             reconstructed_html,

@@ -38,6 +38,9 @@ async def refine_txt_file(
     prompt_options: Optional[Dict[str, Any]] = None,
     checkpoint_manager: Optional[Any] = None,
     translation_id: Optional[str] = None,
+    connection: Optional[Dict] = None,
+    parallel_workers: int = 1,
+    srt_lines_per_block: Optional[int] = None,
 ) -> bool:
     """Run a refinement-only pass on an already-translated text file.
 
@@ -221,8 +224,14 @@ async def refine_txt_file(
         auto_adjust_context=auto_adjust_context,
         prompt_options=prompt_options,
         context_tracker=context_tracker,
+        connection=connection,
+        parallel_workers=parallel_workers,
+        checkpoint_manager=checkpoint_manager,
+        translation_id=translation_id,
     )
 
+    if (prompt_options or {}).get('bilingual'):
+        refined_parts = [f"{refined}\n{draft}" for refined, draft in zip(refined_parts, draft_chunks)]
     final_text = "\n".join(refined_parts)
     try:
         async with aiofiles.open(output_filepath, 'w', encoding='utf-8') as f:

@@ -284,6 +284,7 @@ def test_context_resync_route_accepts_numeric_context_revision(
     state_manager.get_translation.return_value = None
 
     thread = MagicMock()
+    monkeypatch.setattr('src.api.job_runner.get_job_runner', lambda *_args: thread)
     monkeypatch.setattr(
         "src.api.blueprints.translation_routes._claim_context_resync",
         lambda _translation_id: True,
@@ -357,6 +358,7 @@ def test_context_resync_route_accepts_failed_source_snapshot(
     state_manager.get_translation.return_value = None
 
     thread = MagicMock()
+    monkeypatch.setattr('src.api.job_runner.get_job_runner', lambda *_args: thread)
     monkeypatch.setattr(
         "src.api.blueprints.translation_routes._claim_context_resync",
         lambda _translation_id: True,
@@ -520,6 +522,10 @@ def test_context_resync_resume_restores_auto_resume_follow_up(
 
     def fake_resync(*args):
         captured["auto_resume_callback"] = args[5]
+
+    runner = MagicMock()
+    runner.enqueue.side_effect = lambda *_args, task=None, **_kwargs: task()
+    monkeypatch.setattr('src.api.job_runner.get_job_runner', lambda *_args: runner)
 
     class ImmediateThread:
         def __init__(self, target, **_kwargs):
@@ -1220,7 +1226,7 @@ def test_web_jobs_use_and_clamp_live_chunk_budget(monkeypatch):
     assert _clamp_chunk_tokens(5000) == 5000
 
 
-def test_web_jobs_reload_chunk_budget_when_ui_omits_value(monkeypatch):
+def test_web_jobs_freeze_current_chunk_budget_without_reloading(monkeypatch):
     import src.config as config
     from src.api.blueprints.translation_routes import _clamp_chunk_tokens
 
@@ -1230,4 +1236,4 @@ def test_web_jobs_reload_chunk_budget_when_ui_omits_value(monkeypatch):
     monkeypatch.setattr(config, "MAX_TOKENS_PER_CHUNK", 450)
     monkeypatch.setattr(config, "reload_config", reload_config)
 
-    assert _clamp_chunk_tokens(None) == 5000
+    assert _clamp_chunk_tokens(None) == 450

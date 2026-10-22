@@ -33,6 +33,9 @@ async def refine_subtitle_translations(
     subtitle_positions: Optional[Dict[int, int]] = None,
     dynamic_contexts: Optional[List[str]] = None,
     context_tracker: Optional[Any] = None,
+    checkpoint_manager=None,
+    translation_id=None,
+    checkpoint_offset=0,
 ) -> Dict[int, str]:
     """
     Refine subtitle translations using a second LLM pass.
@@ -141,7 +144,22 @@ async def refine_subtitle_translations(
 
     max_block_attempts = 2  # initial attempt + 1 retry with reinforced reminder
 
+    saved_rows = {}
+    if checkpoint_manager and translation_id and not (prompt_options or {}).get('_refine_after'):
+        saved_rows = {row['chunk_index']: row for row in checkpoint_manager.db.get_chunks(translation_id)}
+
     for block_idx, group in enumerate(index_groups):
+        source = '\n'.join(translations[index] for index in group)
+        saved = saved_rows.get(checkpoint_offset + block_idx)
+        if saved and saved['status'] == 'completed' and saved['original_text'] == source:
+            values = (saved.get('chunk_data') or {}).get('refined_subtitles')
+            if values and set(map(int, values)) == set(group):
+                refined_translations.update({int(key): value for key, value in values.items()})
+                completed_count += len(group)
+                if stats_callback:
+                    stats_callback({'total_chunks': total_subtitles, 'completed_chunks': completed_count, 'failed_chunks': failed_count})
+                continue
+
         if check_interruption_callback and check_interruption_callback():
             if log_callback:
                 log_callback(
@@ -298,6 +316,13 @@ async def refine_subtitle_translations(
                     'completed_chunks': completed_count,
                     'failed_chunks': failed_count,
                 })
+
+        if checkpoint_manager and translation_id and not (prompt_options or {}).get('_refine_after'):
+            checkpoint_manager.db.save_chunk(
+                translation_id, checkpoint_offset + block_idx, source,
+                '\n'.join(refined_translations[index] for index in group),
+                {'subtitle_indices': group, 'refined_subtitles': {index: refined_translations[index] for index in group}},
+            )
 
         # Update previous_refined_block context (last up to 5 subtitles of this group).
         last_items = []

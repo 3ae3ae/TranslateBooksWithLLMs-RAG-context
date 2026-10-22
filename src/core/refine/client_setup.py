@@ -30,6 +30,7 @@ def build_refine_client(
     poe_api_key: Optional[str] = None,
     nim_api_key: Optional[str] = None,
     log_callback: Optional[Any] = None,
+    connection: Optional[dict] = None,
 ) -> Tuple[Optional[Any], Optional[Any]]:
     """Create the refine LLM client and (optional) context manager.
 
@@ -57,6 +58,7 @@ def build_refine_client(
         cli_api_endpoint=cli_api_endpoint,
         initial_context=initial_context,
         log_callback=log_callback,
+        connection=connection,
     )
     if llm_client is None:
         return None, None
@@ -67,5 +69,6 @@ def build_refine_client(
         initial_context=initial_context,
         is_thinking_model=is_thinking_model,
         log_callback=log_callback,
+        connection=connection,
     )
     return llm_client, context_manager

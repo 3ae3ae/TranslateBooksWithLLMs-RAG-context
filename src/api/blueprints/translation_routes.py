@@ -39,8 +39,6 @@ def _clamp_parallel_workers(value):
 
 def _clamp_chunk_tokens(value):
     """Resolve the per-job token budget from request or live .env config."""
-    if value in (None, ""):
-        _config.reload_config()
     try:
         resolved = int(value or _config.MAX_TOKENS_PER_CHUNK)
     except (TypeError, ValueError):
@@ -135,13 +133,17 @@ def _strip_api_keys(config):
     since '__USE_ENV__' requests get their key resolved from .env server-side.
     """
     if isinstance(config, dict):
-        for key in [k for k in config if k == 'api_key' or k.endswith('_api_key')]:
-            config.pop(key, None)
+        from src.persistence.database import sanitize_config_secrets
+        safe = sanitize_config_secrets(config)
+        config.clear()
+        config.update(safe)
     return config
 
 
 def _provider_credentials_error(config):
     """Return a credential error payload, or None when the config can run."""
+    if config.get('connection_id'):
+        return None
     provider = (config.get('llm_provider') or 'ollama').lower()
 
     if provider in _KEY_PROVIDERS:
@@ -182,6 +184,8 @@ def _rehydrate_resume_credentials(config, overrides=None):
     job from a checkpoint, including background context re-sync, must call this
     helper before starting a worker.
     """
+    if config.get('connection_id'):
+        return
     provider = (config.get('llm_provider') or 'ollama').lower()
     raw_key = overrides.get('api_key') if isinstance(overrides, dict) else None
 
@@ -217,6 +221,8 @@ def _apply_resume_overrides(config, overrides):
     or None on success.
     """
     if isinstance(overrides, dict) and overrides:
+        if not config.get('connection_id') and any(overrides.get(key) for key in ('model', 'llm_provider', 'llm_api_endpoint')):
+            config.pop('connection', None)
         if overrides.get('model'):
             config['model'] = overrides['model']
         if overrides.get('llm_provider'):
@@ -256,7 +262,7 @@ def _build_corrective_refinement_config(config, output_filepath=None):
     from the already-refined output. Returning ``None`` means the checkpoint is
     legacy or incomplete and cannot safely replay refinement automatically.
     """
-    if not config.get("refine_after"):
+    if not (config.get("refine_after") or config.get("_resync_polish")):
         return None
 
     source_path = config.get("refinement_source_path")
@@ -268,6 +274,10 @@ def _build_corrective_refinement_config(config, output_filepath=None):
 
     correction = copy.deepcopy(config)
     correction.update({
+        "_resync_original_refine_only": config.get('refine_only', False),
+        "_resync_original_refine_after": config.get('refine_after', False),
+        "_resync_original_file_path": config.get('file_path'),
+        "_resync_original_preserved_input_path": config.get('preserved_input_path'),
         "file_path": str(Path(source_path).resolve()),
         "preserved_input_path": str(Path(source_path).resolve()),
         "output_filepath": str(Path(final_output_path).resolve()),
@@ -337,6 +347,10 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
             resolve inside it.
     """
     bp = Blueprint('translation', __name__)
+
+    @bp.errorhandler(ValueError)
+    def invalid_value(exc):
+        return jsonify(error=str(exc)), 400
 
     uploads_dir = Path(output_dir) / 'uploads'
 
@@ -444,6 +458,127 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
                 )
 
         return resume_cb
+
+    def make_context_resync_polish_callback(translation_id):
+        def start_corrective_refinement():
+            """Replay refinement once against the fully re-synced snapshots."""
+            try:
+                fresh_checkpoint = (
+                    state_manager.checkpoint_manager.load_checkpoint(
+                        translation_id
+                    )
+                )
+                if not fresh_checkpoint:
+                    raise RuntimeError(
+                        "Translation checkpoint is unavailable."
+                    )
+
+                persisted_config = copy.deepcopy(
+                    fresh_checkpoint["job"]["config"]
+                )
+                live_output_path = state_manager.get_translation_field(
+                    translation_id,
+                    "output_filepath",
+                )
+                correction_config = _build_corrective_refinement_config(
+                    persisted_config,
+                    live_output_path,
+                )
+                if correction_config is None:
+                    raise RuntimeError(
+                        "The preserved first-pass translation or final output "
+                        "is unavailable. Run refinement manually to apply the "
+                        "re-synced context."
+                    )
+
+                live_config = (
+                    state_manager.get_translation_field(
+                        translation_id,
+                        "config",
+                    )
+                    or {}
+                )
+                provider = (
+                    correction_config.get("llm_provider") or "ollama"
+                ).lower()
+                live_key = live_config.get(f"{provider}_api_key")
+                _rehydrate_resume_credentials(
+                    correction_config,
+                    {"api_key": live_key} if live_key else None,
+                )
+                credential_error = _provider_credentials_error(
+                    correction_config
+                )
+                if credential_error is not None:
+                    raise RuntimeError(credential_error["message"])
+
+                if not state_manager.exists(translation_id):
+                    if not state_manager.restore_job_from_checkpoint(
+                        translation_id
+                    ):
+                        raise RuntimeError(
+                            "Could not restore the translation job."
+                        )
+
+                state_manager.set_interrupted(translation_id, False)
+                state_manager.set_translation_field(
+                    translation_id,
+                    "status",
+                    "running",
+                )
+                state_manager.set_translation_field(
+                    translation_id,
+                    "output_filepath",
+                    correction_config["output_filepath"],
+                )
+                state_manager.checkpoint_manager.mark_running(translation_id)
+                emit_update(
+                    socketio,
+                    translation_id,
+                    {
+                        "status": "running",
+                        "log": (
+                            "Context re-sync changed refinement inputs; "
+                            "restarting refinement from the preserved "
+                            "first-pass translation."
+                        ),
+                    },
+                    state_manager,
+                )
+                start_translation_job(
+                    translation_id,
+                    correction_config,
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to start corrective refinement: {e}"
+                )
+                if state_manager.exists(translation_id):
+                    state_manager.set_translation_field(
+                        translation_id,
+                        "status",
+                        "error",
+                    )
+                    state_manager.set_translation_field(
+                        translation_id,
+                        "error",
+                        str(e),
+                    )
+                emit_update(
+                    socketio,
+                    translation_id,
+                    {
+                        "status": "error",
+                        "error": str(e),
+                        "log": (
+                            "Context re-sync completed, but corrective "
+                            f"refinement could not start: {e}"
+                        ),
+                    },
+                    state_manager,
+                )
+
+        return start_corrective_refinement
 
     @bp.route('/api/translate', methods=['POST'])
     def start_translation_request():
@@ -857,7 +992,8 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
         else:
             return jsonify({"error": "Failed to delete checkpoint or checkpoint not found"}), 404
 
-    @bp.route('/api/translation/<translation_id>/context/<int:chunk_index>', methods=['GET'])
+    @bp.route('/api/jobs/<translation_id>/notes/<chunk_index>', methods=['GET'])
+    @bp.route('/api/translation/<translation_id>/context/<chunk_index>', methods=['GET'])
     def get_context_snapshot(translation_id, chunk_index):
         """Fetch the dynamic context snapshot for a specific chunk"""
         checkpoint_data = state_manager.checkpoint_manager.load_checkpoint(translation_id)
@@ -865,6 +1001,13 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
             return jsonify({"error": "Translation not found"}), 404
             
         chunks = checkpoint_data.get('chunks', [])
+        if chunk_index == 'latest':
+            chunk_index = max(_available_context_chunk_indices(checkpoint_data), default=-1)
+        else:
+            try:
+                chunk_index = int(chunk_index)
+            except (TypeError, ValueError):
+                return jsonify(error='Invalid passage index'), 400
         
         # Find the specific chunk index (may not exist yet during active translation)
         target_chunk = None
@@ -947,6 +1090,21 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
             else:
                 plain_text_context = full_context
         
+        if snapshot and not novel_context_file:
+            from src.utils.novel_context import decode_context_snapshot
+            plain_text_context, _, _ = decode_context_snapshot(snapshot, '')
+
+        if request.args.get('format') == 'sections' or request.path.startswith('/api/jobs/'):
+            from src.utils.notes_store import parse_sections
+            sections = parse_sections(plain_text_context)
+            scope = request.args.get('scope', 'story')
+            if scope == 'global_lore':
+                sections = [section for section in sections if section.get('scope') == 'book']
+            resync = config.get('_context_resync')
+            return jsonify(index=chunk_index, scope=scope, sections=sections,
+                           snapshot_indices=_available_context_chunk_indices(checkpoint_data),
+                           resync={'status': resync.get('status'), 'done': sum(resync.get('start_chunk_index', -1) < index <= resync.get('last_processed_chunk', -1) for index in _available_context_chunk_indices(checkpoint_data)), 'total': sum(index > resync.get('start_chunk_index', -1) for index in _available_context_chunk_indices(checkpoint_data))} if resync else None)
+
         return jsonify({
             "translation_id": translation_id,
             "chunk_index": chunk_index,
@@ -958,14 +1116,26 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
             ),
         }), 200
 
-    @bp.route('/api/translation/<translation_id>/context/<int:chunk_index>/resync', methods=['POST'])
+    @bp.route('/api/jobs/<translation_id>/notes/<chunk_index>/resync', methods=['POST'])
+    @bp.route('/api/translation/<translation_id>/context/<chunk_index>/resync', methods=['POST'])
     def resync_context_snapshot(translation_id, chunk_index):
         """Update a context snapshot and trigger a background re-sync for subsequent chunks"""
         from src.utils.unified_logger import get_logger
         logger = get_logger(__name__)
         logger.info(f"Received context resync request for translation {translation_id} at chunk {chunk_index}")
         
-        data = request.json
+        data = request.get_json(silent=True)
+        normalized_sections, removed_lines = None, []
+        if isinstance(data, dict) and 'sections' in data:
+            from src.utils.notes_store import serialize_sections, normalize_sections
+            if not isinstance(data['sections'], list):
+                return jsonify(error='sections must be a list'), 400
+            normalized_sections, removed_lines = normalize_sections(data['sections'])
+            data['context_content'] = serialize_sections(normalized_sections)
+        elif isinstance(data, dict) and data.get('dry_run') and isinstance(data.get('context_content'), str):
+            from src.utils.notes_store import parse_sections, serialize_sections, normalize_sections
+            normalized_sections, removed_lines = normalize_sections(parse_sections(data['context_content']))
+            data['context_content'] = serialize_sections(normalized_sections)
         if not data or 'context_content' not in data:
             logger.error("Context resync failed: Missing context_content in request data")
             return jsonify({"error": "Missing context_content"}), 400
@@ -1001,6 +1171,13 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
             return jsonify({"error": "Translation not found"}), 404
             
         chunks = checkpoint_data.get('chunks', [])
+        if chunk_index == 'latest':
+            chunk_index = max(_available_context_chunk_indices(checkpoint_data), default=-1)
+        else:
+            try:
+                chunk_index = int(chunk_index)
+            except (TypeError, ValueError):
+                return jsonify(error='Invalid passage index'), 400
         target_chunk_idx = None
         for i, chunk in enumerate(chunks):
             if chunk.get('chunk_index') == chunk_index:
@@ -1020,6 +1197,41 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
             return jsonify({"error": "Only chunks with context snapshots can be resynced"}), 409
         if not (target_chunk.get('chunk_data') or {}).get('context_snapshot'):
             return jsonify({"error": "Chunk has no context snapshot to resync"}), 409
+        if data.get('sections') is not None:
+            from src.utils.notes_store import parse_sections, serialize_sections, normalize_sections
+            baseline, _, _ = decode_context_snapshot((target_chunk.get('chunk_data') or {}).get('context_snapshot'), '')
+            previous_sections = {section['key']: section for section in parse_sections(baseline)}
+            for section in data['sections']:
+                previous = previous_sections.get(section.get('key'))
+                if previous and not previous.get('editable', True) and section.get('body') != previous['body']:
+                    return jsonify(error='The generated name map is read only'), 400
+                previous_sections[section['key']] = section
+            normalized_sections, removed_lines = normalize_sections(list(previous_sections.values()))
+            new_content = serialize_sections(normalized_sections)
+            dynamic_state = extract_dynamic_state_from_text(new_content)
+            compressed_snapshot = compress_dynamic_state(new_content)
+        if data.get('dry_run'):
+            indices = _available_context_chunk_indices(checkpoint_data)
+            affected = sum(index > chunk_index for index in indices)
+            config = checkpoint_data['job']['config']
+            polish = bool(data.get('polish') or config.get('refine_after'))
+            polish_requests = len(chunks) if polish else 0
+            return jsonify(normalized_sections=normalized_sections, removed_lines=removed_lines,
+                           affected_passages=affected, estimated_requests=(0 if data.get('scope') == 'global_lore' else affected) + polish_requests,
+                           polish_requests=polish_requests,
+                           will_pause_running_job=(state_manager.get_translation_field(translation_id, 'status') == 'running'),
+                           output_changes=polish)
+        if data.get('polish'):
+            config = copy.deepcopy(checkpoint_data['job']['config'])
+            output_path = config.get('output_filepath') or state_manager.get_translation_field(translation_id, 'output_filepath')
+            if not output_path or not Path(output_path).is_file():
+                return jsonify(error='A saved output is required for corrective polish'), 409
+            if not config.get('refinement_source_path'):
+                if not state_manager.checkpoint_manager.preserve_refinement_source(translation_id, output_path, config):
+                    return jsonify(error='Could not preserve the output for corrective polish'), 500
+            config['_resync_polish'] = True
+            state_manager.checkpoint_manager.update_job_config(translation_id, config)
+            checkpoint_data['job']['config'] = config
         if not _claim_context_resync(translation_id):
             return jsonify({"error": "A context resync is already running for this translation"}), 409
 
@@ -1078,124 +1290,8 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
         post_resync_callback = None
         post_resync_message = None
 
-        def start_corrective_refinement():
-            """Replay refinement once against the fully re-synced snapshots."""
-            try:
-                fresh_checkpoint = (
-                    state_manager.checkpoint_manager.load_checkpoint(
-                        translation_id
-                    )
-                )
-                if not fresh_checkpoint:
-                    raise RuntimeError(
-                        "Translation checkpoint is unavailable."
-                    )
+        start_corrective_refinement = make_context_resync_polish_callback(translation_id)
 
-                persisted_config = copy.deepcopy(
-                    fresh_checkpoint["job"]["config"]
-                )
-                live_output_path = state_manager.get_translation_field(
-                    translation_id,
-                    "output_filepath",
-                )
-                correction_config = _build_corrective_refinement_config(
-                    persisted_config,
-                    live_output_path,
-                )
-                if correction_config is None:
-                    raise RuntimeError(
-                        "The preserved first-pass translation or final output "
-                        "is unavailable. Run refinement manually to apply the "
-                        "re-synced context."
-                    )
-
-                live_config = (
-                    state_manager.get_translation_field(
-                        translation_id,
-                        "config",
-                    )
-                    or {}
-                )
-                provider = (
-                    correction_config.get("llm_provider") or "ollama"
-                ).lower()
-                live_key = live_config.get(f"{provider}_api_key")
-                _rehydrate_resume_credentials(
-                    correction_config,
-                    {"api_key": live_key} if live_key else None,
-                )
-                credential_error = _provider_credentials_error(
-                    correction_config
-                )
-                if credential_error is not None:
-                    raise RuntimeError(credential_error["message"])
-
-                if not state_manager.exists(translation_id):
-                    if not state_manager.restore_job_from_checkpoint(
-                        translation_id
-                    ):
-                        raise RuntimeError(
-                            "Could not restore the translation job."
-                        )
-
-                state_manager.set_interrupted(translation_id, False)
-                state_manager.set_translation_field(
-                    translation_id,
-                    "status",
-                    "running",
-                )
-                state_manager.set_translation_field(
-                    translation_id,
-                    "output_filepath",
-                    correction_config["output_filepath"],
-                )
-                state_manager.checkpoint_manager.mark_running(translation_id)
-                emit_update(
-                    socketio,
-                    translation_id,
-                    {
-                        "status": "running",
-                        "log": (
-                            "Context re-sync changed refinement inputs; "
-                            "restarting refinement from the preserved "
-                            "first-pass translation."
-                        ),
-                    },
-                    state_manager,
-                )
-                start_translation_job(
-                    translation_id,
-                    correction_config,
-                )
-            except Exception as e:
-                logger.error(
-                    f"Failed to start corrective refinement: {e}"
-                )
-                if state_manager.exists(translation_id):
-                    state_manager.set_translation_field(
-                        translation_id,
-                        "status",
-                        "error",
-                    )
-                    state_manager.set_translation_field(
-                        translation_id,
-                        "error",
-                        str(e),
-                    )
-                emit_update(
-                    socketio,
-                    translation_id,
-                    {
-                        "status": "error",
-                        "error": str(e),
-                        "log": (
-                            "Context re-sync completed, but corrective "
-                            f"refinement could not start: {e}"
-                        ),
-                    },
-                    state_manager,
-                )
-        
         if job_status and job_status.get('status') == 'running':
             was_active = True
             logger.info(f"Translation {translation_id} is running. Interrupting for context resync...")
@@ -1231,17 +1327,13 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
                     make_context_resync_auto_resume_callback(translation_id)
                 )
         else:
-            persisted_status = (
-                checkpoint_data.get("job", {})
-                .get("progress", {})
-                .get("status")
-            )
+            persisted_status = checkpoint_data.get("job", {}).get("status")
             persisted_config = (
                 checkpoint_data.get("job", {}).get("config", {})
             )
             if (
                 persisted_status == "completed"
-                and persisted_config.get("refine_after")
+                and (persisted_config.get("refine_after") or persisted_config.get("_resync_polish"))
             ):
                 post_resync_callback = start_corrective_refinement
                 post_resync_message = (
@@ -1274,7 +1366,7 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
             _release_context_resync(translation_id)
             return jsonify({"error": "Failed to persist context resync state"}), 500
             
-        logger.info(f"Dispatching background context resync thread for translation {translation_id} starting at chunk {chunk_index}")
+        logger.info(f"Queueing context resync for translation {translation_id} starting at chunk {chunk_index}")
         
         # Run in a background thread so we don't block the API
         def run_resync():
@@ -1284,7 +1376,7 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
                     chunk_index,
                     compressed_snapshot,
                     socketio,
-                    was_active,
+                    False,
                     auto_resume_callback,
                     post_resync_callback,
                     post_resync_message,
@@ -1293,17 +1385,18 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
             finally:
                 _release_context_resync(translation_id)
 
-        thread = threading.Thread(
-            target=run_resync,
-            name=f"context-resync-{translation_id}",
-        )
-        thread.daemon = True
-        try:
-            thread.start()
-        except Exception:
-            _release_context_resync(translation_id)
-            raise
-        
+        from src.api.job_runner import get_job_runner
+        runner = get_job_runner(state_manager, output_dir, socketio)
+        config = state_manager.checkpoint_manager.get_job(translation_id)['config']
+        config['_resync_previous_status'] = checkpoint_data['job'].get('status', checkpoint_data['job'].get('progress', {}).get('status', 'interrupted'))
+        if was_active:
+            state_manager.set_interrupted(translation_id, True)
+        runner.enqueue(translation_id, config, next_up=True, task=run_resync)
+        runner.start()
+        if data.get('sections') is not None or request.path.startswith('/api/jobs/'):
+            from .jobs_routes import job_summary
+            return jsonify(job=job_summary(runner, runner.db.get_job(translation_id)))
+
         return jsonify({
             "message": "Context resync started successfully",
             "translation_id": translation_id,
@@ -1411,6 +1504,10 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
                 translation_id
             )
 
+        post_resync_callback = None
+        if state.get('follow_up_kind') == 'corrective_refinement':
+            post_resync_callback = make_context_resync_polish_callback(translation_id)
+
         def run_resync():
             try:
                 resync_context_snapshots_background(
@@ -1420,23 +1517,17 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
                     socketio,
                     False,
                     auto_resume_callback,
-                    None,
-                    None,
+                    post_resync_callback,
+                    "Context timeline repaired; starting corrective polish...",
                     state.get("mode") == "global_lore",
                 )
             finally:
                 _release_context_resync(translation_id)
 
-        thread = threading.Thread(
-            target=run_resync,
-            name=f"context-resync-{translation_id}",
-        )
-        thread.daemon = True
-        try:
-            thread.start()
-        except Exception:
-            _release_context_resync(translation_id)
-            raise
+        from src.api.job_runner import get_job_runner
+        runner = get_job_runner(state_manager, output_dir, socketio)
+        runner.enqueue(translation_id, config, next_up=True, task=run_resync)
+        runner.start()
 
         return jsonify({
             "message": "Context resync resumed successfully",

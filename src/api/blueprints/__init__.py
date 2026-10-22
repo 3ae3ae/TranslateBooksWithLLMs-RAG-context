@@ -19,4 +19,7 @@ __all__ = [
     'create_cost_blueprint',
     'create_sample_blueprint',
     'create_profile_blueprint',
+    'create_jobs_blueprint',
 ]
+
+from .jobs_routes import create_jobs_blueprint

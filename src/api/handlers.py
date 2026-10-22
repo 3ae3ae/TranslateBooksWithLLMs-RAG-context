@@ -6,12 +6,11 @@ import time
 import asyncio
 import copy
 import tempfile
-import threading
 from datetime import datetime
 from pathlib import Path
 
 from src.utils.unified_logger import setup_web_logger, LogType
-from src.utils.file_utils import get_unique_output_path, find_partial_output_paths
+from src.utils.file_utils import get_unique_output_path, find_partial_output_paths, _PARTIAL_RE
 from src.utils.custom_instructions import (
     load_custom_instructions,
     is_safe_filename,
@@ -21,7 +20,6 @@ from src.core.llm.exceptions import RateLimitError
 from src.config import AUTO_PAUSE_ON_RATE_LIMIT, RATE_LIMIT_AUTO_RESUME_DELAY
 from src.core.adapters import translate_file, refine_file
 from src.core.progress import snapshot_from_legacy_stats
-from src.utils.notifier import notify, EVENT_SUCCESS, EVENT_FAILURE, EVENT_INTERRUPTION
 from .websocket import emit_update
 
 
@@ -83,6 +81,8 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
         output_dir (str): Output directory path
         socketio: SocketIO instance
     """
+    from src.utils.notifier import notify, EVENT_SUCCESS, EVENT_FAILURE
+
     if not state_manager.exists(translation_id):
         return
 
@@ -163,6 +163,9 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
         if message_key_from_translate_module in ["llm_prompt_debug", "llm_raw_response_preview"]:
             return
         
+        if isinstance(data, dict) and data.get('type') in ('llm_request', 'refinement_request'):
+            stats = state_manager.get_translation_field(translation_id, 'stats') or {}
+            state_manager.update_stats(translation_id, {'requests': stats.get('requests', 0) + 1})
         step_metadata = _ui_step_metadata(message_key_from_translate_module)
         structured_data = dict(data) if isinstance(data, dict) else {}
         if step_metadata:
@@ -172,13 +175,13 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
         if structured_data:
             log_type = structured_data.get('type')
             if log_type == 'llm_request':
-                logger.debug("LLM Request", LogType.LLM_REQUEST, structured_data)
+                logger.info("LLM Request", LogType.LLM_REQUEST, structured_data)
             elif log_type == 'llm_response':
                 # Use INFO level to ensure translation preview works even when DEBUG_MODE=false
                 logger.info("LLM Response", LogType.LLM_RESPONSE, structured_data)
             elif log_type == 'refinement_request':
                 # Refinement uses same log type as LLM request for UI display
-                logger.debug("Refinement Request", LogType.REFINEMENT_REQUEST, structured_data)
+                logger.info("Refinement Request", LogType.REFINEMENT_REQUEST, structured_data)
             elif log_type == 'refinement_response':
                 # Refinement uses same log type as LLM response for UI display
                 # Use INFO level to ensure translation preview works even when DEBUG_MODE=false
@@ -236,6 +239,11 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
             return
         state_manager.update_stats(translation_id, {**new_stats_dict, **phase_meta})
         current_stats = state_manager.get_translation_field(translation_id, 'stats') or {}
+        checkpoint_job = state_manager.get_checkpoint_manager().get_job(translation_id)
+        if checkpoint_job:
+            persisted = checkpoint_job['config']
+            persisted['stats'] = current_stats
+            state_manager.get_checkpoint_manager().update_job_config(translation_id, persisted)
         current_stats['elapsed_time'] = time.time() - current_stats.get('start_time', time.time())
         # Attach the canonical progress contract alongside the legacy fields,
         # applying the monotonic floor so the global bar never moves backward.
@@ -344,6 +352,8 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
         # Normal jobs avoid overwriting existing files. A context re-sync
         # correction deliberately replaces the same final output after replaying
         # refinement from its preserved first-pass translation.
+        if is_resume and config['file_type'] == 'epub':
+            config['output_filename'] = _PARTIAL_RE.sub('', config['output_filename'])
         forced_output_path = config.get('_force_output_filepath')
         if forced_output_path:
             output_filepath_on_server = os.path.abspath(forced_output_path)
@@ -415,7 +425,7 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
         translation_instructions = None
         refinement_instructions = None
 
-        if custom_instruction_file:
+        if custom_instruction_file and not config.get('connection_id'):
             from src.config import CUSTOM_INSTRUCTIONS_DIR
             custom_instructions_dir = CUSTOM_INSTRUCTIONS_DIR
 
@@ -550,7 +560,15 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                 auto_adjust_context=config.get('auto_adjust_context', True),
                 max_tokens_per_chunk=config.get('max_tokens_per_chunk'),
                 prompt_options=refinement_prompt_options,
+                parallel_workers=config.get('parallel_workers', 1),
+                bilingual_output=config.get('bilingual_output', False),
                 soft_limit_ratio=config.get('soft_limit_ratio'),
+                connection=config.get('connection'),
+                request_timeout=config.get('request_timeout'),
+                max_attempts=config.get('max_attempts'),
+                retry_delay=config.get('retry_delay', 2),
+                srt_lines_per_block=config.get('srt_lines_per_block'),
+                unit_validation_retries=config.get('unit_validation_retries'),
             )
             refinement_failed_chunks = (
                 state_manager.get_translation_field(
@@ -634,6 +652,12 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                 bilingual_output=config.get('bilingual_output', False),
                 parallel_workers=config.get('parallel_workers', 1),
                 soft_limit_ratio=config.get('soft_limit_ratio'),
+                connection=config.get('connection'),
+                request_timeout=config.get('request_timeout'),
+                max_attempts=config.get('max_attempts'),
+                retry_delay=config.get('retry_delay', 2),
+                srt_lines_per_block=config.get('srt_lines_per_block'),
+                unit_validation_retries=config.get('unit_validation_retries'),
                 continuation_base_id=config.get('continuation_base_id'),
             )
 
@@ -739,7 +763,15 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                     auto_adjust_context=config.get('auto_adjust_context', True),
                     max_tokens_per_chunk=config.get('max_tokens_per_chunk'),
                     prompt_options=refinement_prompt_options,
+                    parallel_workers=config.get('parallel_workers', 1),
+                    bilingual_output=config.get('bilingual_output', False),
                     soft_limit_ratio=config.get('soft_limit_ratio'),
+                    connection=config.get('connection'),
+                    request_timeout=config.get('request_timeout'),
+                    max_attempts=config.get('max_attempts'),
+                    retry_delay=config.get('retry_delay', 2),
+                    srt_lines_per_block=config.get('srt_lines_per_block'),
+                unit_validation_retries=config.get('unit_validation_retries'),
                 )
                 refinement_failed_chunks = (
                     state_manager.get_translation_field(
@@ -801,6 +833,9 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
             os.remove(temp_txt_file_path)
 
         state_manager.set_translation_field(translation_id, 'output_filepath', output_filepath_on_server)
+        persisted_config = (checkpoint_manager.get_job(translation_id) or {}).get('config', {})
+        persisted_config.update(output_filepath=output_filepath_on_server, output_filename=config['output_filename'])
+        checkpoint_manager.update_job_config(translation_id, persisted_config)
 
         stats = state_manager.get_translation_field(translation_id, 'stats') or {}
         elapsed_time = time.time() - stats.get('start_time', time.time())
@@ -817,8 +852,7 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
             state_manager.set_translation_field(translation_id, 'status', 'interrupted')
             _log_message_callback("summary_interrupted", f"🛑 Translation interrupted - partial result saved ({elapsed_time:.2f}s)")
             final_status_payload['status'] = 'interrupted'
-            await asyncio.to_thread(notify, EVENT_INTERRUPTION,
-                _notification_context(config, translation_id, elapsed_time))
+            # User pauses do not send notifications.
 
             # Mark checkpoint as interrupted in database
             checkpoint_manager.mark_interrupted(translation_id)
@@ -863,11 +897,11 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
             # Get stats for consolidated message
             final_stats = stats
             stats_summary = ""
-            failed = 0
-            if (config['file_type'] in ('txt', 'srt')
+            failed = final_stats.get('failed_chunks', 0) + final_stats.get('fallback_used', 0)
+            if (config['file_type'] in ('txt', 'srt', 'docx')
                     or (config['file_type'] == 'epub' and stats.get('total_chunks', 0) > 0)):
                 completed = final_stats.get('completed_chunks', 0)
-                failed = final_stats.get('failed_chunks', 0)
+                failed = final_stats.get('failed_chunks', 0) + final_stats.get('fallback_used', 0)
                 total = final_stats.get('total_chunks', 0)
                 unit = 'subtitles' if config['file_type'] == 'srt' else 'chunks'
                 stats_summary = f" | {completed}/{total} {unit}"
@@ -896,7 +930,7 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                 await asyncio.to_thread(notify, EVENT_SUCCESS,
                     _notification_context(config, translation_id, elapsed_time))
 
-                # Cleanup completed job checkpoint (automatic immediate cleanup)
+                # Retain job history; the checkpoint manager handles legacy source cleanup.
                 checkpoint_manager.cleanup_completed_job(translation_id)
 
             # Clean up uploaded file if it exists and is in the uploads directory
@@ -961,9 +995,15 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
         if not state_manager.exists(translation_id):
             return
 
+        config['status_reason'] = 'rate_limit'
+        checkpoint_manager.update_job_config(translation_id, config)
+        await asyncio.to_thread(notify, 'system_paused', _notification_context(config, translation_id, 0, error='Rate limited'))
+
         # Auto-resume mode keeps the job running: wait, then re-enter from the checkpoint.
         if not auto_pause:
-            wait_seconds = e.retry_after or RATE_LIMIT_AUTO_RESUME_DELAY
+            wait_seconds = e.retry_after or config.get('rate_limit_retry_seconds', RATE_LIMIT_AUTO_RESUME_DELAY)
+            config['resume_at'] = time.time() + wait_seconds
+            checkpoint_manager.update_job_config(translation_id, config)
             wait_msg = (f"⏳ Rate limited by {provider_name}.{retry_msg} "
                         f"Auto-resume in {wait_seconds}s (auto-pause disabled).")
             _log_message_callback("rate_limit_auto_resume", wait_msg)
@@ -975,7 +1015,12 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                 'log': wait_msg
             }, state_manager)
 
-            await asyncio.sleep(wait_seconds)
+            deadline = time.monotonic() + wait_seconds
+            while time.monotonic() < deadline and not state_manager.get_translation_field(translation_id, 'interrupted'):
+                await asyncio.sleep(min(1, max(0, deadline - time.monotonic())))
+            config.pop('resume_at', None)
+            config['status_reason'] = 'user' if state_manager.get_translation_field(translation_id, 'interrupted') else None
+            checkpoint_manager.update_job_config(translation_id, config)
 
             # Honor an interrupt that arrived during the wait by falling through to pause.
             if state_manager.get_translation_field(translation_id, 'interrupted'):
@@ -1013,6 +1058,17 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                     new_config['resume_from_index'] = resume_index
                     new_config['_auto_resume_last_index'] = resume_index
                     new_config['_auto_resume_stuck_count'] = stuck_count
+                    if new_config.get('connection_id'):
+                        from .job_runner import resolve_connection
+                        from src.core.llm.connections import ConnectionNotFound
+                        try:
+                            new_config['connection'] = resolve_connection(new_config)
+                        except ConnectionNotFound:
+                            new_config.update(status_reason='connection_removed', error='Connection removed — choose a model')
+                            checkpoint_manager.update_job_config(translation_id, new_config)
+                            state_manager.set_translation_field(translation_id, 'status', 'error')
+                            state_manager.set_translation_field(translation_id, 'error', new_config['error'])
+                            return
                     checkpoint_manager.mark_running(translation_id)
                     state_manager.set_translation_field(translation_id, 'status', 'running')
                     emit_update(socketio, translation_id, {
@@ -1026,6 +1082,9 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                 # No checkpoint available, fall through to the pause path below.
                 _log_message_callback("rate_limit_no_checkpoint",
                     "⚠️ Auto-resume requested but no checkpoint found, falling back to pause.")
+
+        config['status_reason'] = config.get('status_reason') or 'rate_limit'
+        checkpoint_manager.update_job_config(translation_id, config)
 
         pause_msg = f"⏸️ Rate limited by {provider_name}.{retry_msg} Translation auto-paused, you can resume when ready."
         _log_message_callback("rate_limit_auto_pause", pause_msg)
@@ -1081,9 +1140,60 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                                       error=critical_error_msg))
 
 
+def freeze_legacy_config(config, state_manager):
+    import src.config as defaults
+    from .api_keys import resolve_api_key
+    config = copy.deepcopy(config)
+    prompt = config.setdefault('prompt_options', {})
+    for key, setting in (
+        ('novel_context_update_interval', 'NOVEL_CONTEXT_UPDATE_INTERVAL'),
+        ('novel_context_prompt_max_tokens', 'NOVEL_CONTEXT_PROMPT_MAX_TOKENS'),
+        ('novel_context_source_memory_chars', 'NOVEL_CONTEXT_SOURCE_MEMORY_CHARS'),
+        ('novel_context_consolidation_interval', 'NOVEL_CONTEXT_CONSOLIDATION_INTERVAL'),
+        ('bypass_context_gating', 'BYPASS_CONTEXT_GATING'),
+    ):
+        prompt.setdefault(key, getattr(defaults, setting))
+    config.setdefault('srt_lines_per_block', defaults.SRT_LINES_PER_BLOCK)
+    config.setdefault('max_tokens_per_chunk', defaults.MAX_TOKENS_PER_CHUNK)
+    config.setdefault('soft_limit_ratio', defaults.SOFT_LIMIT_RATIO)
+    config.setdefault('unit_validation_retries', defaults.UNIT_VALIDATION_RETRIES)
+    config.setdefault('context_window', defaults.OLLAMA_NUM_CTX)
+    config.setdefault('request_timeout', defaults.REQUEST_TIMEOUT)
+    config.setdefault('max_attempts', defaults.MAX_TRANSLATION_ATTEMPTS)
+    config.setdefault('retry_delay', 2)
+    config.setdefault('auto_adjust_context', defaults.AUTO_ADJUST_CONTEXT)
+    provider = config.get('llm_provider', 'ollama')
+    if not config.get('connection'):
+        config['connection'] = {
+            'llm_provider': provider, 'llm_api_endpoint': config.get('llm_api_endpoint'),
+            'api_key': resolve_api_key(config.get(f'{provider}_api_key'), f'{provider.upper()}_API_KEY') or '',
+            'model': config['model'], 'reasoning_effort': config.get('reasoning', 'default'),
+            'local': provider == 'ollama', 'connection_type': provider,
+            'request_timeout': config.get('request_timeout', defaults.REQUEST_TIMEOUT),
+            'max_attempts': config.get('max_attempts', defaults.MAX_TRANSLATION_ATTEMPTS),
+            'retry_delay': config.get('retry_delay', 2), 'temperature': config.get('temperature', defaults.TEMPERATURE),
+            'parallel_requests': config.get('parallel_workers', 1),
+            'rate_limit_behavior': 'pause' if config.get('auto_pause_on_rate_limit', True) else 'retry',
+            'rate_limit_retry_seconds': config.get('rate_limit_retry_seconds', defaults.RATE_LIMIT_AUTO_RESUME_DELAY),
+        }
+    instruction = prompt.pop('custom_instruction_file', None)
+    if instruction:
+        loaded = load_custom_instructions(instruction, defaults.CUSTOM_INSTRUCTIONS_DIR)
+        config.update(style=instruction, style_text=loaded)
+        if loaded.get('translation'):
+            prompt['custom_instructions'] = loaded['translation']
+        if loaded.get('refinement'):
+            prompt['refinement_instructions'] = loaded['refinement']
+    if prompt.get('glossary_id') and 'glossary_terms' not in prompt:
+        glossary = state_manager.get_glossary_store().get_glossary(int(prompt['glossary_id']))
+        if glossary:
+            prompt.update(glossary_terms=glossary.terms_dict, glossary_name=glossary.name)
+    return config
+
+
 def start_translation_job(translation_id, config, state_manager, output_dir, socketio):
     """
-    Start a translation job in a separate thread
+    Enqueue a translation on the shared worker
 
     Args:
         translation_id (str): Translation job ID
@@ -1092,9 +1202,8 @@ def start_translation_job(translation_id, config, state_manager, output_dir, soc
         output_dir (str): Output directory path
         socketio: SocketIO instance
     """
-    thread = threading.Thread(
-        target=run_translation_async_wrapper,
-        args=(translation_id, config, state_manager, output_dir, socketio)
-    )
-    thread.daemon = True
-    thread.start()
+    from .job_runner import get_job_runner
+    runner = get_job_runner(state_manager, output_dir, socketio)
+    config = freeze_legacy_config(config, state_manager)
+    runner.enqueue(translation_id, config)
+    runner.start()

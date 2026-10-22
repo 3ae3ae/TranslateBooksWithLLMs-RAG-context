@@ -20,6 +20,7 @@ import sys
 import logging
 import webbrowser
 import threading
+from pathlib import Path
 from datetime import datetime
 from urllib.parse import urlparse
 from flask import Flask
@@ -205,22 +206,11 @@ configure_websocket_handlers(socketio, state_manager)
 def restore_incomplete_jobs():
     """Restore incomplete translation jobs from checkpoints on server startup"""
     try:
-        # First, clean up old jobs (older than 30 days) to prevent database bloat
-        jobs_deleted, files_cleaned = state_manager.checkpoint_manager.cleanup_old_jobs(max_age_days=30)
-        if jobs_deleted > 0:
-            logger.info(f"🧹 Cleaned up {jobs_deleted} old job(s) and {files_cleaned} upload folder(s)")
-
-        # Clean up orphan upload folders (folders without corresponding jobs in DB)
-        orphans_deleted = state_manager.checkpoint_manager.cleanup_orphan_uploads()
-        if orphans_deleted > 0:
-            logger.info(f"🧹 Cleaned up {orphans_deleted} orphan upload folder(s)")
-
-        # Then, reset any jobs that were 'running' when the server was stopped
-        # These jobs are now interrupted and should be resumable
-        reset_count = state_manager.checkpoint_manager.reset_running_jobs_on_startup()
-        if reset_count > 0:
-            logger.info(f"🔄 Reset {reset_count} job(s) that were running when the server was stopped")
-
+        from src.api.job_runner import get_job_runner
+        from src.api.blueprints.security_routes import sweep_abandoned_uploads
+        runner = get_job_runner(state_manager, OUTPUT_DIR, socketio)
+        runner.restart_hold()
+        sweep_abandoned_uploads(Path(OUTPUT_DIR) / 'uploads', runner.db)
         resumable_jobs = state_manager.get_resumable_jobs()
         if resumable_jobs:
             logger.info(f"📦 Found {len(resumable_jobs)} incomplete translation job(s) from previous session:")
@@ -241,6 +231,7 @@ def restore_incomplete_jobs():
         logger.error(f"Error restoring incomplete jobs: {e}")
 
 restore_incomplete_jobs()
+state_manager.job_runner.start()
 
 def open_browser(port):
     """Open the web interface in the default browser after a short delay"""

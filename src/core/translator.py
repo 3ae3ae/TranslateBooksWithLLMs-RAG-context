@@ -686,6 +686,11 @@ async def refine_chunks(
     prompt_options=None,
     dynamic_contexts=None,
     context_tracker=None,
+    connection=None,
+    parallel_workers=1,
+    _unit_index=None,
+    checkpoint_manager=None,
+    translation_id=None,
 ) -> List[str]:
     """
     Refine translated chunks with a second pass for literary quality improvement.
@@ -758,7 +763,8 @@ async def refine_chunks(
         deepseek_api_key=deepseek_api_key,
         poe_api_key=poe_api_key,
         nim_api_key=nim_api_key,
-        context_window=initial_context, log_callback=log_callback
+        context_window=initial_context, log_callback=log_callback,
+        **({'connection': connection} if connection is not None else {}),
     )
 
     if context_tracker is None:
@@ -769,9 +775,44 @@ async def refine_chunks(
             log_callback=log_callback,
         )
 
+    if parallel_workers > 1 and _unit_index is None and not context_tracker.auto_analyze:
+        import copy
+        from src.core.common.parallel import iter_ordered_concurrent
+        failures = {}
+
+        async def refine_one(index):
+            tracker = copy.deepcopy(context_tracker)
+            tracker.cursor += index
+            def record_stats(stats):
+                failures[index] = stats.get('failed_chunks', 0)
+            return await refine_chunks(
+                translated_chunks, original_chunks, target_language, model_name, api_endpoint,
+                log_callback=log_callback, stats_callback=record_stats,
+                check_interruption_callback=check_interruption_callback,
+                llm_provider=llm_provider, gemini_api_key=gemini_api_key, openai_api_key=openai_api_key,
+                openrouter_api_key=openrouter_api_key, mistral_api_key=mistral_api_key,
+                deepseek_api_key=deepseek_api_key, poe_api_key=poe_api_key, nim_api_key=nim_api_key,
+                context_window=context_window, auto_adjust_context=auto_adjust_context,
+                prompt_options=prompt_options, context_tracker=tracker, connection=connection,
+                _unit_index=index, checkpoint_manager=checkpoint_manager, translation_id=translation_id,
+            )
+        try:
+            async for index, result in iter_ordered_concurrent(list(range(total_chunks)), parallel_workers, refine_one, check_interruption_callback):
+                if isinstance(result, Exception):
+                    raise result
+                refined_parts.extend(result)
+                if stats_callback:
+                    failed = sum(failures.values())
+                    stats_callback({'total_chunks': total_chunks, 'completed_chunks': len(refined_parts) - failed, 'failed_chunks': failed})
+            refined_parts.extend(translated_chunks[len(refined_parts):])
+            return refined_parts
+        finally:
+            if llm_client:
+                await llm_client.close()
+
     # Create adaptive context manager for Ollama
     context_manager = None
-    if llm_provider == "ollama" and auto_adjust_context:
+    if llm_provider == "ollama" and auto_adjust_context and (connection is None or connection['local']):
         from .context_optimizer import MAX_CONTEXT_SIZE
         context_manager = AdaptiveContextManager(
             initial_context=initial_context,
@@ -786,6 +827,10 @@ async def refine_chunks(
     if llm_client and llm_provider == "ollama":
         await llm_client.detect_thinking_model()
 
+    saved_rows = {}
+    if checkpoint_manager and translation_id and not (prompt_options or {}).get('_refine_after'):
+        saved_rows = {row['chunk_index']: row for row in checkpoint_manager.db.get_chunks(translation_id)}
+
     try:
         iterator = tqdm(
             enumerate(translated_chunks),
@@ -795,6 +840,15 @@ async def refine_chunks(
         ) if not log_callback else enumerate(translated_chunks)
 
         for i, draft_text in iterator:
+            if _unit_index is not None and i != _unit_index:
+                continue
+            saved = saved_rows.get(i)
+            if saved and saved['status'] == 'completed' and saved['original_text'] == draft_text:
+                refined_parts.append(saved['translated_text'])
+                progress_tracker.mark_completed(i, 0)
+                if stats_callback:
+                    stats_callback(progress_tracker.get_stats().to_dict())
+                continue
             # Check for interruption
             if check_interruption_callback and check_interruption_callback():
                 if log_callback:
@@ -947,6 +1001,13 @@ async def refine_chunks(
                 progress_tracker.mark_failed(i)
                 last_refined_context = ""
 
+            if checkpoint_manager and translation_id and not (prompt_options or {}).get('_refine_after'):
+                from src.utils.novel_context import compress_dynamic_state
+                checkpoint_manager.db.save_chunk(
+                    translation_id, i, draft_text, refined_parts[-1],
+                    {'context_snapshot': compress_dynamic_state(context_content)} if context_content else None,
+                    status='completed' if refined_text is not None else 'failed',
+                )
             if stats_callback:
                 stats_callback(progress_tracker.get_stats().to_dict())
 
