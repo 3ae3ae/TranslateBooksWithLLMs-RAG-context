@@ -47,8 +47,8 @@ JS_DIR = ROOT / "src" / "web" / "static" / "js"
 # Must stay in sync with SUPPORTED_LOCALES / NAMESPACES in
 # src/web/static/js/i18n/i18n.js — the test will fail loudly if a locale
 # directory or namespace file is missing.
-SUPPORTED_LOCALES = ["en", "fr", "es", "de", "zh-CN", "ja", "ko"]
-NAMESPACES = ["common", "translation", "settings", "glossary", "files", "tts", "errors", "sample"]
+SUPPORTED_LOCALES = ["en", "ko"]
+NAMESPACES = ["common", "translation", "settings", "glossary", "files", "errors", "sample"]
 REFERENCE_LOCALE = "en"
 
 
@@ -150,12 +150,6 @@ _HARDCODE_ALLOWLIST: set[tuple[str, str, str]] = {
     # --- brand / product identity ----------------------------------------
     ("img", "alt", "TBL Logo"),
     ("h2", "<text>", "TBL"),
-    # `v` prefix in front of the Jinja-rendered app version (e.g. "v1.2.3").
-    # Universal version-number convention, not user-translatable. Both
-    # entries cover the visible content and the tooltip on #appVersion.
-    ("span", "<text>", "v"),
-    ("span", "title", "TBL v"),
-
     # --- dynamic placeholders replaced by JS at runtime ------------------
     ("span", "<text>", "EN"),     # #uiLocaleDisplay — short locale code
     ("h3", "<text>", "0s"),       # #elapsedTime — timer initial value

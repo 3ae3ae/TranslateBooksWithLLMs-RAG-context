@@ -7,8 +7,8 @@
  * window (see <script> tags in translation_interface.html).
  */
 
-export const SUPPORTED_LOCALES = ['en', 'fr', 'es', 'de', 'zh-CN', 'ja', 'ko'];
-export const NAMESPACES = ['common', 'translation', 'settings', 'glossary', 'files', 'tts', 'errors', 'sample'];
+export const SUPPORTED_LOCALES = ['en', 'ko'];
+export const NAMESPACES = ['common', 'translation', 'settings', 'glossary', 'files', 'errors', 'sample'];
 
 let ready = false;
 let readyPromise = null;
@@ -35,7 +35,6 @@ export function initI18n() {
         return readyPromise;
     }
 
-    const version = window.__APP_VERSION__ || 'dev';
     const initial = resolveInitialLocale();
 
     readyPromise = window.i18next
@@ -47,7 +46,7 @@ export function initI18n() {
             ns: NAMESPACES,
             defaultNS: 'common',
             backend: {
-                loadPath: `/static/locales/{{lng}}/{{ns}}.json?v=${encodeURIComponent(version)}`,
+                loadPath: '/static/locales/{{lng}}/{{ns}}.json',
             },
             interpolation: { escapeValue: false },
             returnEmptyString: false,
@@ -165,9 +164,4 @@ function parseParams(raw) {
     } catch {
         return undefined;
     }
-}
-
-/** Convenience: await initI18n then call cb. Useful for late-bound modules. */
-export function whenReady(cb) {
-    initI18n().then(cb);
 }

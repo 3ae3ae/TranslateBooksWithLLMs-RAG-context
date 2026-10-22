@@ -13,17 +13,7 @@
 import { DomHelpers } from './dom-helpers.js';
 import { StateManager } from '../core/state-manager.js';
 import { t } from '../i18n/i18n.js';
-
-const PROVIDER_LABELS = {
-    ollama: 'Ollama',
-    gemini: 'Gemini',
-    openai: 'OpenAI',
-    openrouter: 'OpenRouter',
-    mistral: 'Mistral',
-    deepseek: 'DeepSeek',
-    poe: 'Poe',
-    nim: 'NVIDIA NIM',
-};
+import { PROVIDER_META } from '../providers/provider-select-helpers.js';
 
 // Each chip carries its own tint. Background uses rgba so it stays readable
 // on both light and dark themes; the text uses the same hue at full saturation.
@@ -93,7 +83,7 @@ function queueOperation() {
 
 function buildLlmLine() {
     const providerKey = (DomHelpers.getValue('llmProvider') || '').trim();
-    const providerLabel = PROVIDER_LABELS[providerKey] || providerKey || '—';
+    const providerLabel = PROVIDER_META[providerKey]?.name || providerKey || '—';
     const modelLabel = getSelectText('model') || DomHelpers.getValue('model') || '—';
     const sourceLang = getLanguage('sourceLang', 'customSourceLang') || t('translation:summary_lang_auto_detect');
     const targetLang = getLanguage('targetLang', 'customTargetLang') || '—';

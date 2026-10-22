@@ -201,11 +201,4 @@ export const StatusManager = {
         this.setStatus('waiting', text);
     },
 
-    /**
-     * Get current status
-     * @returns {string} Current status type
-     */
-    getCurrentStatus() {
-        return currentStatus;
-    }
 };

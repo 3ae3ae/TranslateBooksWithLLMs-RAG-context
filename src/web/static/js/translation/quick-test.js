@@ -13,28 +13,18 @@
  * filters incoming events by the id it owns, so the two never collide.
  */
 
-import { ApiClient } from '../core/api-client.js';
 import { WebSocketManager } from '../core/websocket-manager.js';
 import { DomHelpers } from '../ui/dom-helpers.js';
 import { t, applyToDOM } from '../i18n/i18n.js';
 import { navigateToSetting } from '../ui/settings-summary.js';
 import { SampleManager } from '../sample/sample-manager.js';
+import { formatLatency, formatCost } from '../sample/sample-table.js';
+import { PROVIDER_META } from '../providers/provider-select-helpers.js';
 import { SAMPLE_DEFAULT_N_SAMPLES, SAMPLE_DEFAULT_MAX_CHARS } from '../sample/sample-defaults.js';
 
 // Samples exactly like the full Sample tool — same shared defaults.
 const N_SAMPLES = SAMPLE_DEFAULT_N_SAMPLES;
 const MAX_CHARS = SAMPLE_DEFAULT_MAX_CHARS;
-
-const PROVIDER_LABELS = {
-    ollama: 'Ollama',
-    gemini: 'Gemini',
-    openai: 'OpenAI',
-    openrouter: 'OpenRouter',
-    mistral: 'Mistral',
-    deepseek: 'DeepSeek',
-    poe: 'Poe',
-    nim: 'NVIDIA NIM',
-};
 
 const escapeHtml = DomHelpers.escapeHtml;
 
@@ -83,17 +73,6 @@ function readPromptOptions() {
     };
 }
 
-function formatLatency(ms) {
-    if (ms == null) return '–';
-    return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(2)} s`;
-}
-
-function formatCost(cost) {
-    if (cost == null) return null;
-    if (cost < 0.0001) return '$<0.0001';
-    return `$${cost.toFixed(4)}`;
-}
-
 function metricsLine(metrics) {
     if (!metrics) return '';
     const parts = [];
@@ -109,7 +88,7 @@ function metricsLine(metrics) {
 
 /** Compact, read-only summary of the LLM + options being tested. */
 function renderSummary(file, cfg, mode) {
-    const provider = PROVIDER_LABELS[cfg.provider] || cfg.provider || '—';
+    const provider = PROVIDER_META[cfg.provider]?.name || cfg.provider || '—';
     const model = cfg.model || '—';
     const langs = mode === 'refine'
         ? t('translation:summary_refining_in', { lang: file.targetLanguage || '—' })

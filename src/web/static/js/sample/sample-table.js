@@ -16,13 +16,13 @@ import { inlineDiff } from './sample-diff.js';
 // Shared HTML escaper (was a local copy here and in sample-diff.js).
 const escapeHtml = DomHelpers.escapeHtml;
 
-function formatLatency(ms) {
+export function formatLatency(ms) {
     if (ms == null) return '–';
     if (ms < 1000) return `${ms} ms`;
     return `${(ms / 1000).toFixed(2)} s`;
 }
 
-function formatCost(cost) {
+export function formatCost(cost) {
     if (cost == null) return null;
     if (cost < 0.0001) return '$<0.0001';
     return `$${cost.toFixed(4)}`;

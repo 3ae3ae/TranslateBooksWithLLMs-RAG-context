@@ -1,6 +1,5 @@
 {
   "ui_language_label": "인터페이스 언어",
-  "ui_language_help": "원어 이름은 절대 번역되지 않습니다 — 가장 편하게 읽을 수 있는 언어를 선택하세요.",
 
   "provider_and_defaults": "제공자 및 기본값",
   "ai_provider": "AI 제공자",
@@ -11,8 +10,6 @@
   "model": "모델",
   "reset_endpoint_title": "서버 설정으로 초기화",
   "endpoint_custom_badge": "사용자 지정",
-  "key_status_set": "설정됨",
-  "key_status_not_set": "설정되지 않음",
   "key_status_configured": "✓ 구성됨",
   "key_status_configured_rotation": "✓ {{count}}개 키 (순환)",
   "key_status_not_configured_badge": "⚠ 설정되지 않음",
@@ -20,8 +17,6 @@
   "key_using_env_single_with_masked": ".env 키 사용 중 ({{masked}})",
   "key_using_env_multi": ".env 키 {{count}}개 사용 중",
   "key_using_env_multi_with_masked": ".env 키 {{count}}개 사용 중 (마지막: {{masked}})",
-  "key_rotation_count": "키 {{count}}개 순환됨",
-  "key_rotation_count_other": "키 {{count}}개 순환됨",
 
   "api_key_rotation_tip": "팁: 속도 제한 (HTTP 429) 시 자동 순환을 활성화하려면 여러 키를 쉼표로 구분하여 입력하세요 — 무료 등급 계정을 연결하는 데 유용합니다.",
   "api_key_placeholder_gemini": "Gemini API 키 입력",
@@ -51,13 +46,8 @@
   "parallel_workers_help": "동시 요청을 허용하는 클라우드 제공업체에서 여러 청크를 한 번에 번역합니다. 1로 설정하면 원래의 순차 처리 동작을 유지합니다. 값이 높을수록 빠르지만 속도 제한에 걸릴 수 있으며, 일관성을 위한 청크 간 컨텍스트가 비활성화됩니다. 로컬 제공업체(Ollama)에서는 무시됩니다.",
 
   "translation_options": "번역 옵션",
-  "post_processing": "후처리",
-  "system_prompts": "시스템 프롬프트",
-  "ocr_cleanup": "OCR 정리",
-  "literary_refinement": "문학적 다듬기",
   "save_settings": ".env에 설정 저장",
   "save_settings_help": "API 키, 엔드포인트, 파일명 규칙 및 현재 모델을 <code>.env</code> 파일의 기본값으로 저장합니다. 이 섹션의 변경 사항은 자동으로 저장되지 <strong>않습니다</strong>.",
-  "settings_summary_placeholder": "—",
 
   "option_bilingual_title": "이중 언어 출력",
   "option_bilingual_description": "번역과 함께 원문을 포함합니다. 각 청크는 원문 다음에 번역을 표시하므로 언어 학습이나 나란히 비교하기에 이상적입니다.",
@@ -78,20 +68,10 @@
   "default_config_load_failed": "기본 구성을 로드하지 못했습니다",
 
   "notifications": "알림",
-  "notifications_enable": "웹훅 알림 활성화",
   "notifications_url": "웹훅 URL",
   "notifications_method": "메서드",
-  "notifications_headers": "사용자 지정 헤더 (JSON)",
-  "notifications_payload": "사용자 지정 페이로드 (JSON 템플릿)",
-  "notifications_on_success": "성공 시",
-  "notifications_on_failure": "실패 시",
-  "notifications_on_interruption": "중단 시",
-  "notifications_timeout": "타임아웃 (초)",
-  "notifications_test": "테스트 알림 보내기",
-  "notifications_test_sent": "{{event}} 테스트 알림이 성공적으로 전송되었습니다.",
-  "notifications_test_failed": "테스트 실패: {{error}}",
 
-  "notifications_intro": "번역이 종료 상태에 도달하면 휴대폰, Discord 채널 또는 모든 HTTP 엔드포인트로 알림을 받습니다. 로컬 모델로 장시간 실행되는 작업에 유용합니다. <strong>ntfy</strong>, <strong>gotify</strong>, <strong>Discord</strong>, <strong>Slack</strong>, <strong>Healthchecks.io</strong> 또는 사용자 지정 웹훅과 호환됩니다. 전체 참조는 <a href=\"https://github.com/hydropix/TranslateBooksWithLLMs/blob/main/docs/NOTIFICATIONS.md\" target=\"_blank\" rel=\"noopener\" style=\"color: var(--primary-light);\">docs/NOTIFICATIONS.md</a>를 참조하세요.",
+  "notifications_intro": "번역이 종료 상태에 도달하면 휴대폰, Discord 채널 또는 모든 HTTP 엔드포인트로 알림을 받습니다. 로컬 모델로 장시간 실행되는 작업에 유용합니다. <strong>ntfy</strong>, <strong>gotify</strong>, <strong>Discord</strong>, <strong>Slack</strong>, <strong>Healthchecks.io</strong> 또는 사용자 지정 웹훅과 호환됩니다.",
   "notifications_presets_label": "빠른 프리셋",
   "notifications_presets_help": "URL과 페이로드를 미리 채울 서비스를 선택한 다음 계정에 맞게 값을 편집하세요.",
   "notifications_preset_reset": "초기화 (비활성화)",
@@ -135,7 +115,6 @@
   "search_models_no_models_available": "사용 가능한 모델이 없습니다",
   "search_models_no_check_endpoint": "모델 없음 — 엔드포인트를 확인하세요",
   "search_models_error": "모델 로딩 오류",
-  "search_models_loading_models": "모델 로딩 중...",
   "waiting_for_ollama_log": "⚠️ {{endpoint}}의 Ollama에서 사용 가능한 모델이 없습니다 ({{interval}}초마다 자동 재시도 중...)",
   "waiting_for_ollama_msg": "⚠️ Ollama 시작 대기 중...",
   "ollama_not_accessible_log": "⚠️ Ollama에 접근할 수 없으므로 {{interval}}초마다 자동 재시도 중...",

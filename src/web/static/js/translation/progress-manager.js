@@ -415,15 +415,6 @@ export const ProgressManager = {
     },
 
     /**
-     * Update statistics display
-     * @param {string} fileType - File type ('txt', 'epub', 'srt')
-     * @param {Object} stats - Statistics object from server
-     */
-    updateStats(fileType, stats) {
-        updateStatistics(stats, fileType);
-    },
-
-    /**
      * Update progress and statistics together
      * @param {Object} data - Update data from server
      * @param {Object} data.stats - Statistics object
@@ -473,32 +464,4 @@ export const ProgressManager = {
         DomHelpers.show('progressSection');
     },
 
-    /**
-     * Hide progress section
-     */
-    hide() {
-        DomHelpers.hide('progressSection');
-    },
-
-    /**
-     * Set progress to complete (100%)
-     */
-    complete() {
-        updateProgressBar(100);
-    },
-
-    /**
-     * Get current progress percentage
-     * @returns {number} Current progress (0-100)
-     */
-    getCurrentProgress() {
-        const progressBar = DomHelpers.getElement('progressBar');
-
-        if (!progressBar) return 0;
-
-        const widthStyle = progressBar.style.width;
-        const match = widthStyle.match(/(\d+(?:\.\d+)?)/);
-
-        return match ? parseFloat(match[1]) : 0;
-    }
 };

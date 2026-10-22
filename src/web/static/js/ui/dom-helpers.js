@@ -75,16 +75,6 @@ export const DomHelpers = {
     },
 
     /**
-     * Toggle element visibility
-     * @param {HTMLElement|string} element - Element or element ID
-     * @param {boolean} [force] - Force show (true) or hide (false)
-     */
-    toggle(element, force) {
-        const el = typeof element === 'string' ? this.getElement(element) : element;
-        if (el) el.classList.toggle('hidden', force);
-    },
-
-    /**
      * Add class to element
      * @param {HTMLElement|string} element - Element or element ID
      * @param {string} className - Class name
@@ -102,17 +92,6 @@ export const DomHelpers = {
     removeClass(element, className) {
         const el = typeof element === 'string' ? this.getElement(element) : element;
         if (el) el.classList.remove(className);
-    },
-
-    /**
-     * Toggle class on element
-     * @param {HTMLElement|string} element - Element or element ID
-     * @param {string} className - Class name
-     * @param {boolean} [force] - Force add (true) or remove (false)
-     */
-    toggleClass(element, className, force) {
-        const el = typeof element === 'string' ? this.getElement(element) : element;
-        if (el) el.classList.toggle(className, force);
     },
 
     /**
@@ -156,24 +135,6 @@ export const DomHelpers = {
     },
 
     /**
-     * Enable element
-     * @param {HTMLElement|string} element - Element or element ID
-     */
-    enable(element) {
-        const el = typeof element === 'string' ? this.getElement(element) : element;
-        if (el) el.disabled = false;
-    },
-
-    /**
-     * Disable element
-     * @param {HTMLElement|string} element - Element or element ID
-     */
-    disable(element) {
-        const el = typeof element === 'string' ? this.getElement(element) : element;
-        if (el) el.disabled = true;
-    },
-
-    /**
      * Set disabled state on element
      * @param {HTMLElement|string} element - Element or element ID
      * @param {boolean} disabled - Whether to disable (true) or enable (false)
@@ -181,27 +142,6 @@ export const DomHelpers = {
     setDisabled(element, disabled) {
         const el = typeof element === 'string' ? this.getElement(element) : element;
         if (el) el.disabled = disabled;
-    },
-
-    /**
-     * Set element attribute
-     * @param {HTMLElement|string} element - Element or element ID
-     * @param {string} attr - Attribute name
-     * @param {string} value - Attribute value
-     */
-    setAttr(element, attr, value) {
-        const el = typeof element === 'string' ? this.getElement(element) : element;
-        if (el) el.setAttribute(attr, value);
-    },
-
-    /**
-     * Remove element attribute
-     * @param {HTMLElement|string} element - Element or element ID
-     * @param {string} attr - Attribute name
-     */
-    removeAttr(element, attr) {
-        const el = typeof element === 'string' ? this.getElement(element) : element;
-        if (el) el.removeAttribute(attr);
     },
 
     /**
@@ -255,13 +195,4 @@ export const DomHelpers = {
         }
     },
 
-    /**
-     * Scroll element into view
-     * @param {HTMLElement|string} element - Element or element ID
-     * @param {Object} [options] - Scroll options
-     */
-    scrollIntoView(element, options = { behavior: 'smooth' }) {
-        const el = typeof element === 'string' ? this.getElement(element) : element;
-        if (el) el.scrollIntoView(options);
-    }
 };

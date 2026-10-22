@@ -46,7 +46,6 @@ class TestEndpointHybridLogic:
         - apiEndpointCustomized in LOCAL_SETTINGS
         - openaiEndpointCustomized in LOCAL_SETTINGS
         - markEndpointCustomized() method
-        - isEndpointCustomized() method
         - resetEndpointToServerDefault() method
         """
         settings_manager = js_files["settings_manager"]
@@ -63,8 +62,6 @@ class TestEndpointHybridLogic:
         # Check for the methods
         assert "markEndpointCustomized" in content, \
             "SettingsManager should have markEndpointCustomized() method"
-        assert "isEndpointCustomized" in content, \
-            "SettingsManager should have isEndpointCustomized() method"
         assert "resetEndpointToServerDefault" in content, \
             "SettingsManager should have resetEndpointToServerDefault() method"
 
@@ -177,76 +174,6 @@ class TestEndpointHybridLogic:
         # Should have material icons or similar
         assert "restart_alt" in content or "refresh" in content.lower() or "undo" in content.lower(), \
             "Reset button should have an appropriate icon"
-
-
-class TestEndpointLogicFlow:
-    """
-    Documentation tests for the expected behavior flow.
-    """
-
-    def test_flow_first_load(self):
-        """
-        Document expected behavior on first load:
-        1. No localStorage preferences
-        2. FormManager loads server config
-        3. Uses server endpoint (from .env)
-        4. Badge hidden, reset button hidden
-        """
-        flow = {
-            "localStorage": "empty or no customized flag",
-            "serverConfig": "loaded from /api/config",
-            "endpointUsed": "server default (.env)",
-            "badgeVisible": False,
-            "resetButtonVisible": False
-        }
-        
-        assert flow["badgeVisible"] == False
-        assert flow["resetButtonVisible"] == False
-        assert "server" in flow["endpointUsed"].lower() or ".env" in flow["endpointUsed"].lower()
-
-    def test_flow_user_modifies(self):
-        """
-        Document expected behavior when user modifies endpoint:
-        1. User changes endpoint input
-        2. FormManager detects change
-        3. SettingsManager marks as customized
-        4. Badge shown, reset button shown
-        5. Value saved to localStorage
-        """
-        flow = {
-            "trigger": "user modifies endpoint input",
-            "action": "markEndpointCustomized() called",
-            "localStorage": "apiEndpointCustomized = true, lastApiEndpoint = userValue",
-            "badgeVisible": True,
-            "resetButtonVisible": True
-        }
-        
-        assert flow["badgeVisible"] == True
-        assert flow["resetButtonVisible"] == True
-
-    def test_flow_user_resets(self):
-        """
-        Document expected behavior when user clicks reset:
-        1. User clicks reset button
-        2. SettingsManager.resetEndpointToServerDefault() called
-        3. Input updated to server value
-        4. Customized flag cleared
-        5. Badge hidden, reset button hidden
-        6. Models reloaded with server endpoint
-        """
-        flow = {
-            "trigger": "user clicks reset button",
-            "action": "resetEndpointToServerDefault() called",
-            "localStorage": "apiEndpointCustomized cleared",
-            "endpointUsed": "server default (.env)",
-            "badgeVisible": False,
-            "resetButtonVisible": False,
-            "modelsReloaded": True
-        }
-        
-        assert flow["badgeVisible"] == False
-        assert flow["resetButtonVisible"] == False
-        assert flow["modelsReloaded"] == True
 
 
 if __name__ == '__main__':

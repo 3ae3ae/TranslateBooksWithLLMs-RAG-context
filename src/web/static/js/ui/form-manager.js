@@ -10,7 +10,6 @@ import { ApiClient } from '../core/api-client.js';
 import { DomHelpers } from './dom-helpers.js';
 import { MessageLogger } from './message-logger.js';
 import { ApiKeyUtils } from '../utils/api-key-utils.js';
-import { TranslationTracker } from '../translation/translation-tracker.js';
 import { SettingsManager } from '../core/settings-manager.js';
 import { ProviderManager } from '../providers/provider-manager.js';
 import { GlossaryManager } from '../glossary/glossary-manager.js';
@@ -94,14 +93,6 @@ export const FormManager = {
             });
         }
 
-        // TTS enabled checkbox
-        const ttsEnabled = DomHelpers.getElement('ttsEnabled');
-        if (ttsEnabled) {
-            ttsEnabled.addEventListener('change', (e) => {
-                this.handleTtsToggle(e.target.checked);
-            });
-        }
-
         // Prompt options checkboxes - keep section open if any is checked
         const textCleanup = DomHelpers.getElement('textCleanup');
         const bilingualMode = DomHelpers.getElement('bilingualMode');
@@ -169,14 +160,6 @@ export const FormManager = {
         if (autoUpdateContext) {
             autoUpdateContext.addEventListener('change', () => {
                 this.handlePromptOptionChange();
-            });
-        }
-
-        // Reset button
-        const resetBtn = DomHelpers.getElement('resetBtn');
-        if (resetBtn) {
-            resetBtn.addEventListener('click', () => {
-                this.resetForm();
             });
         }
 
@@ -338,87 +321,6 @@ export const FormManager = {
                 StateManager.setState('ui.isPromptOptionsOpen', true);
             }
         }
-    },
-
-    /**
-     * Handle TTS toggle
-     * @param {boolean} isChecked - Whether TTS is enabled
-     */
-    handleTtsToggle(isChecked) {
-        const ttsOptions = DomHelpers.getElement('ttsOptions');
-
-        if (ttsOptions) {
-            if (isChecked) {
-                ttsOptions.style.display = 'block';
-            } else {
-                ttsOptions.style.display = 'none';
-            }
-        }
-
-        // Dispatch event for other components
-        window.dispatchEvent(new CustomEvent('ttsChanged', { detail: { enabled: isChecked } }));
-    },
-
-    /**
-     * Detect browser language and map to full language name
-     * @returns {string} Full language name (e.g., "French", "English")
-     */
-    detectBrowserLanguage() {
-        // Get browser language (e.g., "fr-FR", "en-US", "zh-CN")
-        const browserLang = navigator.language || navigator.userLanguage || 'en';
-        const langCode = browserLang.split('-')[0].toLowerCase();
-
-        // Map language codes to full names used in the UI
-        const languageMap = {
-            'en': 'English',
-            'zh': 'Chinese',
-            'es': 'Spanish',
-            'fr': 'French',
-            'de': 'German',
-            'ja': 'Japanese',
-            'ko': 'Korean',
-            'pt': 'Portuguese',
-            'ru': 'Russian',
-            'ar': 'Arabic',
-            'it': 'Italian',
-            'nl': 'Dutch',
-            'pl': 'Polish',
-            'sv': 'Swedish',
-            'no': 'Norwegian',
-            'da': 'Danish',
-            'fi': 'Finnish',
-            'el': 'Greek',
-            'hu': 'Hungarian',
-            'cs': 'Czech',
-            'sk': 'Slovak',
-            'ro': 'Romanian',
-            'bg': 'Bulgarian',
-            'hr': 'Croatian',
-            'sr': 'Serbian',
-            'uk': 'Ukrainian',
-            'ca': 'Catalan',
-            'hi': 'Hindi',
-            'bn': 'Bengali',
-            'ur': 'Urdu',
-            'pa': 'Punjabi',
-            'ta': 'Tamil',
-            'te': 'Telugu',
-            'mr': 'Marathi',
-            'gu': 'Gujarati',
-            'vi': 'Vietnamese',
-            'th': 'Thai',
-            'id': 'Indonesian',
-            'ms': 'Malay',
-            'tl': 'Tagalog',
-            'my': 'Burmese',
-            'fa': 'Persian',
-            'tr': 'Turkish',
-            'he': 'Hebrew',
-            'sw': 'Swahili',
-            'am': 'Amharic'
-        };
-
-        return languageMap[langCode] || 'English'; // Default to English if not found
     },
 
     /**
@@ -713,98 +615,6 @@ export const FormManager = {
     },
 
     /**
-     * Reset form to default state
-     */
-    async resetForm() {
-        // Get current files to process
-        const filesToProcess = StateManager.getState('files.toProcess');
-        const currentJob = StateManager.getState('translation.currentJob');
-        const isBatchActive = StateManager.getState('translation.isBatchActive');
-
-        // First, interrupt current translation if active
-        if (currentJob && currentJob.translationId && isBatchActive) {
-            MessageLogger.addLog(t('translation:interrupt_before_clear_log'));
-            try {
-                await ApiClient.interruptTranslation(currentJob.translationId);
-            } catch {
-                // Interrupt failed
-            }
-        }
-
-        // Collect file paths to delete from server
-        const uploadedFilePaths = filesToProcess
-            .filter(file => file.filePath)
-            .map(file => file.filePath);
-
-        // Clear client-side state
-        StateManager.setState('files.toProcess', []);
-        StateManager.setState('translation.currentJob', null);
-        StateManager.setState('translation.isBatchActive', false);
-
-        // Clear saved translation state from localStorage
-        if (TranslationTracker && TranslationTracker.clearTranslationState) {
-            TranslationTracker.clearTranslationState();
-        }
-
-        // Reset file input
-        DomHelpers.setValue('fileInput', '');
-
-        // Hide progress section
-        DomHelpers.hide('progressSection');
-
-        // Reset buttons
-        DomHelpers.setText('translateBtn', t('translation:start_batch_with_icon'));
-        DomHelpers.setDisabled('translateBtn', true);
-        DomHelpers.hide('interruptBtn');
-        DomHelpers.setDisabled('interruptBtn', false);
-
-        // Reset language selectors
-        const sourceContainer = DomHelpers.getElement('customSourceLangContainer');
-        const targetContainer = DomHelpers.getElement('customTargetLangContainer');
-        if (sourceContainer) sourceContainer.style.display = 'none';
-        if (targetContainer) targetContainer.style.display = 'none';
-        DomHelpers.getElement('sourceLang').selectedIndex = 0;
-        DomHelpers.getElement('targetLang').selectedIndex = 0;
-
-        // Reset stats and progress
-        DomHelpers.show('statsGrid');
-        this.updateProgress(0);
-        MessageLogger.showMessage('', '');
-
-        // Delete uploaded files from server
-        if (uploadedFilePaths.length > 0) {
-            MessageLogger.addLog(t('translation:delete_uploaded_log', { count: uploadedFilePaths.length }));
-            try {
-                const result = await ApiClient.clearUploads(uploadedFilePaths);
-
-                MessageLogger.addLog(t('translation:delete_uploaded_success_log', { count: result.total_deleted }));
-                if (result.failed && result.failed.length > 0) {
-                    MessageLogger.addLog(t('translation:delete_uploaded_failed_log', { count: result.failed.length }));
-                }
-            } catch {
-                MessageLogger.addLog(t('translation:delete_uploaded_error_log'));
-            }
-        }
-
-        MessageLogger.addLog(t('translation:form_reset_log'));
-
-        // Trigger UI update
-        window.dispatchEvent(new CustomEvent('formReset'));
-    },
-
-    /**
-     * Update progress bar
-     * @param {number} percent - Progress percentage (0-100)
-     */
-    updateProgress(percent) {
-        const progressBar = DomHelpers.getElement('progressBar');
-        if (!progressBar) return;
-
-        progressBar.style.width = percent + '%';
-        DomHelpers.setText(progressBar, Math.round(percent) + '%');
-    },
-
-    /**
      * Get form configuration for translation
      * @returns {Object} Translation configuration object
      */
@@ -842,9 +652,6 @@ export const FormManager = {
         const poeApiKey = provider === 'poe' ? ApiKeyUtils.getValue('poeApiKey') : '';
         const nimApiKey = provider === 'nim' ? ApiKeyUtils.getValue('nimApiKey') : '';
 
-        // Get TTS configuration
-        const ttsEnabled = DomHelpers.getElement('ttsEnabled')?.checked || false;
-
         return {
             source_language: sourceLanguageVal,
             target_language: targetLanguageVal,
@@ -879,46 +686,9 @@ export const FormManager = {
             parallel_workers: provider === 'ollama'
                 ? 1
                 : (parseInt(DomHelpers.getValue('parallelWorkers'), 10) || 1),
-            // TTS configuration
-            tts_enabled: ttsEnabled,
-            tts_voice: ttsEnabled ? (DomHelpers.getValue('ttsVoice') || '') : '',
-            tts_rate: ttsEnabled ? (DomHelpers.getValue('ttsRate') || '+0%') : '+0%',
-            tts_format: ttsEnabled ? (DomHelpers.getValue('ttsFormat') || 'opus') : 'opus',
-            tts_bitrate: ttsEnabled ? (DomHelpers.getValue('ttsBitrate') || '64k') : '64k'
         };
     },
 
-    /**
-     * Validate form configuration
-     * @returns {Object} { valid: boolean, message: string }
-     */
-    validateConfig() {
-        const config = this.getTranslationConfig();
-
-        if (!config.source_language) {
-            return { valid: false, message: t('translation:validation_source_required') };
-        }
-
-        if (!config.target_language) {
-            return { valid: false, message: t('translation:validation_target_required') };
-        }
-
-        if (!config.model) {
-            return { valid: false, message: t('translation:validation_model_required') };
-        }
-
-        if (!config.llm_api_endpoint) {
-            return { valid: false, message: t('translation:validation_endpoint_empty') };
-        }
-
-        // Validate API keys for cloud providers using shared utility
-        const apiKeyValidation = ApiKeyUtils.validateForProvider(config.llm_provider, config.llm_api_endpoint);
-        if (!apiKeyValidation.valid) {
-            return apiKeyValidation;
-        }
-
-        return { valid: true, message: '' };
-    },
     /**
      * Load translation profiles from API
      */
@@ -1037,7 +807,6 @@ window.loadSelectedProfile = async function() {
             disableAutoPause: data.auto_pause_on_rate_limit === undefined
                 ? undefined
                 : !data.auto_pause_on_rate_limit,
-            ttsEnabled: data.tts_enabled
         };
         Object.entries(checkboxValues).forEach(([id, value]) => {
             const element = document.getElementById(id);
@@ -1046,19 +815,11 @@ window.loadSelectedProfile = async function() {
 
         const valueFields = {
             parallelWorkers: data.parallel_workers,
-            ttsVoice: data.tts_voice,
-            ttsRate: data.tts_rate,
-            ttsFormat: data.tts_format,
-            ttsBitrate: data.tts_bitrate,
             outputFilenamePattern: data.output_filename_pattern
         };
         Object.entries(valueFields).forEach(([id, value]) => {
             if (value !== undefined) DomHelpers.setValue(id, String(value));
         });
-
-        if (data.tts_enabled !== undefined) {
-            FormManager.handleTtsToggle(data.tts_enabled);
-        }
 
         // Open the prompt options section if any of the prompt options are enabled
         FormManager.handlePromptOptionChange();
@@ -1094,11 +855,6 @@ window.promptSaveProfile = async function() {
         chapter_mode: !!formData.prompt_options?.chapter_mode,
         auto_pause_on_rate_limit: formData.auto_pause_on_rate_limit,
         parallel_workers: formData.parallel_workers,
-        tts_enabled: formData.tts_enabled,
-        tts_voice: formData.tts_voice,
-        tts_rate: formData.tts_rate,
-        tts_format: formData.tts_format,
-        tts_bitrate: formData.tts_bitrate,
         output_filename_pattern: DomHelpers.getValue('outputFilenamePattern') || ''
     };
     

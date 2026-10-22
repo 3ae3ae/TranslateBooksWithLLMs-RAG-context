@@ -89,19 +89,6 @@ export function generateOutputFilename(file, pattern, overrides = {}) {
 }
 
 /**
- * Detect file type from extension
- * @param {string} filename - Filename
- * @returns {string} File type ('txt', 'epub', 'srt')
- */
-function detectFileType(filename) {
-    const extension = filename.split('.').pop().toLowerCase();
-
-    if (extension === 'epub') return 'epub';
-    if (extension === 'srt') return 'srt';
-    return 'txt';
-}
-
-/**
  * Set language in select dropdown (case-insensitive match)
  * @param {string} selectId - Select element ID
  * @param {string} languageValue - Language value to set
@@ -152,7 +139,6 @@ export const FileUpload = {
      */
     initialize() {
         this.setupDragDrop();
-        this.setupFileInput();
         this.setupLanguageSyncListeners();
         this.setupDefaultConfigListener();
         // Restore file queue from localStorage synchronously first
@@ -332,21 +318,6 @@ export const FileUpload = {
         } catch (error) {
             MessageLogger.showMessage(t('translation:lang_detection_failed', { error: error.message }), 'error');
         }
-    },
-
-    /**
-     * Get the name of the last uploaded file
-     * @returns {string|null} Last uploaded filename
-     */
-    getLastUploadedFileName() {
-        return lastUploadedFileName;
-    },
-
-    /**
-     * Clear the last uploaded file tracking
-     */
-    clearLastUploadedFile() {
-        lastUploadedFileName = null;
     },
 
     /**
@@ -665,24 +636,6 @@ export const FileUpload = {
                 }
             });
         });
-    },
-
-    /**
-     * Set up file input change handler
-     */
-    setupFileInput() {
-        const fileInput = DomHelpers.getElement('fileInput');
-        if (fileInput) {
-            fileInput.addEventListener('change', (e) => {
-                this.handleFileSelect(e);
-            });
-        }
-        const fileInputRefine = DomHelpers.getElement('fileInputRefine');
-        if (fileInputRefine) {
-            fileInputRefine.addEventListener('change', (e) => {
-                this.handleFileSelectRefine(e);
-            });
-        }
     },
 
     /**
@@ -1233,15 +1186,6 @@ export const FileUpload = {
             lastUploadedFileName = null;
         }
 
-        this.notifyFileListChanged();
-    },
-
-    /**
-     * Clear all files from queue
-     */
-    clearAll() {
-        StateManager.setState('files.toProcess', []);
-        lastUploadedFileName = null;
         this.notifyFileListChanged();
     },
 

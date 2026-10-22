@@ -16,8 +16,6 @@ import { StatusManager } from '../utils/status-manager.js';
 import { SearchableSelectFactory } from '../ui/searchable-select.js';
 import { t } from '../i18n/i18n.js';
 import {
-    PROVIDER_LOGOS,
-    PROVIDER_META,
     populateModelSelectInto,
     setPlaceholderOption as setPlaceholderOptionShared,
     renderProviderOption,
@@ -1041,22 +1039,6 @@ export const ProviderManager = {
             StateManager.setState('models.availableModels', POE_FALLBACK_MODELS.map(m => m.value));
             StatusManager.setConnected('poe', POE_FALLBACK_MODELS.length);
         }
-    },
-
-    /**
-     * Get current provider
-     * @returns {string} Current provider ('ollama', 'gemini', 'openai', 'openrouter')
-     */
-    getCurrentProvider() {
-        return StateManager.getState('ui.currentProvider') || DomHelpers.getValue('llmProvider');
-    },
-
-    /**
-     * Get current model
-     * @returns {string} Current model name
-     */
-    getCurrentModel() {
-        return StateManager.getState('ui.currentModel') || DomHelpers.getValue('model');
     },
 
     /**

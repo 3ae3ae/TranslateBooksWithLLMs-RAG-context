@@ -28,7 +28,6 @@ function validatePreferences(data) {
     if (!('version' in data)) return false;
 
     // Validate types for known fields (non-exhaustive, just critical ones)
-    if ('ttsEnabled' in data && typeof data.ttsEnabled !== 'boolean') return false;
     if ('textCleanup' in data && typeof data.textCleanup !== 'boolean') return false;
     if ('chapterMode' in data && typeof data.chapterMode !== 'boolean') return false;
 
@@ -127,7 +126,6 @@ export const SettingsManager = {
             { id: 'targetLang', event: 'change' },
             { id: 'customSourceLang', event: 'change' },
             { id: 'customTargetLang', event: 'change' },
-            { id: 'ttsEnabled', event: 'change' },
             { id: 'textCleanup', event: 'change' },
             { id: 'bilingualMode', event: 'change' },
             { id: 'plainTextMode', event: 'change' },
@@ -328,19 +326,6 @@ export const SettingsManager = {
             }
         }
 
-        // Apply TTS Enabled setting
-        if (prefs.ttsEnabled !== undefined) {
-            const ttsEnabledCheckbox = DomHelpers.getElement('ttsEnabled');
-            if (ttsEnabledCheckbox) {
-                ttsEnabledCheckbox.checked = prefs.ttsEnabled;
-                // Show/hide the TTS options panel based on checkbox state
-                const ttsOptions = DomHelpers.getElement('ttsOptions');
-                if (ttsOptions) {
-                    ttsOptions.style.display = prefs.ttsEnabled ? 'block' : 'none';
-                }
-            }
-        }
-
         // Apply Prompt Options settings
         if (prefs.textCleanup !== undefined) {
             const cleanupCheckbox = DomHelpers.getElement('textCleanup');
@@ -438,7 +423,6 @@ export const SettingsManager = {
      * Save current form state to local preferences
      */
     saveCurrentState() {
-        const ttsEnabledCheckbox = DomHelpers.getElement('ttsEnabled');
         const textCleanupCheckbox = DomHelpers.getElement('textCleanup');
         const bilingualModeCheckbox = DomHelpers.getElement('bilingualMode');
         const plainTextModeCheckbox = DomHelpers.getElement('plainTextMode');
@@ -452,7 +436,6 @@ export const SettingsManager = {
             lastApiEndpoint: DomHelpers.getValue('apiEndpoint'),
             lastOpenaiEndpoint: DomHelpers.getValue('openaiEndpoint'),
             outputFilenamePattern: DomHelpers.getValue('outputFilenamePattern'),
-            ttsEnabled: ttsEnabledCheckbox ? ttsEnabledCheckbox.checked : false,
             textCleanup: textCleanupCheckbox ? textCleanupCheckbox.checked : false,
             bilingualMode: bilingualModeCheckbox ? bilingualModeCheckbox.checked : false,
             plainTextMode: plainTextModeCheckbox ? plainTextModeCheckbox.checked : false,
@@ -706,14 +689,6 @@ export const SettingsManager = {
     },
 
     /**
-     * Check if .env model was already applied
-     * @returns {boolean}
-     */
-    isEnvModelApplied() {
-        return envModelApplied;
-    },
-
-    /**
      * Mark an endpoint as customized by the user
      * @param {string} endpointType - 'ollama' or 'openai'
      */
@@ -721,18 +696,6 @@ export const SettingsManager = {
         const key = endpointType === 'openai' ? 'openaiEndpointCustomized' : 'apiEndpointCustomized';
         this.saveLocalPreferences({ [key]: true });
         this.updateEndpointBadge(endpointType, true);
-    },
-
-    /**
-     * Check if an endpoint was customized by the user
-     * @param {string} endpointType - 'ollama' or 'openai'
-     * @returns {boolean}
-     */
-    isEndpointCustomized(endpointType) {
-        const prefs = this.getLocalPreferences();
-        return endpointType === 'openai' 
-            ? prefs.openaiEndpointCustomized 
-            : prefs.apiEndpointCustomized;
     },
 
     /**
@@ -786,30 +749,6 @@ export const SettingsManager = {
         }
     },
 
-    /**
-     * Initialize endpoint badges on page load
-     * Call this after server config is loaded
-     * @param {Object} serverConfig - The config from /api/config
-     */
-    initializeEndpointBadges(serverConfig) {
-        const prefs = this.getLocalPreferences();
-        
-        // Check Ollama endpoint
-        if (prefs.apiEndpointCustomized && prefs.lastApiEndpoint) {
-            const serverEndpoint = serverConfig.ollama_api_endpoint || serverConfig.api_endpoint;
-            if (prefs.lastApiEndpoint !== serverEndpoint) {
-                this.updateEndpointBadge('ollama', true);
-            }
-        }
-        
-        // Check OpenAI endpoint
-        if (prefs.openaiEndpointCustomized && prefs.lastOpenaiEndpoint) {
-            const serverEndpoint = serverConfig.openai_api_endpoint;
-            if (prefs.lastOpenaiEndpoint !== serverEndpoint) {
-                this.updateEndpointBadge('openai', true);
-            }
-        }
-    }
 };
 
 // Auto-save preferences when leaving page

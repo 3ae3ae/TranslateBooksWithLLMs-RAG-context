@@ -55,12 +55,6 @@ export const WebSocketManager = {
             this.emit('checkpoint_created', data);
         });
 
-        // TTS events
-        socket.on('tts_update', (data) => {
-            console.log('TTS update:', data.status, '-', data.message);
-            this.emit('tts_update', data);
-        });
-
         // Sample & Compare events
         socket.on('sample_update', (data) => {
             this.emit('sample_update', data);
@@ -75,14 +69,6 @@ export const WebSocketManager = {
             socket.disconnect();
             socket = null;
         }
-    },
-
-    /**
-     * Check if WebSocket is connected
-     * @returns {boolean} True if connected
-     */
-    isConnected() {
-        return socket && socket.connected;
     },
 
     /**
@@ -133,24 +119,4 @@ export const WebSocketManager = {
         }
     },
 
-    /**
-     * Send message through WebSocket
-     * @param {string} eventName - Event name
-     * @param {any} data - Data to send
-     */
-    send(eventName, data) {
-        if (socket && socket.connected) {
-            socket.emit(eventName, data);
-        } else {
-            console.error('Cannot send message: WebSocket not connected');
-        }
-    },
-
-    /**
-     * Get underlying socket.io instance (for advanced usage)
-     * @returns {Socket|null} Socket.io instance
-     */
-    getSocket() {
-        return socket;
-    }
 };

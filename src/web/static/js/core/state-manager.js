@@ -107,21 +107,6 @@ export const StateManager = {
     },
 
     /**
-     * Unsubscribe from state changes
-     * @param {string} key - State key
-     * @param {Function} callback - Callback to remove
-     */
-    unsubscribe(key, callback) {
-        if (subscribers.has(key)) {
-            const callbacks = subscribers.get(key);
-            const index = callbacks.indexOf(callback);
-            if (index > -1) {
-                callbacks.splice(index, 1);
-            }
-        }
-    },
-
-    /**
      * Notify subscribers of state change
      * @param {string} key - State key that changed
      * @param {any} newValue - New value

@@ -35,11 +35,6 @@ def test_profile_round_trip_preserves_all_non_secret_settings(profile_client):
         "chapter_mode": True,
         "auto_pause_on_rate_limit": False,
         "parallel_workers": 4,
-        "tts_enabled": True,
-        "tts_voice": "voice",
-        "tts_rate": "+10%",
-        "tts_format": "mp3",
-        "tts_bitrate": "128k",
         "output_filename_pattern": "{originalName}-{targetLang}.{ext}",
         "translation_id": "old-job",
         "resume_from_index": 42,
@@ -137,10 +132,9 @@ def test_profile_frontend_restores_complete_state_without_timer_race():
         "chapter_mode",
         "auto_pause_on_rate_limit",
         "parallel_workers",
-        "tts_enabled",
         "output_filename_pattern",
     ):
         assert field in form_manager
 
-    for method in ("getProfiles", "getProfile", "saveProfile", "deleteProfile"):
+    for method in ("getProfiles", "getProfile", "saveProfile"):
         assert f"async {method}(" in api_client

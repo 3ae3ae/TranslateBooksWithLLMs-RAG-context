@@ -643,21 +643,6 @@ export class SearchableSelect {
     }
 
     /**
-     * Get current value
-     * @returns {string}
-     */
-    getValue() {
-        return this.currentValue;
-    }
-
-    /**
-     * Refresh options from select
-     */
-    refresh() {
-        this._updateFromOriginalSelect();
-    }
-
-    /**
      * Destroy the searchable select and restore original
      */
     destroy() {
@@ -723,11 +708,4 @@ export const SearchableSelectFactory = {
         }
     },
 
-    /**
-     * Destroy all instances
-     */
-    destroyAll() {
-        this.instances.forEach(instance => instance.destroy());
-        this.instances.clear();
-    }
 };

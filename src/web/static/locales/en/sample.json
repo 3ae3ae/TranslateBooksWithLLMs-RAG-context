@@ -18,7 +18,6 @@
   "update_samples_title": "Apply N and Max chars: re-sample the document, keeping existing translations where possible.",
 
   "llms_label": "LLMs to compare",
-  "llm_label": "LLM {{index}}",
   "add_llm": "Add an LLM",
   "remove_llm": "Remove this LLM",
   "apply_to_settings_title": "Apply this LLM's configuration to the app settings",
@@ -42,7 +41,6 @@
 
   "badge_truncated": "truncated",
   "badge_fallback": "fallback",
-  "badge_error": "error",
 
   "warning_small_document": "Document has only {{total}} chunks; sampled {{count}} interior chunks instead of {{requested}}.",
   "warning_lang_autodetected": "Source language auto-detected as {{lang}} (confidence {{confidence}}%).",

@@ -103,17 +103,6 @@ export const ApiKeyUtils = {
     },
 
     /**
-     * Check if API key is available for a specific provider
-     * @param {string} provider - Provider name
-     * @returns {boolean} True if key is available
-     */
-    isAvailableForProvider(provider) {
-        const fieldId = this.getFieldIdForProvider(provider);
-        if (!fieldId) return false;
-        return this.isAvailable(fieldId);
-    },
-
-    /**
      * Setup API key field with proper placeholder/indicator and status badge.
      * When `keyCount > 1`, signals the active rotation pool size so users can
      * verify their multi-key .env config actually parsed.

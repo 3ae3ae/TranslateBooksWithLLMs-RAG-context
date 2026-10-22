@@ -148,7 +148,6 @@ export const FileManager = {
                         file.file_type === 'txt' ? 'description' :
                         isAudioFile ? 'headphones' : 'attach_file';
 
-        const supportsTTS = ['epub', 'txt', 'srt'].includes(file.file_type);
         const safeFilename = DomHelpers.escapeHtml(file.filename);
         const tooltipInfo = `${file.file_type.toUpperCase()} • ${file.size_mb} MB • ${formattedDate}`;
 
@@ -178,16 +177,6 @@ export const FileManager = {
         }
 
         const actionsHost = row.querySelector('.file-action-group');
-
-        if (supportsTTS) {
-            const audiobookBtn = document.createElement('button');
-            audiobookBtn.type = 'button';
-            audiobookBtn.className = 'file-action-btn audiobook';
-            audiobookBtn.title = t('translation:audiobook_btn_title');
-            audiobookBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size: 0.875rem;">headphones</span>';
-            audiobookBtn.addEventListener('click', () => window.createAudiobook(file.filename, file.file_path));
-            actionsHost.appendChild(audiobookBtn);
-        }
 
         const refreshAfterDelete = () => this.refreshFileList();
         ['open', 'reveal', 'download', 'delete'].forEach(action => {
@@ -297,10 +286,6 @@ export const FileManager = {
         }
     },
 
-    async deleteSingleFile(filename) {
-        await FileActions.delete(filename, { onDeleted: () => this.refreshFileList() });
-    },
-
     /**
      * Download selected files as ZIP
      */
@@ -389,8 +374,3 @@ export const FileManager = {
     },
 
 };
-
-// Selection toggle stays here (state lives in FileManager); the per-file
-// actions (open/reveal/download) are exposed globally by FileActions itself.
-window.toggleFileSelection = (filename) => FileManager.toggleFileSelection(filename);
-window.deleteSingleFile = (filename) => FileManager.deleteSingleFile(filename);

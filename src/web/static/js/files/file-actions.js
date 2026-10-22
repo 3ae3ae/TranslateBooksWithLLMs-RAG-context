@@ -8,7 +8,6 @@
 
 import { ApiClient } from '../core/api-client.js';
 import { MessageLogger } from '../ui/message-logger.js';
-import { DomHelpers } from '../ui/dom-helpers.js';
 import { t } from '../i18n/i18n.js';
 
 const ACTION_DEFS = {
@@ -172,10 +171,3 @@ export const FileActions = {
         return wrap;
     }
 };
-
-// Expose action handlers globally (used by completion-card and any inline onclicks)
-if (typeof window !== 'undefined') {
-    window.openLocalFile = (filename) => FileActions.open(filename);
-    window.revealLocalFile = (filename) => FileActions.reveal(filename);
-    window.downloadSingleFile = (filename) => FileActions.download(filename);
-}

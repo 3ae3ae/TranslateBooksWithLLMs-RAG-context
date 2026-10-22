@@ -20,7 +20,6 @@
        surfaces stay visually consistent. */
     --danger-light: #ef4444;
     --danger-light-hover: #dc2626;
-    --danger-light-border: #dc2626;
 
     /* Neumorphic shadows */
     --shadow-dark: #d8dbdf;
@@ -52,7 +51,6 @@ html.dark {
        glare against a dim background. */
     --danger-light: #dc2626;
     --danger-light-hover: #b91c1c;
-    --danger-light-border: #b91c1c;
 
     /* Neumorphic shadows for dark mode */
     --shadow-dark: #1a1a1a;
@@ -121,11 +119,6 @@ html.dark .message.info {
     background: #1e3a5f;
     border-color: #1e40af;
     color: #93c5fd;
-}
-
-html.dark #ttsOptions {
-    background: linear-gradient(135deg, rgba(52, 211, 153, 0.15) 0%, rgba(52, 211, 153, 0.08) 100%);
-    border-color: rgba(52, 211, 153, 0.4);
 }
 
 html.dark .log-entry.log-summary-detailed {
@@ -263,15 +256,6 @@ body {
     font-size: 0.75rem;
     font-weight: 500;
     margin-top: 0.25rem;
-}
-
-.header .logo-text .app-version {
-    color: var(--text-muted-light);
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0;
-    margin-left: 0.35rem;
-    vertical-align: middle;
 }
 
 .header .status-section {
@@ -1074,25 +1058,6 @@ select.form-control {
     font-size: 0.9rem;
 }
 
-.log-content {
-    color: var(--text-dark);
-}
-
-.log-content.success {
-    color: var(--success-light);
-    font-weight: 700;
-}
-
-.log-content.info {
-    color: var(--primary-light);
-    font-weight: 500;
-}
-
-.log-content.error {
-    color: #ef4444;
-    font-weight: 700;
-}
-
 /* ========================================
    Scrollbar Customization - Hidden
    ======================================== */
@@ -1117,11 +1082,6 @@ select.form-control {
 /* Hide scrollbars for Firefox */
 * {
     scrollbar-width: none;
-}
-
-/* Hide scrollbars for IE and Edge Legacy */
-* {
-    -ms-overflow-style: none;
 }
 
 /* ========================================
@@ -1340,10 +1300,6 @@ input[type="checkbox"] {
     color: #ef4444;
 }
 
-.file-action-btn.audiobook {
-    color: #8b5cf6;
-}
-
 .file-action-btn.reveal {
     color: #f59e0b;
 }
@@ -1428,111 +1384,11 @@ input[type="checkbox"] {
     color: #1e3a8a;
 }
 
-/* ========================================
-   Footer
-   ======================================== */
-
-.app-footer {
-    padding: 1.5rem 2rem;
-    margin-top: 3rem;
-    border-top: 1px solid var(--border-light);
-    border-radius: 2rem;
-}
-
-.footer-links {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.5rem 1.5rem;
-}
-
-.footer-links a {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    color: var(--text-muted-light);
-    text-decoration: none;
-    font-size: 0.8125rem;
-    font-weight: 500;
-    transition: color 0.2s ease;
-}
-
-.footer-links a:hover {
-    color: var(--primary-light);
-}
-
-.footer-links a .material-symbols-outlined {
-    font-size: 1rem;
-}
-
-/* Ko-fi support link — uses the Ko-fi brand blue so it reads as a
-   donation call-out without breaking the muted footer style. */
-.footer-links a.footer-kofi {
-    color: #72a4f2;
-    font-weight: 600;
-}
-
-.footer-links a.footer-kofi:hover {
-    color: #5a8de0;
-}
-
-/* ========================================
-   TTS Section
-   ======================================== */
-
-#ttsOptions {
-    margin-top: 1rem;
-    padding: 1.5rem;
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(34, 197, 94, 0.05) 100%);
-    border: 1px solid rgba(34, 197, 94, 0.3);
-    border-radius: 1.5rem;
-}
-
-.gpu-status {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem 1rem;
-    border-radius: 1rem;
-    font-size: 0.875rem;
-    transition: all 0.3s ease;
-}
-
-.gpu-status.gpu-available {
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(22, 163, 74, 0.15) 100%);
-    border: 1px solid rgba(34, 197, 94, 0.4);
-    color: #16a34a;
-}
-
-.gpu-status.gpu-unavailable {
-    background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(185, 28, 28, 0.15) 100%);
-    border: 1px solid rgba(239, 68, 68, 0.4);
-    color: #dc2626;
-}
-
-.gpu-status.gpu-checking {
-    background: linear-gradient(135deg, rgba(251, 191, 36, 0.2) 0%, rgba(245, 158, 11, 0.15) 100%);
-    border: 1px solid rgba(251, 191, 36, 0.4);
-    color: #f59e0b;
-}
-
 .status-dot {
     width: 10px;
     height: 10px;
     border-radius: 50%;
     flex-shrink: 0;
-}
-
-.status-dot.available {
-    background: #22c55e;
-    box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
-    animation: pulse-green 2s infinite;
-}
-
-.status-dot.unavailable {
-    background: #ef4444;
-    box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
 }
 
 .status-dot.checking {
@@ -1599,56 +1455,6 @@ input[type="checkbox"] {
 @keyframes spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
-}
-
-.rotating {
-    animation: spin 1s linear infinite;
-    display: inline-block;
-}
-
-/* TTS Slider Styles */
-.tts-slider {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 100%;
-    height: 8px;
-    border-radius: 4px;
-    background: var(--background-light);
-    box-shadow: inset 2px 2px 4px var(--shadow-dark), inset -2px -2px 4px var(--shadow-light);
-    outline: none;
-    cursor: pointer;
-    margin-top: 0.5rem;
-}
-
-.tts-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: var(--primary-light);
-    cursor: pointer;
-    box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light);
-    transition: all 0.2s;
-}
-
-.tts-slider::-webkit-slider-thumb:hover {
-    transform: scale(1.1);
-}
-
-.tts-slider::-moz-range-thumb {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: var(--primary-light);
-    cursor: pointer;
-    border: none;
-    box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light);
-    transition: all 0.2s;
-}
-
-.tts-slider::-moz-range-thumb:hover {
-    transform: scale(1.1);
 }
 
 /* ========================================
@@ -3250,120 +3056,6 @@ html.dark .cost-badge.cost-error {
 }
 
 /* ========================================
-   Update Banner (auto-update notification)
-   ======================================== */
-.update-banner {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    margin: 0 0 1rem 0;
-    padding: 0.75rem 1rem;
-    background: var(--info-light-bg);
-    border: 1px solid var(--info-light);
-    border-radius: 0.75rem;
-    color: var(--text-dark);
-    font-size: 0.9rem;
-    box-shadow: 2px 2px 5px var(--shadow-dark), -2px -2px 5px var(--shadow-light);
-}
-.update-banner.hidden { display: none; }
-.update-banner__text { flex: 1 1 auto; }
-.update-banner__text strong { color: var(--info-light); }
-.update-banner__actions {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex: 0 0 auto;
-}
-.update-banner__actions .btn {
-    padding: 0.45rem 0.85rem;
-    font-size: 0.85rem;
-    font-weight: 600;
-    border-radius: 0.5rem;
-}
-.update-banner__close {
-    background: transparent;
-    border: none;
-    color: var(--text-muted-light);
-    cursor: pointer;
-    padding: 0.25rem;
-    border-radius: 0.4rem;
-    display: inline-flex;
-    align-items: center;
-    line-height: 1;
-}
-.update-banner__close:hover {
-    background: rgba(0, 0, 0, 0.05);
-    color: var(--text-dark);
-}
-html.dark .update-banner__close:hover {
-    background: rgba(255, 255, 255, 0.08);
-}
-
-/* Modal-like overlay used while the update is running / restarting. */
-.update-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(15, 22, 35, 0.6);
-    backdrop-filter: blur(2px);
-    z-index: 9999;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 1.5rem;
-}
-.update-overlay.hidden { display: none; }
-.update-overlay__panel {
-    background: var(--background-outer);
-    color: var(--text-dark);
-    border-radius: 1rem;
-    padding: 1.5rem 1.75rem;
-    max-width: 640px;
-    width: 100%;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
-    border: 1px solid var(--border-light);
-}
-.update-overlay__title {
-    margin: 0 0 0.5rem 0;
-    font-size: 1.15rem;
-    font-weight: 700;
-}
-.update-overlay__step {
-    margin: 0 0 1rem 0;
-    color: var(--text-muted-light);
-    font-size: 0.9rem;
-}
-.update-overlay__log {
-    max-height: 220px;
-    overflow-y: auto;
-    background: var(--background-light);
-    border: 1px solid var(--border-light);
-    border-radius: 0.5rem;
-    padding: 0.75rem;
-    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-    font-size: 0.78rem;
-    line-height: 1.45;
-    color: var(--text-muted-light);
-    white-space: pre-wrap;
-    word-break: break-word;
-}
-.update-overlay__actions {
-    margin-top: 1rem;
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
-}
-.update-overlay__error {
-    margin: 0.5rem 0;
-    padding: 0.5rem 0.75rem;
-    background: rgba(220, 38, 38, 0.12);
-    color: #dc2626;
-    border-radius: 0.5rem;
-    font-size: 0.85rem;
-}
-html.dark .update-overlay__error { color: #fca5a5; }
-
-/* ========================================
    Sample & Compare tab
    ======================================== */
 
@@ -3670,11 +3362,6 @@ html.dark .sample-card {
     font-weight: 700;
     color: var(--text-dark);
 }
-.sample-llm-meta {
-    margin-left: auto;
-    font-size: 0.75rem;
-    color: var(--text-muted-light);
-}
 .sample-llm-content {
     display: flex;
     flex-direction: column;
@@ -3768,11 +3455,6 @@ html.dark .sample-badge-fallback {
     background: rgba(168, 85, 247, 0.22);
     color: #c084fc;
 }
-.sample-badge-error {
-    background: rgba(239, 68, 68, 0.18);
-    color: var(--danger-light);
-}
-
 .sample-cell-skeleton {
     height: 56px;
     border-radius: 0.5rem;

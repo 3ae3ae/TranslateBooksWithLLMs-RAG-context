@@ -5,7 +5,7 @@
  * with consistent error handling and response processing.
  */
 
-let API_BASE_URL = window.location.origin;
+const API_BASE_URL = window.location.origin;
 
 /**
  * Append the per-session API token (issue #210) as a query parameter.
@@ -71,14 +71,6 @@ async function apiRequest(endpoint, options = {}) {
  * API Client interface
  */
 export const ApiClient = {
-    /**
-     * Set the base URL for API requests
-     * @param {string} url - Base URL
-     */
-    setBaseUrl(url) {
-        API_BASE_URL = url;
-    },
-
     /**
      * Get current base URL
      * @returns {string} Current base URL
@@ -205,32 +197,6 @@ export const ApiClient = {
     },
 
     /**
-     * Batch download files as zip
-     * @param {string[]} filenames - Array of filenames
-     * @returns {Promise<Blob>} Zip file blob
-     */
-    async batchDownloadFiles(filenames) {
-        const response = await apiRequest('/api/files/batch/download', {
-            method: 'POST',
-            body: JSON.stringify({ filenames })
-        });
-
-        return await response.blob();
-    },
-
-    /**
-     * Batch delete files
-     * @param {string[]} filenames - Array of filenames
-     * @returns {Promise<Object>} Delete result
-     */
-    async batchDeleteFiles(filenames) {
-        return await apiRequest('/api/files/batch/delete', {
-            method: 'POST',
-            body: JSON.stringify({ filenames })
-        });
-    },
-
-    /**
      * Open a local file
      * @param {string} filename - Filename to open
      * @returns {Promise<Object>} Open result
@@ -269,18 +235,6 @@ export const ApiClient = {
     async openContextFolder() {
         return await apiRequest('/api/folders/context/open', {
             method: 'POST'
-        });
-    },
-
-    /**
-     * Clear uploaded files
-     * @param {string[]} filePaths - Array of file paths to delete
-     * @returns {Promise<Object>} Clear result
-     */
-    async clearUploadedFiles(filePaths) {
-        return await apiRequest('/api/uploads/clear', {
-            method: 'POST',
-            body: JSON.stringify({ file_paths: filePaths })
         });
     },
 
@@ -448,14 +402,6 @@ export const ApiClient = {
     // ========================================
 
     /**
-     * Get current user settings
-     * @returns {Promise<Object>} Current settings
-     */
-    async getSettings() {
-        return await apiRequest('/api/settings');
-    },
-
-    /**
      * Save user settings to .env file
      * @param {Object} settings - Settings to save
      * @returns {Promise<Object>} Save result
@@ -519,115 +465,6 @@ export const ApiClient = {
         return await apiRequest(`/api/profiles/${encodeURIComponent(name)}`, {
             method: 'POST',
             body: JSON.stringify(profile)
-        });
-    },
-
-    async deleteProfile(name) {
-        return await apiRequest(`/api/profiles/${encodeURIComponent(name)}`, {
-            method: 'DELETE'
-        });
-    },
-
-    // ========================================
-    // TTS (Text-to-Speech) Operations
-    // ========================================
-
-    /**
-     * Generate TTS audio from an existing file
-     * @param {Object} config - TTS configuration
-     * @param {string} config.filename - File to generate audio from
-     * @param {string} config.target_language - Target language for voice selection
-     * @param {string} [config.tts_voice] - Specific voice (auto-select if empty)
-     * @param {string} [config.tts_rate] - Speech rate (default: +0%)
-     * @param {string} [config.tts_format] - Output format (opus/mp3)
-     * @param {string} [config.tts_bitrate] - Audio bitrate
-     * @returns {Promise<Object>} TTS job info
-     */
-    async generateTTS(config) {
-        return await apiRequest('/api/tts/generate', {
-            method: 'POST',
-            body: JSON.stringify(config)
-        });
-    },
-
-    /**
-     * Get TTS job status
-     * @param {string} jobId - TTS job ID
-     * @returns {Promise<Object>} Job status
-     */
-    async getTTSStatus(jobId) {
-        return await apiRequest(`/api/tts/status/${jobId}`);
-    },
-
-    /**
-     * Get available TTS voices
-     * @returns {Promise<Object>} Available voices by language
-     */
-    async getTTSVoices() {
-        return await apiRequest('/api/tts/voices');
-    },
-
-    /**
-     * Get available TTS providers and their status
-     * @returns {Promise<Object>} Providers information
-     */
-    async getTTSProviders() {
-        return await apiRequest('/api/tts/providers');
-    },
-
-    /**
-     * Get available Chatterbox voices/languages
-     * @returns {Promise<Object>} Chatterbox languages and availability
-     */
-    async getChatterboxVoices() {
-        return await apiRequest('/api/tts/voices/chatterbox');
-    },
-
-    /**
-     * Get GPU status for TTS
-     * @returns {Promise<Object>} GPU status information
-     */
-    async getTTSGPUStatus() {
-        return await apiRequest('/api/tts/gpu-status');
-    },
-
-    /**
-     * Upload a voice prompt file for voice cloning
-     * @param {File} file - Audio file to upload
-     * @returns {Promise<Object>} Upload result with path
-     */
-    async uploadTTSVoicePrompt(file) {
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const response = await fetch(`${API_BASE_URL}/api/tts/voice-prompt/upload`, {
-            method: 'POST',
-            body: formData
-        });
-
-        if (!response.ok) {
-            await handleApiError(response);
-        }
-
-        return await response.json();
-    },
-
-    /**
-     * Get list of available voice prompts
-     * @returns {Promise<Object>} Voice prompts list
-     */
-    async getTTSVoicePrompts() {
-        return await apiRequest('/api/tts/voice-prompts');
-    },
-
-    /**
-     * Delete a voice prompt file
-     * @param {string} filename - Filename to delete
-     * @returns {Promise<Object>} Delete result
-     */
-    async deleteTTSVoicePrompt(filename) {
-        return await apiRequest(`/api/tts/voice-prompt/${encodeURIComponent(filename)}`, {
-            method: 'DELETE'
         });
     },
 
