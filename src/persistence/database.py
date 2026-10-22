@@ -88,6 +88,9 @@ class Database:
                 )
             """)
 
+            if 'passages_revision' not in {row['name'] for row in cursor.execute('PRAGMA table_info(translation_jobs)')}:
+                cursor.execute('ALTER TABLE translation_jobs ADD COLUMN passages_revision INTEGER NOT NULL DEFAULT 0')
+
             # Checkpoint chunks table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS checkpoint_chunks (
@@ -313,6 +316,15 @@ class Database:
                 conn = self._get_connection()
                 cursor = conn.cursor()
 
+                previous = cursor.execute(
+                    'SELECT chunk_data FROM checkpoint_chunks WHERE translation_id = ? AND chunk_index = ?',
+                    (translation_id, chunk_index),
+                ).fetchone()
+                metadata = json.loads(previous['chunk_data'] or '{}') if previous else {}
+                metadata.update(chunk_data or {})
+                if metadata.get('passage_workflow_version') == 1:
+                    status = {'pending': 'partial', 'done': 'completed', 'failed': 'failed'}.get(metadata.get('polish_status'), status)
+
                 cursor.execute("""
                     INSERT OR REPLACE INTO checkpoint_chunks
                     (translation_id, chunk_index, original_text, translated_text,
@@ -323,13 +335,14 @@ class Database:
                     chunk_index,
                     original_text,
                     translated_text,
-                    json.dumps(chunk_data) if chunk_data else None,
+                    json.dumps(metadata) if metadata else None,
                     status
                 ))
 
+                cursor.execute('UPDATE translation_jobs SET passages_revision = passages_revision + 1, updated_at = CURRENT_TIMESTAMP WHERE translation_id = ?', (translation_id,))
                 conn.commit()
                 callback = getattr(self, 'passage_callback', None)
-                if callback and status == 'completed':
+                if callback:
                     callback(translation_id, chunk_index, original_text, translated_text)
                 return True
             except Exception as e:
@@ -362,6 +375,7 @@ class Database:
 
                 return {
                     'translation_id': row['translation_id'],
+                    'passages_revision': row['passages_revision'],
                     'status': row['status'],
                     'file_type': row['file_type'],
                     'config': json.loads(row['config']),

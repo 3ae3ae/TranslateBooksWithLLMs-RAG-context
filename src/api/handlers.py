@@ -67,6 +67,15 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
     if not state_manager.exists(translation_id):
         return
 
+    checkpoint_manager = state_manager.get_checkpoint_manager()
+    interleaved = bool(config.get('refine_after') and not config.get('refine_only') and (
+        config.get('_passage_workflow') or not checkpoint_manager.db.get_chunks(translation_id)))
+    if interleaved:
+        config['_passage_workflow'] = 1
+        checkpoint_manager.update_job_config(translation_id, config)
+
+    state_manager.update_stats(translation_id, {'interleaved': interleaved, 'current_unit': None,
+                                                  'phase': 'polishing' if config.get('refine_only') else 'translating'})
     state_manager.set_translation_field(translation_id, 'status', 'running')
     emit_update(socketio, translation_id, {'status': 'running', 'log': 'Translation task started by worker.'}, state_manager)
 
@@ -144,9 +153,20 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
         if message_key_from_translate_module in ["llm_prompt_debug", "llm_raw_response_preview"]:
             return
         
+        if isinstance(data, dict) and 'current_unit' in data:
+            _emit_progress({'current_unit': data['current_unit'], 'phase': data.get('phase', 'translating')}, {})
+        if interleaved:
+            if message_key_from_translate_module == 'novel_context_updating':
+                _emit_progress({'phase': 'notes'}, {})
+            elif message_key_from_translate_module == 'novel_context_updated':
+                _emit_progress({'phase': 'translating'}, {})
+
         if isinstance(data, dict) and data.get('type') in ('llm_request', 'refinement_request'):
             stats = state_manager.get_translation_field(translation_id, 'stats') or {}
             state_manager.update_stats(translation_id, {'requests': stats.get('requests', 0) + 1})
+            if interleaved:
+                phase = 'notes' if data.get('phase') == 'context' else 'polishing' if data['type'] == 'refinement_request' else 'translating'
+                _emit_progress({'phase': phase}, {})
         step_metadata = _ui_step_metadata(message_key_from_translate_module)
         structured_data = dict(data) if isinstance(data, dict) else {}
         if step_metadata:
@@ -221,10 +241,11 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
         state_manager.update_stats(translation_id, {**new_stats_dict, **phase_meta})
         current_stats = state_manager.get_translation_field(translation_id, 'stats') or {}
         checkpoint_job = state_manager.get_checkpoint_manager().get_job(translation_id)
-        if checkpoint_job:
-            persisted = checkpoint_job['config']
-            persisted['stats'] = current_stats
-            state_manager.get_checkpoint_manager().update_job_config(translation_id, persisted)
+        if interleaved:
+            from src.core.common.passage_workflow import passage_progress
+            total = max(current_stats.get('total_chunks', 0),
+                        (checkpoint_job or {}).get('config', {}).get('stats', {}).get('total_chunks', 0))
+            current_stats.update(passage_progress(checkpoint_manager.db.get_chunks(translation_id), total))
         current_stats['elapsed_time'] = time.time() - current_stats.get('start_time', time.time())
         # Attach the canonical progress contract alongside the legacy fields,
         # applying the monotonic floor so the global bar never moves backward.
@@ -236,6 +257,10 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
         current_stats.update(snapshot)
         current_stats['context_chunk_indices'] = _context_chunk_indices()
         state_manager.set_translation_field(translation_id, 'stats', current_stats)
+        if checkpoint_job:
+            persisted = checkpoint_job['config']
+            persisted['stats'] = current_stats
+            state_manager.get_checkpoint_manager().update_job_config(translation_id, persisted)
         emit_update(socketio, translation_id, {'stats': current_stats}, state_manager)
 
         completed = current_stats.get('completed_chunks', 0)
@@ -247,7 +272,7 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
         # Phase 1. enable_refinement advertises the two-phase bar up-front when
         # a refine-after pass will follow, so phase 1 maps to the [0, 50] band.
         _emit_progress(new_stats_dict, {
-            'enable_refinement': bool(config.get('refine_after')),
+            'enable_refinement': bool(config.get('refine_after')) and not interleaved,
             'current_phase': 1,
         })
 
@@ -257,6 +282,8 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
 
     def _refine_only_stats_callback(new_stats_dict):
         # Single-phase refine-only: the whole bar is the refinement pass.
+        rows = checkpoint_manager.db.get_chunks(translation_id)
+        new_stats_dict = {**new_stats_dict, 'failed_chunks': sum(row['status'] == 'failed' for row in rows)}
         _emit_progress(new_stats_dict, {
             'enable_refinement': False, 'refine_only': True, 'current_phase': 1,
         })
@@ -445,6 +472,7 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
             refinement_prompt_options = copy.deepcopy(
                 config.get('prompt_options', {})
             )
+            refinement_prompt_options['_polish_passages'] = True
             if is_context_resync_refinement:
                 refinement_prompt_options['_refine_after'] = True
             if is_context_resync_refinement:
@@ -562,6 +590,9 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                 # The handler owns the second phase. Disable legacy adapter-
                 # internal refinement to avoid refining EPUB/DOCX twice.
                 translation_prompt_options['refine'] = False
+                if interleaved:
+                    translation_prompt_options['_passage_workflow'] = 1
+                    translation_prompt_options['_draft_artifacts'] = {}
 
             translation_success = await translate_file(
                 input_filepath=input_path_for_translate_module,
@@ -629,16 +660,36 @@ async def perform_actual_translation(translation_id, config, state_manager, outp
                     "output was saved and the checkpoint was kept.",
                 )
 
+            if (interleaved and not should_interrupt_current_task()
+                    and (translation_success or translation_prompt_options['_draft_artifacts'].get('output') is not None)):
+                import tempfile
+                draft_bytes = translation_prompt_options['_draft_artifacts'].get('output')
+                if draft_bytes is None:
+                    raise RuntimeError('Could not reconstruct the draft-only translation')
+                with tempfile.NamedTemporaryFile(suffix=os.path.splitext(output_filepath_on_server)[1]) as draft_file:
+                    draft_file.write(draft_bytes)
+                    draft_file.flush()
+                    final_path = output_filepath_on_server
+                    if not checkpoint_manager.preserve_refinement_source(translation_id, draft_file.name, config):
+                        raise RuntimeError('Could not preserve the draft-only translation')
+                    config.update(output_filepath=final_path, output_filename=os.path.basename(final_path))
+                    persisted = checkpoint_manager.get_job(translation_id)['config']
+                    persisted.update(output_filepath=final_path, output_filename=os.path.basename(final_path))
+                    checkpoint_manager.update_job_config(translation_id, persisted)
+                if translation_success:
+                    checkpoint_manager.mark_refinement_current(translation_id)
+
             # Optional chained refinement pass on the translated output.
             should_refine_after = (
                 config.get('refine_after')
+                and not interleaved
                 and translation_success
                 and os.path.exists(output_filepath_on_server)
                 and not state_manager.get_translation_field(translation_id, 'interrupted')
                 and state_manager.get_translation_field(translation_id, 'status')
                     not in ('error', 'partial', 'rate_limited')
             )
-            if config.get('refine_after') and not should_refine_after:
+            if config.get('refine_after') and not interleaved and not should_refine_after:
                 _log_message_callback(
                     "refine_after_skipped",
                     "⚠️ Refinement pass skipped because translation did not finish cleanly.",

@@ -192,6 +192,13 @@ class CheckpointManager:
             config["refinement_stale"] = True
         if not self.update_job_config(translation_id, config):
             return None
+        if config.get('_passage_workflow'):
+            for row in self.db.get_chunks(translation_id):
+                data = row.get('chunk_data') or {}
+                if 'draft_text' in data:
+                    data['polish_status'] = 'pending'
+                    if not self.db.save_chunk(translation_id, row['chunk_index'], row['original_text'], row['translated_text'], data, status='partial'):
+                        return None
         return revision
 
     def mark_refinement_current(self, translation_id: str) -> bool:
@@ -585,7 +592,7 @@ class CheckpointManager:
             except OSError:
                 refinement_source_path = None
 
-        if job.get('config', {}).get('connection_id'):
+        if job.get('config', {}).get('connection_id') or job.get('config', {}).get('_passage_workflow'):
             return True
 
         # Delete preserved files except the immutable first-pass output.

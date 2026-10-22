@@ -179,9 +179,13 @@ def estimate_job(data, uploads_dir):
             note_prompt = 0
         instructions = chunker.count_tokens(style_content.get("translation" if task == "translate" else "refinement") or "")
         overhead = SYSTEM_PROMPT_TOKENS + USER_TEMPLATE_TOKENS + note_prompt + instructions
-        input_tokens = (main_tokens + context_tokens + passages * overhead) * passes
-        input_tokens += updates * (overhead + math.ceil(main_tokens / passages) + math.ceil(memory / 4)) + consolidations * (SYSTEM_PROMPT_TOKENS + note_prompt)
         ratio_min, ratio_max = (0.95, 1.1) if task == "polish" else get_output_ratio(file.get("source_language", data.get("source_language", defaults["source_language"])), data.get("target_language", defaults["target_language"]))
+        input_tokens = main_tokens + context_tokens + passages * overhead
+        if passes == 2:
+            draft_tokens = math.ceil(main_tokens * (ratio_min + ratio_max) / 2)
+            polish_instructions = chunker.count_tokens(style_content.get('refinement') or '')
+            input_tokens += draft_tokens + passages * (SYSTEM_PROMPT_TOKENS + USER_TEMPLATE_TOKENS + note_prompt + polish_instructions)
+        input_tokens += updates * (overhead + math.ceil(main_tokens / passages) + math.ceil(memory / 4)) + consolidations * (SYSTEM_PROMPT_TOKENS + note_prompt)
         output_min = int(main_tokens * ratio_min * passes) + (updates + consolidations) * note_prompt
         output_max = int(main_tokens * ratio_max * passes) + (updates + consolidations) * max(note_prompt, budget)
         total_output_min += output_min

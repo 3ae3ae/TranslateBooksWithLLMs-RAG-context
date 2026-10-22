@@ -392,3 +392,19 @@ def test_estimate_srt_translation_updates_notes_for_every_passage(resources, mod
     assert file["passages"] == file["notes_updates"] == 3
     assert file["consolidation_calls"] == 2
     assert file["requests"] == 8
+
+
+def test_interleaved_estimate_adds_one_polish_request_without_extra_notes(resources):
+    client, _ = resources
+    uploads = Path(config.OUTPUT_DIR) / 'uploads'
+    uploads.mkdir(parents=True)
+    path = uploads / 'chapter.txt'
+    path.write_text('A passage about Alice. ' * 100)
+    payload = dict(files=[{'file_path': str(path)}], connection_id='test', model='test-model',
+                   passage_tokens=60, notes={'mode': 'build', 'consolidation_interval': 2})
+    translated = client.post('/api/estimate', json={**payload, 'polish_after': False}).json
+    polished = client.post('/api/estimate', json={**payload, 'polish_after': True}).json
+    assert polished['requests'] - translated['requests'] == translated['passages']
+    for key in ('notes_updates', 'consolidation_calls'):
+        assert polished['per_file'][0][key] == translated['per_file'][0][key]
+    assert polished['input_tokens'] > translated['input_tokens']

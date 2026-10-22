@@ -105,6 +105,9 @@ async def translate_epub_file(
         max_attempts: Maximum translation attempts per chunk
         bilingual: Enable bilingual translation mode
     """
+    if (prompt_options or {}).get('_passage_workflow'):
+        resume_from_index = 0
+
     # Validate input file
     if not os.path.exists(input_filepath):
         err_msg = f"ERROR: Input EPUB file '{input_filepath}' not found."
@@ -202,6 +205,9 @@ async def translate_epub_file(
                     checkpoint_manager, translation_id, temp_dir,
                     resume_from_index, manifest_data['opf_dir'], log_callback
                 )
+
+            if (prompt_options or {}).get('_passage_workflow'):
+                prompt_options['_draft_artifacts'] = prompt_options.get('_draft_artifacts', {})
 
             # 3. Translate all files using orchestrator
             results = await _process_all_content_files(
@@ -305,6 +311,22 @@ async def translate_epub_file(
                 output_filepath=output_filepath,
                 log_callback=log_callback)
 
+            artifacts = (prompt_options or {}).get('_draft_artifacts')
+            if artifacts is not None and not results.get('was_interrupted'):
+                draft_docs = {
+                    _resolve_content_path(manifest_data['opf_dir'], href): etree.fromstring(content.encode('utf-8'))
+                    for href, content in artifacts.items() if href != 'output'
+                }
+                await _save_translated_files(draft_docs, log_callback)
+                _update_ncx_toc_labels_from_translated_docs(manifest_data['opf_dir'], draft_docs, log_callback)
+                _update_nav_toc_labels_from_translated_docs(manifest_data['opf_dir'], manifest_data['opf_tree'], draft_docs, log_callback)
+                apply_rtl_to_epub_directory(temp_dir, target_language, source_language)
+                apply_target_language_to_xhtml_directory(temp_dir, target_language)
+                with tempfile.NamedTemporaryFile(suffix='.epub') as draft_file:
+                    _repackage_epub(temp_dir, draft_file.name, log_callback)
+                    artifacts.clear()
+                    artifacts['output'] = Path(draft_file.name).read_bytes()
+
             # On successful (non-interrupted) save, remove any leftover [partial ...]
             # siblings from previous interrupted runs targeting this same output.
             if not results.get('was_interrupted'):
@@ -346,6 +368,7 @@ async def translate_epub_file(
             return (
                 not results.get('was_interrupted')
                 and results.get('failed_files', 0) == 0
+                and (not (prompt_options or {}).get('_passage_workflow') or results.get('failed_chunks', 0) == 0)
             )
 
         except Exception as e_epub:

@@ -202,12 +202,12 @@ async def translate_file(
     # This reuses the EPUB pipeline for rapid deployment
     if detected_type == 'docx':
         from src.core.docx.translator import translate_docx_file
-        from src.core.llm import create_llm_provider
+        from src.core.llm_client import LLMClient
 
         # Create LLM client
-        llm_client = create_llm_provider(
+        llm_client = LLMClient(
             provider_type=llm_provider,
-            endpoint=llm_api_endpoint,
+            api_endpoint=llm_api_endpoint,
             model=model_name,
             gemini_api_key=gemini_api_key,
             openai_api_key=openai_api_key,

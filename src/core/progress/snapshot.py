@@ -15,6 +15,7 @@ class Phase(str, Enum):
     enum trivially JSON-serializable and comparable to the wire string.
     """
 
+    NOTES = "notes"
     TRANSLATING = "translating"
     REFINING = "refining"
 

@@ -321,7 +321,6 @@ async def translate_paragraphs_plain(
 
     context_session = None
     checkpoint_context_data_by_index: Dict[int, Dict] = {}
-    continuation_reused_indices = set()
     continuation_context_seed = None
     if continuation_base_id and checkpoint_manager and translation_id:
         previous_checkpoint = checkpoint_manager.load_checkpoint(
@@ -337,7 +336,7 @@ async def translate_paragraphs_plain(
                 latest_context_seed,
                 seed_matching_prefix,
             )
-            prefix = seed_matching_prefix(
+            seed_matching_prefix(
                 checkpoint_manager=checkpoint_manager,
                 translation_id=translation_id,
                 previous_chunks=previous_chunks,
@@ -349,7 +348,6 @@ async def translate_paragraphs_plain(
                 log_callback=log_callback,
                 label="unit",
             )
-            continuation_reused_indices = set(range(prefix))
             continuation_context_seed = latest_context_seed(previous_chunks)
 
     if checkpoint_manager and translation_id and hasattr(checkpoint_manager, "db"):
@@ -383,7 +381,6 @@ async def translate_paragraphs_plain(
                 checkpoint_manager
                 and translation_id
                 and hasattr(checkpoint_manager, "db")
-                and global_chunk_offset > 0
             ):
                 previous_rows = [
                     row
@@ -391,7 +388,7 @@ async def translate_paragraphs_plain(
                         checkpoint_manager.db.get_chunks(translation_id) or []
                     )
                     if row.get("status") in ("completed", "partial", "failed")
-                    and row.get("chunk_index", -1) < global_chunk_offset
+                    and row.get("chunk_index", -1) < global_chunk_offset + len(chunks)
                     and (row.get("chunk_data") or {}).get("context_snapshot")
                 ]
                 if previous_rows:
@@ -454,26 +451,28 @@ async def translate_paragraphs_plain(
                 "Warning: Auto-updating novel context requires sequential translation. Forcing parallel workers to 1.",
             )
         workers = 1
+    from src.core.common.passage_workflow import PassageWorkflow, is_polished
+    workflow = PassageWorkflow(checkpoint_manager, translation_id, llm_client, model_name,
+                               target_language, prompt_options, log_callback, check_interruption_callback) if prompt_options.get('_passage_workflow') else None
+    if workflow:
+        workers = 1
     sequential = workers == 1
 
     # Index-addressed results so out-of-order completion still reassembles in
     # source order.
     translated_parts: List[Optional[str]] = [None] * len(chunks)
-    if continuation_reused_indices and checkpoint_manager and translation_id:
-        seeded_rows = {
-            row.get("chunk_index"): row
-            for row in checkpoint_manager.db.get_chunks(translation_id) or []
-        }
-        for local_index in continuation_reused_indices:
-            seeded = seeded_rows.get(global_chunk_offset + local_index) or {}
-            translated_parts[local_index] = seeded.get("translated_text")
-            if seeded.get("chunk_data"):
-                checkpoint_context_data_by_index[local_index] = dict(
-                    seeded.get("chunk_data") or {}
-                )
-        stats.processed_chunks = len(continuation_reused_indices)
-        if stats_callback:
-            stats_callback(stats.to_dict())
+    restored_indices = set()
+    if checkpoint_manager and translation_id:
+        for row in checkpoint_manager.db.get_chunks(translation_id):
+            local_index = row['chunk_index'] - global_chunk_offset
+            if not 0 <= local_index < len(chunks) or row['original_text'] != chunks[local_index]['main_content']:
+                continue
+            if (is_polished(row) if workflow else row['status'] == 'completed'):
+                translated_parts[local_index] = row['translated_text']
+                restored_indices.add(local_index)
+    stats.processed_chunks = len(restored_indices)
+    if restored_indices and stats_callback:
+        stats_callback(stats.to_dict())
     previous_translation_context = ""
     failed_indices = set()
     reused_context_data_by_index: Dict[int, Dict] = {}
@@ -481,8 +480,16 @@ async def translate_paragraphs_plain(
     async def _translate_chunk(i, analyze_context=True):
         """Translate one chunk. Reads previous_translation_context only in
         sequential mode (parallel runs have no stable previous chunk)."""
+        if workflow:
+            draft = workflow.draft(global_chunk_offset + i, chunks[i]['main_content'])
+            if draft is not None:
+                reused_context_data_by_index[i] = dict(workflow.saved(global_chunk_offset + i, chunks[i]['main_content']).get('chunk_data') or {})
+                return ('done', draft)
+            if prompt_options.get('_repolish_passages'):
+                raise ValueError('Saved passage draft is required for corrective polish')
+            workflow.action(global_chunk_offset + i, 'translating')
         if log_callback:
-            log_callback("unit_start", f"Translating unit {i+1}/{len(chunks)}")
+            log_callback("unit_start", f"Translating unit {i+1}/{len(chunks)}", data={"current_unit": global_chunk_offset + i, "phase": "translating"})
         main_content = chunks[i].get('main_content', '')
         if not main_content.strip():
             return ('empty', main_content)
@@ -492,6 +499,7 @@ async def translate_paragraphs_plain(
             and auto_update_context
             and context_session
             and should_update_novel_context_for_index(i, prompt_options)
+            and i not in checkpoint_context_data_by_index
         )
         if should_analyze_context:
             reused_context_data_by_index.pop(i, None)
@@ -540,6 +548,13 @@ async def translate_paragraphs_plain(
         elif analyze_context and auto_update_context and context_session:
             context_session.remember_source(main_content)
 
+        request_options = prompt_options
+        if workflow:
+            metadata = _chunk_metadata(i)
+            if metadata.get('context_snapshot'):
+                from src.utils.novel_context import decode_context_snapshot
+                request_options = {**prompt_options, 'novel_context': decode_context_snapshot(metadata['context_snapshot'], '')[0],
+                                   'dialogue_attribution': metadata.get('dialogue_attribution')}
         translated = await generate_translation_request(
             main_content=main_content,
             context_before=chunks[i].get('context_before', ''),
@@ -563,7 +578,7 @@ async def translate_paragraphs_plain(
             llm_client=llm_client,
             log_callback=log_callback,
             has_placeholders=False,
-            prompt_options=prompt_options,
+            prompt_options=request_options,
             context_manager=context_manager,
             placeholder_format=None,
         )
@@ -574,19 +589,30 @@ async def translate_paragraphs_plain(
             if translated_parts[j] is None:
                 translated_parts[j] = chunks[j].get('main_content', '')
 
-    def _save_chunk_checkpoint(i, chunk_succeeded):
-        if not (
-            checkpoint_manager
-            and translation_id
-            and hasattr(checkpoint_manager, 'db')
-        ):
-            return
+    def _chunk_metadata(i):
         chunk_data = dict(reused_context_data_by_index.get(i) or {})
         if not chunk_data and context_session:
             chunk_data['context_snapshot'] = context_session.snapshot()
             chunk_data['dialogue_attribution'] = (
                 context_session.dialogue_attribution
             )
+        chunk_data['chapter_index'] = chunks[i].get('chapter_index')
+        return chunk_data
+
+    async def _polish_part(i):
+        if not workflow:
+            return True
+        metadata = _chunk_metadata(i)
+        text, ok = await workflow.finish(global_chunk_offset + i, chunks[i]['main_content'],
+                                         translated_parts[i], metadata, kind='plain', context_manager=context_manager)
+        translated_parts[i] = text
+        reused_context_data_by_index[i] = metadata
+        return ok
+
+    def _save_chunk_checkpoint(i, chunk_succeeded):
+        if not (checkpoint_manager and translation_id and hasattr(checkpoint_manager, 'db')):
+            return
+        chunk_data = _chunk_metadata(i)
         if chunk_data.get('context_snapshot'):
             checkpoint_context_data_by_index[i] = dict(chunk_data)
         checkpoint_manager.db.save_chunk(
@@ -600,7 +626,7 @@ async def translate_paragraphs_plain(
 
     pending = [
         index for index in range(len(chunks))
-        if index not in continuation_reused_indices
+        if index not in restored_indices
     ]
     rate_limit_error = None
     processed = 0
@@ -653,6 +679,11 @@ async def translate_paragraphs_plain(
                         " ".join(words[-25:]) if len(words) > 25 else cleaned
                     )
 
+        if chunk_succeeded:
+            chunk_succeeded = await _polish_part(i)
+            if not chunk_succeeded:
+                failed_indices.add(i)
+                stats.failed_chunks = len(failed_indices)
         _save_chunk_checkpoint(i, chunk_succeeded)
 
         stats.record_processed()
@@ -668,7 +699,7 @@ async def translate_paragraphs_plain(
 
     # Interruption: the scheduler stopped launching new chunks; keep source text
     # for the uncommitted tail and report the interruption.
-    if processed < len(chunks) and check_interruption_callback and check_interruption_callback():
+    if check_interruption_callback and check_interruption_callback() and (processed < len(pending) or workflow):
         if log_callback:
             log_callback(
                 "plain_text_translation_interrupted",
@@ -735,9 +766,18 @@ async def translate_paragraphs_plain(
             else:
                 translated_parts[i] = main_content
 
+            if chunk_succeeded:
+                chunk_succeeded = await _polish_part(i)
+                if not chunk_succeeded:
+                    failed_indices.add(i)
+                    stats.failed_chunks = len(failed_indices)
             _save_chunk_checkpoint(i, chunk_succeeded)
             if stats_callback:
                 stats_callback(stats.to_dict())
+
+    if workflow and '_draft_artifacts' in prompt_options:
+        drafts = [workflow.draft(global_chunk_offset + i, chunk['main_content']) or chunk['main_content'] for i, chunk in enumerate(chunks)]
+        prompt_options['_draft_artifacts'][f'plain:{global_chunk_offset}'] = _reassemble(segments, drafts, source)
 
     # Any None left (shouldn't happen) falls back to empty string.
     safe_parts = [p if p is not None else "" for p in translated_parts]

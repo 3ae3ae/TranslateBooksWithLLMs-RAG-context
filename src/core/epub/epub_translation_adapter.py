@@ -377,6 +377,18 @@ class EpubTranslationAdapter(TranslationAdapter[etree._Element, bool]):
             # we leave the body untouched so the partial output keeps the source text.
             return False, stats
 
+        artifacts = (prompt_options or {}).get('_draft_artifacts')
+        if artifacts is not None and f'plain:{global_chunk_offset}' in artifacts:
+            import copy
+            draft_root = copy.deepcopy(doc_root)
+            draft_body = draft_root.find('.//{http://www.w3.org/1999/xhtml}body')
+            if draft_body is None:
+                draft_body = draft_root.find('.//body')
+            replace_body_with_paragraphs(draft_body, artifacts.pop(f'plain:{global_chunk_offset}'),
+                                         paragraphs_tag, images_by_paragraph, bilingual=bilingual_flag,
+                                         source_paragraphs=paragraphs_text if bilingual_flag else None)
+            artifacts[file_href] = etree.tostring(draft_root, encoding='unicode')
+
         replace_body_with_paragraphs(
             body_element=body,
             translated_paragraphs=translated,

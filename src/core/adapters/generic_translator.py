@@ -144,6 +144,9 @@ class GenericTranslator:
                     'failed_chunks': 0
                 })
 
+            from src.core.common.passage_workflow import PassageWorkflow, is_polished
+            interleaved = bool((llm_kwargs.get("prompt_options") or {}).get("_passage_workflow"))
+
             # 3. Check for checkpoint and resume
             restored_completed = set()
             checkpoint_data = self.checkpoint_manager.load_checkpoint(self.translation_id)
@@ -182,7 +185,7 @@ class GenericTranslator:
                 # resuming from it alone would skip them forever (issue #204).
                 restored_completed = {
                     c['chunk_index'] for c in checkpoint_data.get('chunks', [])
-                    if c.get('status') == 'completed'
+                    if (is_polished(c) if interleaved else c.get('status') == 'completed')
                     and 0 <= c.get('chunk_index', -1) < total_units
                 }
                 if log_callback:
@@ -389,6 +392,11 @@ class GenericTranslator:
                         log_callback("novel_context_workers_override", "Warning: Auto-updating novel context requires sequential translation. Forcing parallel workers to 1.")
                 parallel_workers = 1
 
+            if interleaved:
+                parallel_workers = 1
+            workflow = PassageWorkflow(self.checkpoint_manager, self.translation_id, llm_client, model_name,
+                                       target_language, prompt_options, log_callback, check_interruption_callback) if interleaved else None
+
             workers = resolve_parallel_workers(llm_provider, parallel_workers)
             sequential = workers == 1
             max_validation_attempts = 1 + max(0, self.adapter.config.get('unit_validation_retries') if self.adapter.config.get('unit_validation_retries') is not None else UNIT_VALIDATION_RETRIES)
@@ -396,6 +404,7 @@ class GenericTranslator:
             last_context = ""
             failed_count = 0
             completed_count = len(restored_completed)
+            counted_indices = set(restored_completed)
             failed_indices = set()
             reused_context_data_by_index = {}
 
@@ -408,9 +417,19 @@ class GenericTranslator:
                 to max_validation_attempts; after exhaustion the best-effort
                 content is returned wrapped in _ValidationFailed."""
                 unit = units[i]
+                if workflow:
+                    draft = workflow.draft(i, unit.content)
+                    if draft is not None:
+                        unit.metadata.update(workflow.saved(i, unit.content).get('chunk_data') or {})
+                        reused_context_data_by_index[i] = dict(unit.metadata)
+                        text, _ = await workflow.finish(i, unit.content, draft, unit.metadata, kind=self.adapter.format_name)
+                        return text
+                    if prompt_options.get('_repolish_passages'):
+                        raise ValueError('Saved passage draft is required for corrective polish')
+                    workflow.action(i, 'translating')
                 if log_callback:
                     log_callback("unit_start",
-                        f"Translating unit {i+1}/{total_units} ({unit.unit_id})")
+                        f"Translating unit {i+1}/{total_units} ({unit.unit_id})", data={"current_unit": i, "phase": "translating"})
 
                 base_instructions = (prompt_options or {}).get('custom_instructions', '')
                 attempt_options = prompt_options
@@ -503,6 +522,12 @@ class GenericTranslator:
                     except Exception:
                         pass
 
+                if workflow and unit.metadata.get('context_snapshot'):
+                    from src.utils.novel_context import decode_context_snapshot
+                    attempt_options = {**attempt_options,
+                        'novel_context': decode_context_snapshot(unit.metadata['context_snapshot'], '')[0],
+                        'dialogue_attribution': unit.metadata.get('dialogue_attribution')}
+
                 for attempt in range(max_validation_attempts):
                     same_previous_chapter = (
                         i > 0
@@ -541,6 +566,10 @@ class GenericTranslator:
                         unit.unit_id, result
                     )
                     if feedback is None:
+                        if workflow:
+                            _commit_context(i, unit)
+                            text, _ = await workflow.finish(i, unit.content, result, unit.metadata, kind=self.adapter.format_name)
+                            return text
                         return result
 
                     if log_callback:
@@ -600,7 +629,7 @@ class GenericTranslator:
                     translation_id=self.translation_id,
                     chunk_index=i,
                     original_text=unit.content,
-                    translated_text=None,
+                    translated_text=unit.metadata.get("draft_text"),
                     chunk_data=unit.metadata,
                     total_chunks=total_units,
                     failed_chunks=failed_count
@@ -613,12 +642,14 @@ class GenericTranslator:
                     })
 
             def _commit_context(i, unit):
+                if workflow and unit.metadata and 'draft_text' in unit.metadata:
+                    return
                 if not context_session:
                     return
                 if unit.metadata is None:
                     unit.metadata = {}
                 if i in reused_context_data_by_index:
-                    unit.metadata.update(reused_context_data_by_index[i])
+                    unit.metadata.update({key: value for key, value in reused_context_data_by_index[i].items() if key in ('context_snapshot', 'dialogue_attribution')})
                     return
                 unit.metadata['dialogue_attribution'] = (
                     context_session.dialogue_attribution
@@ -682,7 +713,11 @@ class GenericTranslator:
                         next_index = i + 1
                         continue
 
-                    completed_count += 1
+                    counted_indices.add(i)
+                    completed_count = len(counted_indices)
+                    if workflow and unit.metadata.get('polish_status') != 'done':
+                        failed_indices.add(i)
+                        failed_count = len(failed_indices)
                     _commit_context(i, unit)
 
                     self.checkpoint_manager.save_checkpoint(
@@ -702,11 +737,7 @@ class GenericTranslator:
                         })
 
                     if sequential:
-                        last_context = (
-                            translated_content[-200:]
-                            if len(translated_content) > 200
-                            else translated_content
-                        )
+                        last_context = unit.metadata.get('draft_text', translated_content)[-200:]
 
                     if log_callback:
                         log_callback("unit_complete",
@@ -722,8 +753,8 @@ class GenericTranslator:
 
             # If the scheduler stopped early because interruption was requested,
             # the committed units are persisted; save partial output and pause.
-            if (remaining > 0
-                    and check_interruption_callback and check_interruption_callback()):
+            if (check_interruption_callback and check_interruption_callback()
+                    and (remaining > 0 or workflow)):
                 await _save_partial_and_pause(next_index)
                 return False
 
@@ -778,9 +809,11 @@ class GenericTranslator:
                         continue
 
                     _commit_context(i, unit)
-                    failed_indices.discard(i)
+                    if not workflow or unit.metadata.get('polish_status') == 'done':
+                        failed_indices.discard(i)
                     failed_count = len(failed_indices)
-                    completed_count += 1
+                    counted_indices.add(i)
+                    completed_count = len(counted_indices)
                     self.checkpoint_manager.save_checkpoint(
                         translation_id=self.translation_id,
                         chunk_index=i,
@@ -813,6 +846,14 @@ class GenericTranslator:
                 # Save final file
                 with open(self.adapter.output_file_path, 'wb') as f:
                     f.write(output_bytes)
+
+                if workflow and '_draft_artifacts' in prompt_options:
+                    import copy
+                    draft_adapter = copy.deepcopy(self.adapter)
+                    rows = self.checkpoint_manager.db.get_chunks(self.translation_id)
+                    draft_rows = [{**row, 'status': 'completed', 'translated_text': (row.get('chunk_data') or {}).get('draft_text', row.get('translated_text'))} for row in rows]
+                    await draft_adapter.resume_from_checkpoint({'chunks': draft_rows})
+                    prompt_options['_draft_artifacts']['output'] = await draft_adapter.reconstruct_output(bilingual=bilingual_output)
 
                 if log_callback:
                     log_callback("reconstruct_complete",

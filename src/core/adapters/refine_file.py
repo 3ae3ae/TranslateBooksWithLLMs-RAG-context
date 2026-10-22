@@ -91,6 +91,27 @@ async def refine_file(
             if log_callback:
                 log_callback("novel_context_error", f"Error loading novel context '{novel_context_file}': {str(e)}")
 
+    job_config = (checkpoint_manager.get_job(translation_id) or {}).get('config', {}) if checkpoint_manager and translation_id else {}
+    if prompt_options.get('_refine_after') and job_config.get('_passage_workflow'):
+        from .translate_file import translate_file
+        source = job_config.get('_resync_original_preserved_input_path') or job_config.get('_resync_original_file_path')
+        if not source or not os.path.isfile(source):
+            raise ValueError('Original source is required to rebuild passage formatting')
+        options = {**prompt_options, '_passage_workflow': 1, '_repolish_passages': True,
+                   '_refinement_lore': prompt_options.get('novel_context', ''), 'refine': False,
+                   'auto_update_context': False, '_draft_artifacts': {}}
+        return await translate_file(
+            source, output_filepath, job_config.get('source_language', ''), target_language, model_name,
+            llm_provider, checkpoint_manager, translation_id, log_callback=log_callback,
+            stats_callback=stats_callback, check_interruption_callback=check_interruption_callback,
+            llm_api_endpoint=llm_api_endpoint, gemini_api_key=gemini_api_key, openai_api_key=openai_api_key,
+            openrouter_api_key=openrouter_api_key, mistral_api_key=mistral_api_key, deepseek_api_key=deepseek_api_key,
+            poe_api_key=poe_api_key, nim_api_key=nim_api_key, context_window=context_window,
+            auto_adjust_context=auto_adjust_context, max_tokens_per_chunk=max_tokens_per_chunk,
+            prompt_options=options, connection=connection, bilingual_output=bilingual_output, parallel_workers=1,
+            **additional_config,
+        )
+
     if max_tokens_per_chunk is None:
         from src.config import MAX_TOKENS_PER_CHUNK as _DEFAULT_MAX_TOKENS
         max_tokens_per_chunk = _DEFAULT_MAX_TOKENS

@@ -19,7 +19,7 @@ def matching_prefix_length(
     by_index = {
         chunk.get("chunk_index"): chunk
         for chunk in previous_chunks or []
-        if chunk.get("status") == "completed"
+        if (chunk.get("status") == "completed" or "draft_text" in (chunk.get("chunk_data") or {}))
         and chunk.get("translated_text") is not None
         and isinstance(chunk.get("chunk_index"), int)
     }
@@ -73,7 +73,7 @@ def seed_matching_prefix(
     log_callback: Optional[Callable[[str, str], None]] = None,
     label: str = "unit",
 ) -> int:
-    """Copy matching completed checkpoint rows into a new continuation job."""
+    """Copy matching deliverables and pending drafts into a continuation job."""
     if not (
         checkpoint_manager
         and translation_id
@@ -93,7 +93,7 @@ def seed_matching_prefix(
     previous_by_index = {
         chunk.get("chunk_index"): chunk
         for chunk in previous_chunks or []
-        if chunk.get("status") == "completed"
+        if (chunk.get("status") == "completed" or "draft_text" in (chunk.get("chunk_data") or {}))
         and chunk.get("translated_text") is not None
         and isinstance(chunk.get("chunk_index"), int)
     }
@@ -119,7 +119,7 @@ def seed_matching_prefix(
             original_text=new_source_units[local_index],
             translated_text=previous.get("translated_text"),
             chunk_data=dict(previous.get("chunk_data") or {}),
-            status="completed",
+            status=previous.get("status", "completed"),
         )
 
     checkpoint_manager.db.update_job_progress(

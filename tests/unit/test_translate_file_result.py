@@ -42,7 +42,7 @@ async def test_translation_forwards_nim_key(monkeypatch, tmp_path, extension):
     translate = AsyncMock(return_value=True)
     factory = Mock()
     if extension == "docx":
-        monkeypatch.setattr("src.core.llm.create_llm_provider", factory)
+        monkeypatch.setattr("src.core.llm_client.LLMClient", factory)
         monkeypatch.setattr("src.core.docx.translator.translate_docx_file", AsyncMock(return_value={"success": True}))
     else:
         monkeypatch.setattr(GenericTranslator, "translate", translate)

@@ -112,7 +112,7 @@ async def refine_srt_file(
         log_callback("srt_refine_start",
                      f"✨ Refining {len(subtitles)} subtitles in {target_language}...")
 
-    if stats_callback:
+    if stats_callback and not (prompt_options or {}).get('_polish_passages'):
         stats_callback({
             'total_chunks': len(subtitles),
             'completed_chunks': 0,
@@ -165,6 +165,9 @@ async def refine_srt_file(
                 f"Reusing {len(refine_blocks)} subtitle blocks for exact refinement/context alignment.",
             )
         
+    if stats_callback and (prompt_options or {}).get('_polish_passages'):
+        stats_callback({'total_chunks': len(refine_blocks), 'completed_chunks': 0, 'failed_chunks': 0})
+
     from src.utils.novel_context import (
         RefinementContextTracker,
         map_dialogue_attributions_for_refinement,
@@ -218,7 +221,9 @@ async def refine_srt_file(
                 refined.update(result)
                 completed += len(result)
                 if stats_callback:
-                    stats_callback({'total_chunks': len(subtitles), 'completed_chunks': completed, 'failed_chunks': 0})
+                    passage_progress = bool((prompt_options or {}).get('_polish_passages'))
+                    stats_callback({'total_chunks': len(refine_blocks) if passage_progress else len(subtitles),
+                                    'completed_chunks': index + 1 if passage_progress else completed, 'failed_chunks': 0})
         else:
             refined = await refine_subtitle_translations(
                 translations=translations,

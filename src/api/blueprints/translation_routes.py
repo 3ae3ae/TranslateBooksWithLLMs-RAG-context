@@ -784,7 +784,7 @@ def create_translation_blueprint(state_manager, start_translation_job, output_di
                 checkpoint_data.get("job", {}).get("config", {}).get(
                     "refine_after"
                 )
-                and current_phase == 2
+                and (current_phase == 2 or checkpoint_data.get("job", {}).get("config", {}).get("_passage_workflow"))
             ):
                 post_resync_callback = start_corrective_refinement
                 post_resync_message = (

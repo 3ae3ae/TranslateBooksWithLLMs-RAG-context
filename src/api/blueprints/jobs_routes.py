@@ -50,7 +50,11 @@ def job_summary(runner, job):
     notes_rebuild = config.get('_context_resync')
     rebuild_indices = [row['chunk_index'] for row in runner.db.get_chunks(tid)] if notes_rebuild else []
     phase = 'context' if config.get('_pending_operation') == 'notes_rebuild' else stats.get('phase', stats.get('current_phase', 'translation'))
+    if phase in (1, 2):
+        phase = 'polishing' if phase == 2 or config.get('refine_only') else 'translating'
     return {
+        'passages_revision': job.get('passages_revision', 0),
+        'current_unit': stats.get('current_unit') if status == 'running' else None,
         'id': tid, 'title': Path(config.get('input_filename') or 'Translation').stem,
         'input_filename': config.get('input_filename'), 'file_type': job['file_type'],
         'task': config.get('task', 'polish' if config.get('refine_only') else 'translate'),
@@ -206,6 +210,7 @@ def build_configs(body, state_manager, output_dir):
             'connection': sanitize_config_secrets(connection), 'reasoning': reasoning,
             'task': task, 'polish_after': data.get('polish_after', False),
             'refine_only': task == 'polish', 'refine_after': task == 'translate' and data.get('polish_after', False),
+            '_passage_workflow': 1 if task == 'translate' and data.get('polish_after', False) else None,
             'file_path': str(path), 'input_filename': name, 'file_type': file_type,
             'source_language': source, 'target_language': data['target_language'], 'output_filename': output,
             'output_filename_pattern': pattern, 'notes': file_notes, 'notes_file': None,
@@ -405,8 +410,11 @@ def create_jobs_blueprint(state_manager, output_dir, socketio=None):
 
     @bp.route('/api/jobs/<tid>/passages')
     def passages(tid):
-        if not get_job(tid):
+        job = get_job(tid)
+        if not job:
             return jsonify(error='Job not found'), 404
+        polishes = bool(job['config'].get('refine_after') or job['config'].get('refine_only'))
+        from src.core.common.passage_workflow import passage_stage
         offset = max(0, int(request.args.get('offset', 0)))
         limit = max(1, min(500, int(request.args.get('limit', 50))))
         query = request.args.get('q', '').casefold()
@@ -417,7 +425,9 @@ def create_jobs_blueprint(state_manager, output_dir, socketio=None):
             source = placeholders.remove_all(row['original_text'] or '')
             translation = placeholders.remove_all(row['translated_text'] or '')
             if not query or query in source.casefold() or query in translation.casefold():
-                items.append({'index': row['chunk_index'], 'source': source, 'translation': translation, 'status': row['status']})
+                draft = placeholders.remove_all((row.get('chunk_data') or {}).get('draft_text', row['original_text'] if job['config'].get('refine_only') else row['translated_text']) or '') if polishes else None
+                items.append({'index': row['chunk_index'], 'source': source, 'translation': translation,
+                              'draft': draft, 'stage': passage_stage(row, polishes), 'status': row['status']})
         return jsonify(total=len(items), items=items[offset:offset + limit])
 
     @bp.route('/api/jobs/<tid>/log')
