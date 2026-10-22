@@ -28,56 +28,6 @@ CHUNK_REDUCTION_FACTOR = 0.6  # Reduce to 60% of original size each attempt
 MIN_CHUNK_CHARACTERS = 200  # Minimum chunk size to attempt translation
 
 
-def _build_chunk_glossary_block(
-    chunk_content: str,
-    prompt_options: Optional[dict],
-    log_callback=None,
-    runtime_state: Optional[dict] = None,
-) -> str:
-    """
-    Filter the active glossary against the current chunk and render a prompt block.
-
-    Reads `glossary_terms` (dict source -> target) and optional `glossary_config`
-    (GlossaryConfig) from prompt_options. Returns "" when no glossary is active
-    or no terms match this chunk.
-
-    When the per-chunk cap is hit and `warn_on_cap` is enabled, logs a single
-    warning per job. The dedupe flag lives in `runtime_state` (a transient dict
-    owned by the caller) so it never leaks into the persisted prompt_options
-    snapshot. If runtime_state is None, a fresh local dict is used (warning
-    won't be deduped across calls — fine for ad-hoc uses).
-    """
-    if not prompt_options:
-        return ""
-    terms = prompt_options.get("glossary_terms")
-    if not terms:
-        return ""
-    try:
-        from src.core.glossary import filter_glossary, build_glossary_block, GlossaryConfig
-    except ImportError:
-        return ""
-    config = prompt_options.get("glossary_config") or GlossaryConfig()
-    filtered, capped = filter_glossary(chunk_content, terms, config)
-
-    if runtime_state is None:
-        runtime_state = {}
-
-    if capped and config.warn_on_cap and not runtime_state.get("glossary_cap_warned"):
-        runtime_state["glossary_cap_warned"] = True
-        if log_callback:
-            log_callback(
-                "glossary_capped",
-                f"⚠️ Glossary cap reached: more than {config.max_entries} terms matched in a single chunk. "
-                f"Excess entries are dropped — increase `max_entries` if you need full coverage."
-            )
-
-    if not filtered:
-        return ""
-
-    metadata = prompt_options.get("glossary_term_metadata") or None
-    return build_glossary_block(filtered, term_metadata=metadata)
-
-
 def split_chunk_for_retry(main_content: str, target_ratio: float = 0.5) -> Tuple[str, str]:
     """
     Split a chunk into two parts for retry after context overflow.
@@ -149,7 +99,6 @@ async def _make_llm_request_with_adaptive_context(
     prompt_options: dict = None,
     context_manager: AdaptiveContextManager = None,
     placeholder_format: Optional[Tuple[str, str]] = None,
-    runtime_state: Optional[dict] = None,
 ) -> Tuple[Optional[str], str, Optional[LLMResponse]]:
     """
     Make LLM request with adaptive context sizing.
@@ -184,12 +133,6 @@ async def _make_llm_request_with_adaptive_context(
 
     while current_content.strip():
         try:
-            # Build the per-chunk glossary block (empty if no glossary configured)
-            glossary_block = _build_chunk_glossary_block(
-                current_content, prompt_options, log_callback=log_callback,
-                runtime_state=runtime_state,
-            )
-
             # Generate prompts
             prompt_pair = generate_translation_prompt(
                 current_content,
@@ -201,7 +144,6 @@ async def _make_llm_request_with_adaptive_context(
                 has_placeholders=has_placeholders,
                 prompt_options=prompt_options,
                 placeholder_format=placeholder_format,
-                glossary_block=glossary_block,
             )
 
             # Log the request
@@ -485,7 +427,6 @@ async def _make_refinement_request(
     has_placeholders: bool,
     prompt_options: dict = None,
     context_manager: AdaptiveContextManager = None,
-    runtime_state: Optional[dict] = None,
     **kwargs
 ) -> Tuple[Optional[str], Optional[LLMResponse]]:
     """
@@ -512,13 +453,6 @@ async def _make_refinement_request(
     """
     # Extract refinement instructions from prompt_options
     refinement_instructions = prompt_options.get('refinement_instructions', '') if prompt_options else ''
-
-    # Filter the glossary against the DRAFT (target language) — terms that survived
-    # the first pass are the ones we want to keep stable through refinement.
-    glossary_block = _build_chunk_glossary_block(
-        draft_translation, prompt_options, log_callback=log_callback,
-        runtime_state=runtime_state,
-    )
 
     # Inject historical/full context if provided.
     dynamic_context = kwargs.get('dynamic_context')
@@ -549,7 +483,6 @@ async def _make_refinement_request(
         has_placeholders=False,
         prompt_options=local_prompt_options,
         additional_instructions=refinement_instructions,
-        glossary_block=glossary_block,
     )
 
     client = llm_client or default_client
@@ -721,8 +654,6 @@ async def refine_chunks(
     total_chunks = len(translated_chunks)
     refined_parts = []
     last_refined_context = ""
-    # Transient per-job state (e.g. glossary cap warning dedupe) — never persisted.
-    runtime_state: dict = {}
 
     # Single-phase refinement tracker (the workflow phase, when this runs as the
     # second pass of a translate→refine job, is tagged at the handler seam).
@@ -951,7 +882,6 @@ async def refine_chunks(
                     has_placeholders=False,
                     prompt_options=local_prompt_options,
                     context_manager=context_manager,
-                    runtime_state=runtime_state,
                     context_content=context_content,
                 )
             except RateLimitError as e:

@@ -113,7 +113,7 @@ def test_novel_context_keeps_system_prompt_cacheable():
     assert "Eric: Female." in second.user
 
 
-def test_hard_glossary_has_priority_over_novel_context_hints():
+def test_story_notes_terms_are_injected_without_user_glossary():
     prompt_pair = generate_translation_prompt(
         main_content="The lieutenant colonel entered.",
         context_before="",
@@ -128,20 +128,13 @@ def test_hard_glossary_has_priority_over_novel_context_hints():
                 "- lieutenant colonel: colonel"
             )
         },
-        glossary_block=(
-            "# GLOSSARY - REQUIRED TRANSLATIONS\n\n"
-            "MANDATORY: use these EXACT translations whenever the source term appears.\n"
-            "  - lieutenant colonel -> trung tá\n"
-        ),
+
     )
 
     assert "# NOVEL CONTEXT (CHARACTERS, RELATIONSHIPS & GLOSSARY)" in prompt_pair.user
-    assert "# GLOSSARY - REQUIRED TRANSLATIONS" in prompt_pair.user
-    assert "required glossary wins" in prompt_pair.user
-    assert prompt_pair.user.index(
-        "# NOVEL CONTEXT (CHARACTERS, RELATIONSHIPS & GLOSSARY)"
-    ) < prompt_pair.user.index("# GLOSSARY - REQUIRED TRANSLATIONS")
-    assert "# GLOSSARY - REQUIRED TRANSLATIONS" not in prompt_pair.system
+    assert "lieutenant colonel: colonel" in prompt_pair.user
+    assert "# GLOSSARY - REQUIRED TRANSLATIONS" not in prompt_pair.user
+    assert "required glossary wins" not in prompt_pair.user
 
 
 def test_prompt_context_selector_prefers_relevant_dormant_relationships():

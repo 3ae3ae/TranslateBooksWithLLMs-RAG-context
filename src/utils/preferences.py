@@ -36,7 +36,6 @@ SCHEMA = {
     "notes_source_memory_chars": _field("integer", 6000, min=0, max=1000000),
     "notes_consolidation_interval": _field("integer", 5, min=0, max=10000),
     "notes_accept_gender_corrections": _field("boolean", True),
-    "glossary_id": _field("integer", None, min=1),
     "style": _field("string", ""),
     "simplify_formatting": _field("boolean", False),
     "bilingual": _field("boolean", False),

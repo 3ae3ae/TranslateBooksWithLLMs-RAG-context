@@ -142,12 +142,6 @@ def build_configs(body, state_manager, output_dir):
         raise ValueError('notes.source is required for copy')
     tokens = _integer(data.get('passage_tokens', 450), 'passage_tokens', 50)
     lines = _integer(data.get('srt_lines_per_block', 10), 'srt_lines_per_block', maximum=10000)
-    glossary = None
-    if data.get('glossary_id') is not None:
-        glossary_id = _integer(data['glossary_id'], 'glossary_id')
-        glossary = state_manager.get_glossary_store().get_glossary(glossary_id)
-        if glossary is None:
-            raise ValueError('Glossary not found')
     style = data.get('style')
     style_text = None
     if style:
@@ -208,8 +202,6 @@ def build_configs(body, state_manager, output_dir):
                 prompt['custom_instructions'] = style_text['translation']
             if style_text.get('refinement'):
                 prompt['refinement_instructions'] = style_text['refinement']
-        if glossary:
-            prompt.update(glossary_id=glossary.id, glossary_terms=glossary.terms_dict, glossary_name=glossary.name)
         config = {
             **sanitize_config_secrets(connection),
             'connection': sanitize_config_secrets(connection), 'reasoning': reasoning,
@@ -218,8 +210,8 @@ def build_configs(body, state_manager, output_dir):
             'file_path': str(path), 'input_filename': name, 'file_type': file_type,
             'source_language': source, 'target_language': data['target_language'], 'output_filename': output,
             'output_filename_pattern': pattern, 'notes': file_notes, 'notes_file': None,
-            'series_id': series_id if file_notes['mode'] != 'off' else None, 'glossary_id': data.get('glossary_id'),
-            'glossary_snapshot': glossary.terms_dict if glossary else {}, 'style': style, 'style_text': style_text,
+            'series_id': series_id if file_notes['mode'] != 'off' else None,
+            'style': style, 'style_text': style_text,
             'prompt_options': prompt, 'max_tokens_per_chunk': tokens, 'passage_tokens': tokens,
             'srt_lines_per_block': lines, 'soft_limit_ratio': SOFT_LIMIT_RATIO,
             'unit_validation_retries': UNIT_VALIDATION_RETRIES,

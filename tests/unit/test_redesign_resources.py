@@ -218,7 +218,6 @@ def test_compare_snapshots_resources_and_changes_revision(resources, monkeypatch
     path = uploads / "book.txt"
     path.write_text("This is sample source.")
     monkeypatch.setattr(sample, "_load_source_units", lambda *a, **kw: [{"main_content": "First."}, {"main_content": "Middle."}, {"main_content": "Last."}])
-    monkeypatch.setattr(sample, "_load_column_glossary", lambda gid: {"terms_dict": {"Alice": "앨리스"}, "target_language": "Korean", "term_metadata": {}} if gid else None)
     styles.save_style("noir", {"translation": "First style"}, create=True)
     notes.create_notes("book.txt")
     payload = dict(file_path=str(path), file_type="txt", source_language="English", target_language="Korean", mode="refine", defer_dispatch=True, notes="book.txt", glossary_id=1, columns=[{"connection_id": "test", "model": "test-model", "reasoning": "off", "style": "noir"}])
@@ -329,37 +328,6 @@ def test_notification_test_route_is_removed(resources):
     assert app.test_client().post("/api/notifications/test").status_code == 404
 
 
-@pytest.fixture
-def glossary_client(resources, tmp_path):
-    from src.api.blueprints.glossary_routes import create_glossary_blueprint
-    from src.core.glossary.store import GlossaryStore
-    store = GlossaryStore(db_path=str(tmp_path / "glossaries.db"))
-    app = Flask("glossary")
-    app.register_blueprint(create_glossary_blueprint(store))
-    try:
-        yield app.test_client(), store
-    finally:
-        store.close_all()
-
-
-def test_glossary_import_merges_by_default_and_replaces_explicitly(glossary_client):
-    from src.core.glossary.models import GlossaryTerm
-    client, store = glossary_client
-    glossary = store.create_glossary(name="book", source_language="English", target_language="Korean")
-    store.add_term(glossary.id, GlossaryTerm(source_term="Alice", translated_term="앨리스"))
-    url = f"/api/glossaries/{glossary.id}/import"
-    result = client.post(url, json={"terms": [{"source": "Bob", "target": "밥"}, {"source": "Alice", "target": "existing wins"}]})
-    assert result.status_code == 200 and result.get_json()["imported"] == 1
-    assert store.get_glossary(glossary.id).terms_dict == {"Alice": "앨리스", "Bob": "밥"}
-    assert client.post(url + "?mode=replace", json={"terms": [{"source": "Bob", "target": "new"}]}).status_code == 200
-    assert store.get_glossary(glossary.id).terms_dict == {"Bob": "new"}
-    assert client.post(url, json={"mode": "invalid", "terms": []}).status_code == 400
-    summary = client.get("/api/glossaries").get_json()
-    assert set(summary) == {"glossaries", "count"}
-    assert set(summary["glossaries"][0]) == {"id", "name", "source_lang", "target_lang", "created_at", "updated_at", "term_count"}
-    assert summary["glossaries"][0]["term_count"] == 1
-
-
 def test_folder_routes_use_runtime_paths(resources, monkeypatch):
     from src.api.blueprints.file_routes import create_file_blueprint
     from src.api.services import FileService
@@ -377,39 +345,3 @@ def test_folder_routes_use_runtime_paths(resources, monkeypatch):
         assert client.post(f"/api/folders/{folder}/open").status_code == 200
     assert opened == [Path(config.OUTPUT_DIR), config.NOVEL_CONTEXTS_DIR, config.CUSTOM_INSTRUCTIONS_DIR]
     assert client.post("/api/folders/unknown/open").status_code == 404
-
-
-@pytest.mark.parametrize("multipart", [False, True])
-def test_glossary_suggest_existing_upload_with_connection(resources, glossary_client, monkeypatch, multipart):
-    from src.api.blueprints import glossary_routes
-    from src.core.llm import factory
-    client, store = glossary_client
-    glossary = store.create_glossary(name="book", source_language="English", target_language="Korean")
-    uploads = Path(config.OUTPUT_DIR) / "uploads"
-    uploads.mkdir(parents=True)
-    path = uploads / "book.txt"
-    path.write_text("Alice is an explorer. " * 100)
-    provider = Mock()
-
-    async def close():
-        pass
-
-    async def suggest(**kwargs):
-        assert kwargs["text"].startswith("Alice")
-        return [{"source": "Alice", "target": "앨리스", "category": "character"}], []
-
-    provider.close = close
-    create = Mock(return_value=provider)
-    monkeypatch.setattr(factory, "create_llm_provider", create)
-    monkeypatch.setattr(glossary_routes, "ner_suggest_terms", suggest)
-    payload = dict(file_path=str(path), connection_id="test", model="test-model", reasoning="low")
-    kwargs = {"data": payload, "content_type": "multipart/form-data"} if multipart else {"json": payload}
-    response = client.post(f"/api/glossaries/{glossary.id}/suggest-terms", **kwargs)
-    assert response.status_code == 200
-    value = response.get_json()
-    assert value["candidates"] == [{"source": "Alice", "target": "앨리스", "category": "character", "already_in_glossary": False}]
-    assert value["sample_source"] == "uploaded_file" and value["sample_filename"] == "book.txt"
-    assert create.call_args.kwargs["connection"]["reasoning_effort"] == "low"
-    payload["file_path"] = str(uploads / ".." / ".." / "outside.txt")
-    kwargs = {"data": payload, "content_type": "multipart/form-data"} if multipart else {"json": payload}
-    assert client.post(f"/api/glossaries/{glossary.id}/suggest-terms", **kwargs).status_code == 403
