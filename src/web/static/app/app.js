@@ -3,7 +3,7 @@ import { Icon, IconButton, Button } from './ui/core.js';
 import { ConfirmHost, ToastHost } from './ui/overlays.js';
 import { route, navigate } from './lib/router.js';
 import { t, locale, loadLocale } from './lib/i18n.js';
-import { themePref, setTheme, defaultConnection, connectionsLoaded, jobGroups, preferences } from './lib/stores.js';
+import { themePref, setTheme, defaultConnection, connectionsLoaded, jobGroups, preferences, loadModels, modelsByConnection } from './lib/stores.js';
 import { TranslationsPage } from './pages/translations.js';
 import { NewTranslationPage } from './pages/new.js';
 import { JobPage } from './pages/job.js';
@@ -40,13 +40,16 @@ const NAV = [
 function ModelStatus() {
   const conn = defaultConnection.value;
   const prefs = preferences.value;
+  // Fetching the model list doubles as a reachability check for the dot.
+  useEffect(() => { if (conn) loadModels(conn.id); }, [conn && conn.id]);
   if (!connectionsLoaded.value) return null;
   const model = (prefs && prefs.default_model) || (conn && conn.default_model);
+  const unreachable = conn && modelsByConnection.value[conn.id] && modelsByConnection.value[conn.id].error;
   let dot = 'ok';
   if (!conn || !model) dot = 'warn';
-  else if (conn.status && conn.status.ok === false) dot = 'err';
+  else if (unreachable) dot = 'err';
   const label = conn && model ? model : t('shell.no_model');
-  const sub = conn ? conn.name : t('shell.set_up_model');
+  const sub = !conn ? t('shell.set_up_model') : unreachable ? t('shell.unreachable', { name: conn.name }) : conn.name;
   return html`<a class="model-status" href="#/settings/connections" title=${t('shell.model_status_title')}>
     <span class=${`status-dot status-dot--${dot}`} />
     <span class="stack grow" style="--gap:0">

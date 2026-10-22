@@ -1,5 +1,6 @@
 import { html, useEffect, useMemo } from './html.js';
 import { Combobox, Segmented } from './forms.js';
+import { Button, Callout } from './core.js';
 import { connections, loadModels, modelsByConnection, typeInfo } from '../lib/stores.js';
 import { t } from '../lib/i18n.js';
 import { formatCost } from '../lib/format.js';
@@ -44,8 +45,10 @@ export function ModelPicker({ value, onChange, id, disabled, onlyConnection }) {
 
   const current = value && value.model ? key(value.connectionId, value.model) : null;
   const fallbackConn = (value && value.connectionId) || (conns[0] && conns[0].id);
+  const chosen = value && conns.find((c) => c.id === value.connectionId);
+  const failed = chosen && state[chosen.id] && state[chosen.id].error;
 
-  return html`<${Combobox}
+  return html`<div class="stack" style="--gap:8px"><${Combobox}
     id=${id}
     value=${current}
     options=${options}
@@ -61,7 +64,12 @@ export function ModelPicker({ value, onChange, id, disabled, onlyConnection }) {
       if (o && o.custom) onChange({ connectionId: fallbackConn, model: v });
       else if (o) onChange({ connectionId: o.conn.id, model: o.model });
     }}
-  />`;
+  />
+  ${failed && html`<${Callout} tone="warning" title=${t('model.unreachable_title', { name: chosen.name })}
+      actions=${html`<${Button} size="sm" icon="rotate-ccw" onClick=${() => loadModels(chosen.id, { refresh: true })}>${t('model.retry')}<//>
+        <${Button} size="sm" variant="ghost" href="#/settings/connections">${t('model.open_settings')}<//>`}>
+    ${chosen.local ? t('model.unreachable_local') : t('model.unreachable_remote')}
+  <//>`}</div>`;
 }
 
 export const REASONING_LEVELS = ['off', 'low', 'medium', 'high', 'default'];
