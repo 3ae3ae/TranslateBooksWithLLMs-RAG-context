@@ -38,7 +38,7 @@ function CellMetrics({ m }) {
     ${(m.prompt_tokens || m.completion_tokens) ? html`<span>${t('compare.tokens', { input: formatNumber(m.prompt_tokens || 0), output: formatNumber(m.completion_tokens || 0) })}</span>` : null}
     ${m.cost_usd != null && html`<span>${formatCost(m.cost_usd)}</span>`}
     ${m.was_truncated && html`<${Pill} tone="warning">${t('compare.truncated')}<//>`}
-    ${m.was_fallback && html`<${Pill} tone="warning">${t('compare.fallback')}<//>`}
+    ${m.was_fallback && html`<${Pill} tone="warning" title=${t('compare.fallback_help')}>${t('compare.fallback')}<//>`}
   </div>`;
 }
 

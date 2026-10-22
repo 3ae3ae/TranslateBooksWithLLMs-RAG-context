@@ -298,7 +298,7 @@ function NotesTab({ job, detail }) {
         ${!editing && canEdit && html`<${Button} size="sm" icon="pencil" onClick=${() => setEditing(data.sections.map((s) => ({ ...s })))}>${t('common.edit')}<//>`}
       </div>
     </div>
-    ${view === 'latest' && html`<p class="small muted">${t('job.notes.latest_help')}</p>`}
+    <p class="small muted">${t(view === 'book' ? 'job.notes.book_help' : view === 'passage' ? 'job.notes.passage_help' : 'job.notes.latest_help')}</p>
     ${error && html`<${Callout} tone="danger">${error.message}<//>`}
     ${!data && !error && html`<p class="muted">${t('common.loading')}</p>`}
     ${data && !editing && html`<${NotesView} sections=${data.sections} emptyText=${t('job.notes.empty')} />`}

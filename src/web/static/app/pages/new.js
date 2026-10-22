@@ -421,9 +421,10 @@ export function NewTranslationPage() {
                 <${Field} label=${t('new.notes.source')} htmlFor="notes-source">
                   <${Select} id="notes-source" value=${d.notes.source} options=${noteOptions} onChange=${(v) => updateNotes({ source: v })} />
                 <//>
-                ${!polish && html`<div class="row" style="align-self:end;padding-bottom:8px">
+                ${!polish && html`<div class="stack" style="--gap:2px;align-self:end">
                   <${Checkbox} checked=${d.notes.keepUpdating} onChange=${(v) => updateNotes({ keepUpdating: v })}
                     label=${html`<span>${t('new.notes.keep_updating')}</span>`} />
+                  <span class="field__help">${t('new.notes.keep_updating_desc')}</span>
                 </div>`}
               </div>`}
               ${notesOn && !polish && (d.notes.mode === 'build' || d.notes.keepUpdating) && html`<div class="row row--wrap" style="--gap:12px">
