@@ -33,7 +33,7 @@ function ConnectionCard({ c, onEdit }) {
   const remove = async () => {
     const ok = await confirm({ title: t('connection.confirm.delete_title', { name: c.name }), body: t('connection.confirm.delete_body'), confirmLabel: t('common.delete'), danger: true });
     if (!ok) return;
-    try { await connectionsApi.remove(c.id); await loadConnections(); toast({ tone: 'success', title: t('connection.toast.deleted') }); }
+    try { await connectionsApi.remove(c.id); await loadConnections(); await loadPreferences().catch(() => {}); toast({ tone: 'success', title: t('connection.toast.deleted') }); }
     catch (e) { toast({ tone: 'error', title: t('errors.action_failed'), message: e.message }); }
   };
   let statusEl = null;
@@ -63,7 +63,7 @@ function ConnectionCard({ c, onEdit }) {
         { label: t('common.edit'), icon: 'pencil', onSelect: () => onEdit(c) },
         { label: t('connection.set_default'), icon: 'check', disabled: c.is_default, onSelect: setDefault },
         'sep',
-        { label: t('common.delete'), icon: 'trash-2', danger: true, disabled: c.builtin, onSelect: remove },
+        { label: t('common.delete'), icon: 'trash-2', danger: true, onSelect: remove },
       ]} />
     </div>
   </div>`;

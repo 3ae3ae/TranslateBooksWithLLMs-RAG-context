@@ -432,6 +432,7 @@
   "compare.stop": "중지",
   "compare.stop_note": "이미 보낸 요청은 끝까지 처리돼요.",
   "compare.results": "결과",
+  "compare.polish_failed_draft": "다듬기에 실패해서 초벌 번역을 보여드려요",
   "compare.original": "원문",
   "compare.waiting": "기다리는 중…",
   "compare.summary": "종합",

@@ -111,8 +111,6 @@ def _normalize(fields, previous=None):
     if not isinstance(kind, str) or kind not in _TYPES:
         raise ValueError("Unknown connection type")
     base, resolved = normalize_url(kind, connection.get("base_url", _TYPES[kind][1]))
-    if previous and previous.get("builtin") and kind != previous["type"]:
-        raise ValueError("The built-in connection type cannot be changed")
     local = connection.get("local")
     local_explicit = "local" in fields or bool(previous and previous.get("_local_explicit"))
     if not local_explicit and (not previous or "base_url" in fields):
@@ -169,10 +167,10 @@ def _migrate():
     builtin = _normalize({"type": "ollama", "name": "Local Ollama",
                           "base_url": setting("OLLAMA_API_ENDPOINT", _TYPES["ollama"][1]),
                           "default_model": setting("DEFAULT_MODEL")})
-    builtin.update(id="local-ollama", builtin=True)
+    builtin.update(id="local-ollama", builtin=False)
     items = [builtin]
     provider = setting("LLM_PROVIDER", "ollama").lower()
-    default_id, default_model = builtin["id"], builtin["default_model"]
+    default_id, default_model = "", ""
     for kind in ("openai", "neuralwatt", "gemini", "openrouter", "mistral", "deepseek", "poe", "nim", "ollama_cloud"):
         prefix = "OLLAMA" if kind == "ollama_cloud" else kind.upper()
         keys = normalize_api_keys(setting(prefix + "_API_KEY"))
@@ -208,6 +206,11 @@ def _read():
         raise ValueError("connections.json is invalid; restore it before editing connections") from None
     for connection in data["connections"]:
         connection.pop("parallel_requests", None)
+        if connection.get('builtin'):
+            connection['builtin'] = False
+            if connection.get('local') and data['default'].get('connection_id') == connection['id']:
+                data['default'] = {'connection_id': '', 'model': ''}
+            _write(data)
     return data
 
 
@@ -262,12 +265,9 @@ def delete_connection(connection_id) -> None:
     with _lock:
         data = _read()
         connection = _find(data, connection_id)
-        if connection["builtin"]:
-            raise ValueError("The built-in connection cannot be deleted")
         data["connections"].remove(connection)
         if data["default"]["connection_id"] == connection_id:
-            builtin = _find(data, "local-ollama")
-            data["default"] = {"connection_id": builtin["id"], "model": builtin["default_model"]}
+            data["default"] = {"connection_id": "", "model": ""}
         _write(data)
 
 

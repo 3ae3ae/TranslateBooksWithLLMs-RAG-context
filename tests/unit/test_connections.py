@@ -44,19 +44,30 @@ def test_crud_masks_keys_and_keeps_private_atomic_file(connection_store):
     assert not list(connection_store.parent.glob(".connections-*"))
     store.delete_connection(created["id"])
     assert store.get_connection(created["id"]) is None
-    assert store.get_default()["connection_id"] == "local-ollama"
+    assert store.get_default() == {"connection_id": "", "model": ""}
     with pytest.raises(store.ConnectionNotFound):
         store.resolve_for_pipeline(created["id"], "test-model")
 
 
-def test_builtin_is_editable_but_not_deletable(connection_store):
-    with pytest.raises(ValueError, match="cannot be deleted"):
-        store.delete_connection("local-ollama")
-    with pytest.raises(ValueError, match="type cannot be changed"):
-        store.update_connection("local-ollama", {"type": "openai"})
+def test_legacy_builtin_is_editable_and_deletable_without_being_default(connection_store):
+    assert store.get_default() == {"connection_id": "", "model": ""}
     result = store.update_connection("local-ollama", {"base_url": "http://studio.local:11434/api/generate"})
     assert result["resolved"]["chat_url"] == "http://studio.local:11434/api/chat"
-    assert result["builtin"] and result["local"]
+    assert not result["builtin"] and result["local"]
+    store.set_default('local-ollama', 'chosen-model')
+    assert store.get_default()['model'] == 'chosen-model'
+    store.delete_connection('local-ollama')
+    assert store.list_connections() == []
+    assert store.get_default() == {"connection_id": "", "model": ""}
+    assert store.list_connections() == []
+
+
+def test_legacy_remote_ollama_default_is_preserved(connection_store):
+    data = json.loads(connection_store.read_text())
+    data['connections'][0].update(local=False, base_url='https://example.test')
+    store._write(data)
+    assert store.get_default() == {'connection_id': 'local-ollama', 'model': 'local-model'}
+    assert not store.get_connection('local-ollama')['builtin']
 
 
 def test_atomic_failure_preserves_original_file(connection_store, monkeypatch):
@@ -295,7 +306,7 @@ def test_routes_crud_types_defaults_and_auth(api):
     assert listed["default"]["model"] == "gpt-4.1"
     assert client.delete(f"/api/connections/{cid}", headers=headers).status_code == 200
     assert client.patch(f"/api/connections/{cid}", json={}, headers=headers).json["error"]["code"] == "connection_not_found"
-    assert client.delete("/api/connections/local-ollama", headers=headers).json["error"]["code"] == "invalid_request"
+    assert client.delete("/api/connections/local-ollama", headers=headers).status_code == 200
     assert client.post("/api/connections", data="broken", content_type="application/json", headers=headers).json["error"]["code"] == "invalid_request"
 
 
@@ -494,6 +505,8 @@ def test_empty_configuration_migrates_only_builtin(connection_store, monkeypatch
     monkeypatch.setattr(config, "OPENAI_API_ENDPOINT", "https://api.openai.com/v1/chat/completions")
     monkeypatch.setattr(config, "LLM_PROVIDER", "ollama")
     assert [item["id"] for item in store.list_connections()] == ["local-ollama"]
+    assert store.get_default() == {"connection_id": "", "model": ""}
+    assert not store.get_connection('local-ollama')['builtin']
 
 
 def test_migration_uses_provider_model_when_default_not_explicit(connection_store, monkeypatch):

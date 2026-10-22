@@ -171,7 +171,8 @@ function ReviewRow({ p, job, marks, onToggle }) {
   // Text still being polished will change, so it can't be signed off yet.
   const checkable = p.stage !== 'draft';
   const canCompare = p.stage === 'polished' && p.draft && p.draft !== p.translation;
-  const text = showDraft && canCompare ? p.draft : p.translation;
+  const showingDraft = (showDraft && canCompare) || p.stage === 'polish_failed';
+  const text = showingDraft ? p.draft || p.translation : p.translation;
   return html`<article id=${`passage-${p.index}`} class=${cx('review-row', checked && checkable && 'review-row--checked', flagged && 'review-row--flagged')}>
     <header class="review-row__head">
       <span class="review-row__num">${t('job.live.passage', { n: formatNumber(p.index + 1) })}</span>
@@ -187,8 +188,8 @@ function ReviewRow({ p, job, marks, onToggle }) {
     </header>
     <div class="passage passage--review">
       <div class="passage__col"><div class="passage__text">${p.source}</div></div>
-      <div class=${cx('passage__col', showDraft && canCompare && 'passage__col--draft')}>
-        ${showDraft && canCompare && html`<div class="passage__lang">${t('job.review.draft_label')}</div>`}
+      <div class=${cx('passage__col', showingDraft && 'passage__col--draft')}>
+        ${showingDraft && html`<div class="passage__lang">${t('job.review.draft_label')}</div>`}
         <div class="passage__text">${text || html`<span class="faint">${t('job.passages.not_yet')}</span>`}</div>
       </div>
     </div>

@@ -23,7 +23,7 @@ function priceMeta(m, conn) {
  */
 export function ModelPicker({ value, onChange, id, disabled, onlyConnection }) {
   const conns = connections.value.filter((c) => !onlyConnection || c.id === onlyConnection);
-  useEffect(() => { conns.forEach((c) => loadModels(c.id)); }, [conns.map((c) => c.id).join(',')]);
+  useEffect(() => { conns.filter((c) => c.type !== 'ollama' || !c.local).forEach((c) => loadModels(c.id)); }, [conns.map((c) => c.id).join(',')]);
   const state = modelsByConnection.value;
   const loading = conns.some((c) => state[c.id] && state[c.id].loading);
 
@@ -49,6 +49,7 @@ export function ModelPicker({ value, onChange, id, disabled, onlyConnection }) {
   const failed = chosen && state[chosen.id] && state[chosen.id].error;
 
   return html`<div class="stack" style="--gap:8px"><${Combobox}
+    onOpen=${() => conns.forEach((c) => loadModels(c.id))}
     id=${id}
     value=${current}
     options=${options}

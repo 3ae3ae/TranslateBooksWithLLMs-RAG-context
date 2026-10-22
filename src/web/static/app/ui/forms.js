@@ -158,7 +158,7 @@ const norm = (s) => String(s ?? '').toLocaleLowerCase();
  */
 export function Combobox({
   value, onChange, options, placeholder, label, id, disabled, loading,
-  allowCustom, customLabel, emptyText, searchPlaceholder, align, triggerMeta, renderValue,
+  allowCustom, customLabel, emptyText, searchPlaceholder, align, triggerMeta, renderValue, onOpen,
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -168,6 +168,7 @@ export function Combobox({
   const listRef = useRef(null);
   const uid = useUid('combo');
   useDismiss(open, () => setOpen(false), rootRef);
+  useEffect(() => { if (open && onOpen) onOpen(); }, [open]);
 
   const selected = options.find((o) => o.value === value);
   const filtered = useMemo(() => {

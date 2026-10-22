@@ -21,7 +21,6 @@ import logging
 import webbrowser
 import threading
 from pathlib import Path
-from urllib.parse import urlparse
 from flask import Flask
 from flask_socketio import SocketIO
 
@@ -43,8 +42,6 @@ from src.utils.console import ensure_utf8_stdio
 ensure_utf8_stdio()
 
 from src.config import (
-    API_ENDPOINT as DEFAULT_OLLAMA_API_ENDPOINT,
-    DEFAULT_MODEL,
     PORT,
     OUTPUT_DIR,
     INCOMING_DIR,
@@ -84,10 +81,6 @@ def validate_configuration():
 
     if not PORT or not isinstance(PORT, int):
         issues.append("PORT must be a valid integer")
-    if not DEFAULT_MODEL:
-        issues.append("DEFAULT_MODEL must be configured")
-    if not DEFAULT_OLLAMA_API_ENDPOINT:
-        issues.append("API_ENDPOINT must be configured")
 
     if issues:
         logger.error("\n" + "="*70)
@@ -225,41 +218,6 @@ def open_browser(port):
     thread.start()
 
 
-def test_ollama_connection():
-    """Test Ollama connection at startup and log result"""
-    import requests
-    try:
-        parsed = urlparse(DEFAULT_OLLAMA_API_ENDPOINT)
-        path = parsed.path or '/'
-        if '/api/' in path:
-            base_path = path.split('/api/')[0]
-            base_url = f"{parsed.scheme}://{parsed.netloc}{base_path}"
-        else:
-            base_url = f"{parsed.scheme}://{parsed.netloc}"
-        tags_url = f"{base_url}/api/tags"
-        logger.info(f"🔍 Testing Ollama connection at {tags_url}...")
-        response = requests.get(tags_url, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            models = [m.get('name') for m in data.get('models', [])]
-            logger.info(f"✅ Ollama connected! Found {len(models)} model(s)")
-            if models:
-                logger.info(f"   Available models:")
-                for model in sorted(models):
-                    logger.info(f"     - {model}")
-            return True
-        else:
-            logger.warning(f"⚠️ Ollama returned status {response.status_code}")
-            return False
-    except requests.exceptions.ConnectionError:
-        logger.warning(f"⚠️ Cannot connect to Ollama at {base_url}")
-        logger.warning(f"   Make sure Ollama is running ('ollama serve')")
-        return False
-    except Exception as e:
-        logger.warning(f"⚠️ Ollama connection test failed: {e}")
-        return False
-
-
 def main():
     """Start the local translation web app."""
     try:
@@ -271,12 +229,8 @@ def main():
         logger.info("  TranslateBook with LLMs - Server")
         logger.info("=" * 50)
         logger.info("")
-        logger.info(f"  Ollama Endpoint: {DEFAULT_OLLAMA_API_ENDPOINT}")
         logger.info("  Supported formats: .txt, .epub, .srt, .docx")
         logger.info("")
-
-        # Test Ollama connection at startup
-        test_ollama_connection()
 
         logger.info("")
         logger.info("=" * 50)

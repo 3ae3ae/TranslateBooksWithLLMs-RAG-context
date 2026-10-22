@@ -432,6 +432,7 @@
   "compare.stop": "Stop",
   "compare.stop_note": "Requests already sent will still finish.",
   "compare.results": "Results",
+  "compare.polish_failed_draft": "Polishing failed · showing the first translation",
   "compare.original": "Original",
   "compare.waiting": "Waiting…",
   "compare.summary": "Overall",

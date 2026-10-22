@@ -250,11 +250,14 @@ function CompareForm({ query }) {
           ${columns.map((c, ci) => {
             const r = results[`${ri}:${ci}:${lastPhase}`];
             const draftR = phases.length > 1 ? results[`${ri}:${ci}:translate`] : null;
+            const showDraft = r && r.error && draftR && !draftR.error && draftR.output;
+            const visible = showDraft ? draftR : r;
             return html`<div class="compare-cell">
               ${!r && !(draftR && draftR.error) && (run && run.running ? html`<div class="row small muted"><${Spinner} size="sm" />${t('compare.waiting')}</div>` : html`<span class="faint small">—</span>`)}
               ${draftR && draftR.error && html`<div class="small" style="color:var(--danger)">${draftR.error}</div>`}
-              ${r && (r.error ? html`<div class="small" style="color:var(--danger)">${r.error}</div>` : html`<div class="compare-cell__text">${r.output}</div>`)}
-              <${CellMetrics} m=${r && r.metrics} />
+              ${showDraft && html`<${Pill} tone="warning">${t('compare.polish_failed_draft')}<//>`}
+              ${visible && (visible.error ? html`<div class="small" style="color:var(--danger)">${visible.error}</div>` : html`<div class="compare-cell__text">${visible.output}</div>`)}
+              <${CellMetrics} m=${visible && visible.metrics} />
             </div>`;
           })}
         `)}
