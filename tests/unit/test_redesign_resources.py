@@ -1,0 +1,431 @@
+"""Resource contracts, isolated from credentials, provider APIs, and user files."""
+import json
+from pathlib import Path
+import sqlite3
+import stat
+import sys
+from types import ModuleType
+from unittest.mock import Mock
+
+from flask import Flask
+import pytest
+import requests
+
+from src import config
+from src.api.blueprints.estimate_routes import create_estimate_blueprint
+from src.api.blueprints.notes_routes import create_notes_blueprint
+from src.api.blueprints.preferences_routes import create_preferences_blueprint
+from src.api.blueprints.styles_routes import create_styles_blueprint
+from src.core.pricing import job_estimator
+from src.utils import custom_instructions as styles, notes_store as notes, notifier, preferences
+
+
+@pytest.fixture
+def resources(tmp_path, monkeypatch):
+    runtime = tmp_path / "TranslateBook_Data"
+    monkeypatch.setattr(config, "CUSTOM_INSTRUCTIONS_DIR", runtime / "Custom_Instructions")
+    monkeypatch.setattr(config, "NOVEL_CONTEXTS_DIR", runtime / "Novel_Contexts")
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
+    monkeypatch.setattr(config, "OUTPUT_DIR", str(tmp_path / "output"))
+    for attr in ("NOTIFY_WEBHOOK_URL", "NOTIFY_WEBHOOK_HEADERS", "NOTIFY_WEBHOOK_PAYLOAD"):
+        monkeypatch.setattr(config, attr, "")
+    connection = dict(connection_id="test", llm_provider="openai", model="test-model", reasoning_effort="off", connection_type="openai", local=False, request_timeout=30, api_key="", llm_api_endpoint="https://example.test/v1/chat/completions")
+    connections = ModuleType("src.core.llm.connections")
+    connections.ConnectionNotFound = type("ConnectionNotFound", (ValueError,), {})
+    connections.get_default = Mock(return_value={"id": "test", "default_model": "test-model"})
+    connections.resolve_for_pipeline = Mock(side_effect=lambda cid, model, reasoning="off": {**connection, "connection_id": cid, "model": model or connection["model"], "reasoning_effort": reasoning})
+    connections.list_models = Mock(return_value=[{"id": "test-model", "pricing": {"input_per_m": 2, "output_per_m": 4}}])
+    monkeypatch.setitem(sys.modules, "src.core.llm.connections", connections)
+    app = Flask(__name__)
+    app.register_blueprint(create_preferences_blueprint())
+    app.register_blueprint(create_notes_blueprint())
+    app.register_blueprint(create_styles_blueprint())
+    app.register_blueprint(create_estimate_blueprint(config.OUTPUT_DIR))
+    return app.test_client(), connections
+
+
+def seed_job(job_id, status, job_config):
+    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(config.DATA_DIR / "jobs.db") as db:
+        db.execute("CREATE TABLE IF NOT EXISTS translation_jobs (translation_id TEXT, status TEXT, config TEXT)")
+        db.execute("INSERT INTO translation_jobs VALUES (?, ?, ?)", (job_id, status, json.dumps(job_config)))
+
+
+def test_preferences_seed_schema_permissions_and_connection_authority(resources, monkeypatch):
+    client, connections = resources
+    monkeypatch.setattr(config, "MAX_TOKENS_PER_CHUNK", 700)
+    result = client.get("/api/preferences").get_json()
+    assert result["values"]["passage_tokens"] == 700
+    assert result["values"]["default_connection_id"] == "test"
+    assert result["values"]["default_model"] == "test-model"
+    assert result["schema"]["passage_tokens"]["min"] == 50
+    assert result["schema"]["default_reasoning"]["choices"][0] == "off"
+    assert stat.S_IMODE(preferences.preferences_path().stat().st_mode) == 0o600
+    monkeypatch.setattr(config, "MAX_TOKENS_PER_CHUNK", 900)
+    assert preferences.get_preferences()["passage_tokens"] == 700
+    connections.get_default.assert_called_once()
+
+
+def test_preferences_validation_is_atomic_and_masks_secrets(resources):
+    client, _ = resources
+    before = client.get("/api/preferences").get_json()["values"]
+    result = client.patch("/api/preferences", json={"passage_tokens": 2, "bilingual": 1, "notes_update_interval": 0, "task": "other", "unknown": True})
+    assert result.status_code == 400
+    assert set(result.get_json()["error"]["details"]) == {"passage_tokens", "bilingual", "notes_update_interval", "task", "unknown"}
+    assert client.get("/api/preferences").get_json()["values"] == before
+    patch = {"notifications": {"url": "https://example.test/YOUR_API_KEY_HERE", "headers": {"X-Key": "YOUR_API_KEY_HERE"}, "enabled": True}}
+    result = client.patch("/api/preferences", json=patch)
+    assert result.status_code == 200
+    public = result.get_json()["values"]["notifications"]
+    assert public["url"] == {"set": True, "hint": "…/HERE"}
+    assert public["headers"] == {"set": True, "hint": ""}
+    assert "YOUR_API_KEY_HERE" not in result.get_data(as_text=True)
+    result = client.patch("/api/preferences", json={"notifications": {"url": None, "headers": None}, "passage_tokens": None})
+    assert result.status_code == 200
+    assert preferences.get_preferences()["notifications"]["headers"] == patch["notifications"]["headers"]
+    assert stat.S_IMODE(preferences.preferences_path().stat().st_mode) == 0o600
+
+
+@pytest.mark.parametrize("patch", [
+    {"notifications": {"headers": {"X-Key": {"set": True}}}},
+    {"notifications": {"headers": {"X-Key": "bad\nheader"}}},
+    {"notifications": {"url": {"set": True}}},
+    {"notifications": {"events": ["other"]}},
+    {"notifications": {"timeout_seconds": 121}},
+    {"notifications": {"payload": "not json"}},
+    {"price_overrides": {"test:model": {"input_per_m": -1, "output_per_m": 1}}},
+    {"price_overrides": {"test:model": {"input_per_m": True, "output_per_m": 1}}},
+])
+def test_preferences_nested_validation(resources, patch):
+    assert resources[0].patch("/api/preferences", json=patch).status_code == 400
+
+
+def test_remember_defaults_copies_job_fields(resources):
+    preferences.remember_job_defaults({"connection_id": "other", "model": "model", "reasoning": "low", "bilingual": True, "notes": {"mode": "copy", "update_interval": 3}, "files": []})
+    values = preferences.get_preferences()
+    assert (values["default_connection_id"], values["default_model"], values["default_reasoning"]) == ("other", "model", "low")
+    assert values["notes_mode"] == "copy" and values["notes_update_interval"] == 3
+    assert values["bilingual"] is True
+
+
+def test_notes_round_trip_dry_run_matches_saved_normalization(resources):
+    client, _ = resources
+    assert client.post("/api/notes", json={"name": "book.txt"}).status_code == 201
+    sections = client.get("/api/notes/book.txt").get_json()["sections"]
+    assert [s["key"] for s in sections] == ["characters", "aliases", "name_map", "glossary", "addressing", "relationships"]
+    assert notes.parse_sections(notes.serialize_sections(sections)) == sections
+    sections[0]["body"] = "- 爱丽丝: female; explorer\n- 爱丽丝: female; explorer\n- None: unknown"
+    sections[3]["body"] = "- 爱丽丝: Alice"
+    path = config.NOVEL_CONTEXTS_DIR / "book.txt"
+    before = path.read_bytes()
+    dry = client.put("/api/notes/book.txt?dry_run=1", json={"sections": sections})
+    assert dry.status_code == 200
+    assert path.read_bytes() == before
+    saved = client.put("/api/notes/book.txt", json={"sections": sections})
+    assert saved.get_json() == dry.get_json()
+    assert client.get("/api/notes/book.txt").get_json()["sections"] == dry.get_json()["normalized_sections"]
+    assert dry.get_json()["removed_lines"]
+    assert "- 爱丽丝: Alice" in dry.get_json()["normalized_sections"][2]["body"]
+
+
+def test_notes_read_only_map_and_section_injection(resources):
+    client, _ = resources
+    notes.create_notes("book.txt")
+    assert client.put("/api/notes/book.txt", json={"sections": [{"key": "name_map", "body": "- edited"}]}).status_code == 400
+    assert client.put("/api/notes/book.txt", json={"sections": [{"key": "characters", "body": "## NAME TRANSLATION MAP\n- edited"}]}).status_code == 400
+    assert client.put("/api/notes/book.txt", json={"text": "raw notes"}).status_code == 400
+
+
+@pytest.mark.parametrize("status", ["running", "queued", "interrupted", "partial", "error"])
+def test_notes_in_use_blocks_all_mutations(resources, status):
+    client, _ = resources
+    notes.create_notes("book.txt")
+    seed_job("unfinished", status, {"notes_file": "book.txt"})
+    assert notes.notes_in_use("book.txt") == ["unfinished"]
+    assert client.get("/api/notes").get_json()["notes"][0]["used_by"] == ["unfinished"]
+    for response in [client.put("/api/notes/book.txt?dry_run=1", json={"sections": []}), client.post("/api/notes/book.txt/rename", json={"name": "other.txt"}), client.delete("/api/notes/book.txt")]:
+        assert response.status_code == 409
+        assert response.get_json()["error"]["details"]["used_by"] == ["unfinished"]
+
+
+def test_prepare_notes_build_copy_carry_unique_and_completed_mutation(resources):
+    client, _ = resources
+    first = notes.prepare_job_notes("build", job_title="book.epub")
+    second = notes.prepare_job_notes("build", job_title="book.epub")
+    assert first == "book_notes.txt" and second == "book_notes_2.txt"
+    notes.put_notes(first, [{"key": "characters", "body": "- Alice: female; explorer"}])
+    copied = notes.prepare_job_notes("copy", source=first, name="copied", job_title="book")
+    carried = notes.prepare_job_notes("copy", source=second, carry_from=copied, name="copied", job_title="volume2")
+    assert copied != carried
+    assert notes.get_notes(carried)["sections"] == notes.get_notes(first)["sections"]
+    assert notes.prepare_job_notes("off", job_title="book") is None
+    assert notes.prepare_job_notes("build", name="My notes", job_title="book") == "My_notes.txt"
+    seed_job("finished", "completed", {"notes_file": first})
+    assert client.post(f"/api/notes/{first}/rename", json={"name": "renamed.txt"}).status_code == 200
+    assert client.delete("/api/notes/renamed.txt").status_code == 200
+
+
+def test_notes_and_styles_reject_traversal_and_external_symlinks(resources, tmp_path):
+    client, _ = resources
+    assert client.post("/api/notes", json={"name": "../outside.txt"}).status_code == 400
+    assert client.post("/api/styles", json={"name": "../outside", "translation": "text"}).status_code == 400
+    outside = tmp_path / "outside.txt"
+    outside.write_text("outside")
+    config.NOVEL_CONTEXTS_DIR.mkdir(parents=True)
+    (config.NOVEL_CONTEXTS_DIR / "link.txt").symlink_to(outside)
+    assert client.get("/api/notes/link.txt").status_code == 400
+    config.CUSTOM_INSTRUCTIONS_DIR.mkdir(parents=True)
+    (config.CUSTOM_INSTRUCTIONS_DIR / "link.txt").symlink_to(outside)
+    assert client.get("/api/styles/link.txt").status_code == 400
+
+
+def test_styles_crud_duplicate_and_legacy_save_conversion(resources):
+    client, _ = resources
+    result = client.post("/api/styles", json={"name": "noir", "translation": "Translate noir", "refinement": "Polish noir"})
+    assert result.status_code == 201 and result.get_json()["name"] == "noir.yaml"
+    assert client.get("/api/styles").get_json()["styles"][0]["name"] == "noir.yaml"
+    assert client.post("/api/styles/noir.yaml/duplicate", json={"name": "copy"}).status_code == 201
+    assert client.post("/api/styles", json={"name": "noir"}).status_code == 409
+    assert client.put("/api/styles/noir", json={"translation": "Changed"}).get_json()["translation"] == "Changed"
+    legacy = config.CUSTOM_INSTRUCTIONS_DIR / "legacy.txt"
+    legacy.write_text("Legacy text")
+    assert client.get("/api/styles/legacy.txt").get_json()["refinement"] == "Legacy text"
+    result = client.put("/api/styles/legacy.txt", json={"translation": "New", "refinement": "Polished"})
+    assert result.get_json()["name"] == "legacy.yaml" and not legacy.exists()
+    assert client.delete("/api/styles/legacy.yaml").status_code == 200
+
+
+def test_compare_uses_runtime_styles_and_connection_factory(resources, monkeypatch):
+    from src.api.blueprints import sample_routes as sample
+    styles.save_style("noir", {"translation": "Runtime translation", "refinement": "Runtime polish"}, create=True)
+    options = sample._column_prompt_options({}, {"style": "noir"})
+    assert options == {"custom_instructions": "Runtime translation", "refinement_instructions": "Runtime polish"}
+    factory = Mock()
+    monkeypatch.setattr(sample, "create_llm_provider", factory)
+    sample._instantiate_provider({"connection_id": "test", "model": "test-model", "reasoning": "low"})
+    assert factory.call_args.kwargs["connection"]["reasoning_effort"] == "low"
+    assert sample._sample_max_chars({"passage_tokens": 300}) == 1200
+    assert sample._sample_max_chars({"passage_tokens": 1000}) == 2000
+
+
+def test_compare_snapshots_resources_and_changes_revision(resources, monkeypatch):
+    from src.api.blueprints import sample_routes as sample
+    from src.api.sample_state import SampleStateManager
+    state = SampleStateManager()
+    app = Flask("compare")
+    app.register_blueprint(sample.create_sample_blueprint(state, output_dir=config.OUTPUT_DIR))
+    client = app.test_client()
+    uploads = Path(config.OUTPUT_DIR) / "uploads"
+    uploads.mkdir(parents=True)
+    path = uploads / "book.txt"
+    path.write_text("This is sample source.")
+    monkeypatch.setattr(sample, "_load_source_units", lambda *a, **kw: [{"main_content": "First."}, {"main_content": "Middle."}, {"main_content": "Last."}])
+    monkeypatch.setattr(sample, "_load_column_glossary", lambda gid: {"terms_dict": {"Alice": "앨리스"}, "target_language": "Korean", "term_metadata": {}} if gid else None)
+    styles.save_style("noir", {"translation": "First style"}, create=True)
+    notes.create_notes("book.txt")
+    payload = dict(file_path=str(path), file_type="txt", source_language="English", target_language="Korean", mode="refine", defer_dispatch=True, notes="book.txt", glossary_id=1, columns=[{"connection_id": "test", "model": "test-model", "reasoning": "off", "style": "noir"}])
+    response = client.post("/api/sample/run", json=payload)
+    assert response.status_code == 200
+    first = response.get_json()
+    context = state.get_run_context(first["sample_id"])
+    assert context["target_language"] == "Korean"
+    assert context["columns"][0]["_prompt_options"]["custom_instructions"] == "First style"
+    assert "_connection" not in first["columns"][0]
+    assert "_connection" not in client.get("/api/sample/" + first["sample_id"]).get_data(as_text=True)
+    styles.save_style("noir", {"translation": "Second style"})
+    second = client.post("/api/sample/run", json=payload).get_json()
+    assert first["columns"][0]["cache_key"] != second["columns"][0]["cache_key"]
+    notes.put_notes("book.txt", [{"key": "characters", "body": "- Alice: female; explorer"}])
+    third = client.post("/api/sample/run", json=payload).get_json()
+    assert third["columns"][0]["cache_key"] != second["columns"][0]["cache_key"]
+
+
+def test_estimate_requests_pricing_and_real_chunker(resources):
+    client, connections = resources
+    from pathlib import Path
+    uploads = Path(config.OUTPUT_DIR) / "uploads"
+    uploads.mkdir(parents=True)
+    path = uploads / "book.txt"
+    path.write_text("\n\n".join(["A passage about Alice. " * 15] * 10))
+    payload = dict(files=[{"file_path": str(path), "input_filename": "book.txt"}], connection_id="test", model="test-model", passage_tokens=100, polish_after=True, notes={"mode": "build", "update_interval": 2, "consolidation_interval": 2, "prompt_max_tokens": 100, "source_memory_chars": 0})
+    seed_job("history", "completed", {"connection_id": "test", "model": "test-model", "stats": {"requests": 10, "elapsed_seconds": 50}})
+    result = client.post("/api/estimate", json=payload)
+    assert result.status_code == 200
+    value = result.get_json()
+    from src.api.blueprints.sample_routes import _load_source_units
+    passages = len(_load_source_units(str(path), "txt", passage_tokens=100))
+    updates = (passages + 1) // 2
+    assert value["passages"] == passages
+    consolidations = sum(i % 2 == 0 or i == passages for i in range(1, passages + 1, 2))
+    assert value["requests"] == passages * 2 + updates + consolidations
+    assert value["time_min_s"] == round(value["requests"] * 5 * 0.8)
+    assert value["time_max_s"] == round(value["requests"] * 5 * 1.2)
+    assert value["time_source"] == "history" and value["price_source"] == "models"
+    assert value["cost_max_usd"] >= value["cost_min_usd"] > 0
+    assert value["billing"] == "api"
+    preferences.patch_preferences({"price_overrides": {"test:test-model": {"input_per_m": 1, "output_per_m": 2}}})
+    assert job_estimator.resolve_pricing(connections.resolve_for_pipeline("test", "test-model"), preferences.get_preferences()["price_overrides"])[1] == "models"
+    connections.list_models.return_value = []
+    assert client.post("/api/estimate", json=payload).get_json()["price_source"] == "override"
+
+
+@pytest.mark.parametrize("local,kind,billing", [(True, "ollama", "local"), (False, "ollama_cloud", "plan"), (False, "openai", "api")])
+def test_estimate_srt_lines_read_only_notes_and_billing(resources, local, kind, billing):
+    client, connections = resources
+    from pathlib import Path
+    uploads = Path(config.OUTPUT_DIR) / "uploads"
+    uploads.mkdir(parents=True)
+    path = uploads / "subtitles.srt"
+    path.write_text("\n\n".join(f"{i}\n00:00:01,000 --> 00:00:02,000\nHello Alice." for i in range(1, 6)))
+    connections.resolve_for_pipeline.side_effect = lambda *a: dict(connection_id="test", model="unknown", llm_provider="openai", local=local, connection_type=kind)
+    connections.list_models.return_value = []
+    payload = dict(files=[{"file_path": str(path)}], connection_id="test", model="unknown", srt_lines_per_block=2, notes={"mode": "copy", "keep_updating": False})
+    value = client.post("/api/estimate", json=payload).get_json()
+    assert value["passages"] == value["requests"] == 3
+    assert value["billing"] == billing and value["time_source"] == "unknown"
+    assert value["cost_min_usd"] == (None if billing == "api" else 0)
+    payload["files"][0]["file_path"] = "../../outside.txt"
+    assert client.post("/api/estimate", json=payload).status_code == 400
+
+
+@pytest.mark.parametrize("simplify", [False, True])
+def test_estimate_rich_formats_use_pipeline_chunkers(resources, tmp_path, sampler_epub_path, simplify):
+    from docx import Document
+    from src.core.common.plain_text_pipeline import build_plain_segments
+    from src.core.docx.docx_translation_adapter import DocxTranslationAdapter
+    from src.core.docx.plain_extractor import extract_plain_paragraphs
+    path = tmp_path / "book.docx"
+    document = Document()
+    document.add_heading("Chapter One", 1)
+    for _ in range(10):
+        document.add_paragraph("Alice explored the mountain. " * 15)
+    document.save(path)
+    units = job_estimator.load_job_units(path, "docx", passage_tokens=150, srt_lines_per_block=10, chapter_mode=True, simplify_formatting=simplify)
+    if simplify:
+        content = extract_plain_paragraphs(str(path))
+        expected = build_plain_segments(content.paragraphs_text, 150, paragraph_kinds=content.paragraphs_style, chapter_mode=True)
+    else:
+        adapter = DocxTranslationAdapter()
+        html, context = adapter.extract_content(str(path), None)
+        text, tags, _ = adapter.preserve_structure(html, context, None)
+        expected = adapter.create_chunks(text, tags, 150, None, chapter_mode=True)
+    assert len(units) == len(expected) > 1
+    epub_units = job_estimator.load_job_units(sampler_epub_path, "epub", passage_tokens=150, srt_lines_per_block=10, chapter_mode=True, simplify_formatting=simplify)
+    assert len(epub_units) > 10
+    assert all(unit["main_content"] for unit in epub_units)
+
+
+def test_notifier_legacy_fallback_new_events_and_secret_safe_logs(resources, monkeypatch, caplog):
+    monkeypatch.setattr(config, "NOTIFY_WEBHOOK_URL", "https://example.test/YOUR_API_KEY_HERE")
+    monkeypatch.setattr(config, "NOTIFY_ON_INTERRUPTION", True)
+    request = Mock(return_value=Mock(raise_for_status=Mock()))
+    monkeypatch.setattr(notifier.requests, "request", request)
+    assert notifier.notify("system_paused", {"file": "book.txt"})
+    preferences.patch_preferences({"notifications": {"enabled": True, "url": "https://example.test/YOUR_API_KEY_HERE", "headers": {"X-Key": "YOUR_API_KEY_HERE"}, "events": ["system_paused", "queue_finished"]}})
+    assert notifier.notify("queue_finished", {})
+    assert not notifier.notify("success", {})
+    request.side_effect = requests.ConnectionError("https://example.test/YOUR_API_KEY_HERE")
+    assert not notifier.notify("system_paused", {})
+    assert "YOUR_API_KEY_HERE" not in caplog.text
+    assert not notifier.notify("queue_finished", {"duration_seconds": "invalid"})
+
+
+def test_notification_test_route_uses_preferences_and_new_events(resources, monkeypatch):
+    from src.api.blueprints.config_routes import create_config_blueprint
+    app = Flask("notification-test")
+    app.register_blueprint(create_config_blueprint())
+    client = app.test_client()
+    monkeypatch.setattr(notifier.requests, "request", Mock(return_value=Mock(raise_for_status=Mock())))
+    assert client.post("/api/notifications/test", json={"event": "system_paused"}).status_code == 400
+    preferences.patch_preferences({"notifications": {"url": "https://example.test/YOUR_API_KEY_HERE", "enabled": True, "events": ["system_paused", "queue_finished"]}})
+    for event in ("system_paused", "queue_finished"):
+        response = client.post("/api/notifications/test", json={"event": event})
+        assert response.status_code == 200 and response.get_json()["success"] is True
+    assert client.post("/api/notifications/test", json={"event": "success"}).status_code == 400
+    assert client.post("/api/notifications/test", json={"event": "unknown"}).status_code == 400
+
+
+@pytest.fixture
+def glossary_client(resources, tmp_path):
+    from src.api.blueprints.glossary_routes import create_glossary_blueprint
+    from src.core.glossary.store import GlossaryStore
+    store = GlossaryStore(db_path=str(tmp_path / "glossaries.db"))
+    app = Flask("glossary")
+    app.register_blueprint(create_glossary_blueprint(store))
+    try:
+        yield app.test_client(), store
+    finally:
+        store.close_all()
+
+
+def test_glossary_import_merges_by_default_and_replaces_explicitly(glossary_client):
+    from src.core.glossary.models import GlossaryTerm
+    client, store = glossary_client
+    glossary = store.create_glossary(name="book", source_language="English", target_language="Korean")
+    store.add_term(glossary.id, GlossaryTerm(source_term="Alice", translated_term="앨리스"))
+    url = f"/api/glossaries/{glossary.id}/import"
+    result = client.post(url, json={"terms": [{"source": "Bob", "target": "밥"}, {"source": "Alice", "target": "existing wins"}]})
+    assert result.status_code == 200 and result.get_json()["imported"] == 1
+    assert store.get_glossary(glossary.id).terms_dict == {"Alice": "앨리스", "Bob": "밥"}
+    assert client.post(url + "?mode=replace", json={"terms": [{"source": "Bob", "target": "new"}]}).status_code == 200
+    assert store.get_glossary(glossary.id).terms_dict == {"Bob": "new"}
+    assert client.post(url, json={"mode": "invalid", "terms": []}).status_code == 400
+    summary = client.get("/api/glossaries").get_json()
+    assert set(summary) == {"glossaries", "count"}
+    assert set(summary["glossaries"][0]) == {"id", "name", "source_lang", "target_lang", "created_at", "updated_at", "term_count"}
+    assert summary["glossaries"][0]["term_count"] == 1
+
+
+def test_folder_routes_use_runtime_paths(resources, monkeypatch):
+    from src.api.blueprints.file_routes import create_file_blueprint
+    from src.api.services import FileService
+    opened = []
+
+    def open_folder(path):
+        opened.append(Path(path))
+        return True, "Opened", str(path)
+
+    monkeypatch.setattr(FileService, "open_system_folder", staticmethod(open_folder))
+    app = Flask("folders")
+    app.register_blueprint(create_file_blueprint(config.OUTPUT_DIR))
+    client = app.test_client()
+    for folder in ("output", "notes", "styles"):
+        assert client.post(f"/api/folders/{folder}/open").status_code == 200
+    assert opened == [Path(config.OUTPUT_DIR), config.NOVEL_CONTEXTS_DIR, config.CUSTOM_INSTRUCTIONS_DIR]
+    assert client.post("/api/folders/unknown/open").status_code == 404
+
+
+@pytest.mark.parametrize("multipart", [False, True])
+def test_glossary_suggest_existing_upload_with_connection(resources, glossary_client, monkeypatch, multipart):
+    from src.api.blueprints import glossary_routes
+    from src.core.llm import factory
+    client, store = glossary_client
+    glossary = store.create_glossary(name="book", source_language="English", target_language="Korean")
+    uploads = Path(config.OUTPUT_DIR) / "uploads"
+    uploads.mkdir(parents=True)
+    path = uploads / "book.txt"
+    path.write_text("Alice is an explorer. " * 100)
+    provider = Mock()
+
+    async def close():
+        pass
+
+    async def suggest(**kwargs):
+        assert kwargs["text"].startswith("Alice")
+        return [{"source": "Alice", "target": "앨리스", "category": "character"}], []
+
+    provider.close = close
+    create = Mock(return_value=provider)
+    monkeypatch.setattr(factory, "create_llm_provider", create)
+    monkeypatch.setattr(glossary_routes, "ner_suggest_terms", suggest)
+    payload = dict(file_path=str(path), connection_id="test", model="test-model", reasoning="low")
+    kwargs = {"data": payload, "content_type": "multipart/form-data"} if multipart else {"json": payload}
+    response = client.post(f"/api/glossaries/{glossary.id}/suggest-terms", **kwargs)
+    assert response.status_code == 200
+    value = response.get_json()
+    assert value["candidates"] == [{"source": "Alice", "target": "앨리스", "category": "character", "already_in_glossary": False}]
+    assert value["sample_source"] == "uploaded_file" and value["sample_filename"] == "book.txt"
+    assert create.call_args.kwargs["connection"]["reasoning_effort"] == "low"
+    payload["file_path"] = str(uploads / ".." / ".." / "outside.txt")
+    kwargs = {"data": payload, "content_type": "multipart/form-data"} if multipart else {"json": payload}
+    assert client.post(f"/api/glossaries/{glossary.id}/suggest-terms", **kwargs).status_code == 403

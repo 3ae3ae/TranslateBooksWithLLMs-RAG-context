@@ -159,9 +159,11 @@ def test_notify_preserves_none_in_default_payload(cfg):
 
 
 def test_known_events_contract():
-    """known_events() lists exactly the three terminal events."""
+    """known_events() includes translation and queue lifecycle events."""
     assert set(notifier.known_events()) == {
         notifier.EVENT_SUCCESS,
         notifier.EVENT_FAILURE,
         notifier.EVENT_INTERRUPTION,
+        notifier.EVENT_SYSTEM_PAUSED,
+        notifier.EVENT_QUEUE_FINISHED,
     }

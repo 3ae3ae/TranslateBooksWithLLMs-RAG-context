@@ -4875,6 +4875,9 @@ def _safe_context_filename_stem(value: str) -> str:
     return "".join(safe_chars).strip(".")
 
 
+safe_context_filename_stem = _safe_context_filename_stem
+
+
 def _resolve_inside(directory: Path, filename: str) -> Optional[Path]:
     """Return the file path if it resolves inside `directory`, else None."""
     candidate = directory / filename

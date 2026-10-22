@@ -639,6 +639,13 @@ def create_glossary_blueprint(store: Optional[GlossaryStore] = None):
             else:
                 return jsonify({"error": "Expected application/json body or multipart file upload"}), 400
 
+            body = request.get_json(silent=True)
+            mode = request.args.get("mode") or request.form.get("mode") or (body.get("mode") if isinstance(body, dict) else None) or "merge"
+            if mode not in ("merge", "replace"):
+                return jsonify({"error": {"code": "validation_error", "message": "mode must be merge or replace"}}), 400
+            if mode == "merge":
+                inserted, duplicates, empty = store.bulk_add_terms(gid, terms)
+                return jsonify(imported=inserted, skipped_empty=empty, skipped_duplicate=duplicates, total_input=len(terms), mode=mode)
             result = store.bulk_replace_terms(gid, terms)
             return jsonify({
                 "imported": result.inserted,
@@ -804,12 +811,28 @@ def create_glossary_blueprint(store: Optional[GlossaryStore] = None):
             pre_warnings: List[str] = []
             text = ''
 
-            if is_multipart:
-                upload = next(iter(request.files.values()), None)
-                if upload is None or not upload.filename:
-                    return jsonify({"error": "No file uploaded"}), 400
-
-                ext = Path(upload.filename).suffix.lower()
+            if is_multipart or data.get("file_path"):
+                if data.get("file_path"):
+                    from src import config as runtime_config
+                    from src.api.services.path_validator import PathValidator
+                    if not isinstance(data["file_path"], str):
+                        return jsonify({"error": "file_path must be text"}), 400
+                    path, error = PathValidator.validate_upload_path(data["file_path"], Path(runtime_config.OUTPUT_DIR) / "uploads")
+                    if error:
+                        status = 404 if error == "File not found" else 403 if error.startswith("Access denied") else 400
+                        return jsonify({"error": {"code": "invalid_file", "message": error}}), status
+                    if not path.is_file():
+                        return jsonify({"error": "file_path must refer to a file"}), 400
+                    filename = path.name
+                    with path.open("rb") as stream:
+                        raw = stream.read(_NER_UPLOAD_MAX_BYTES + 1)
+                else:
+                    upload = next(iter(request.files.values()), None)
+                    if upload is None or not upload.filename:
+                        return jsonify({"error": "No file uploaded"}), 400
+                    filename = upload.filename
+                    raw = upload.read(_NER_UPLOAD_MAX_BYTES + 1)
+                ext = Path(filename).suffix.lower()
                 if ext not in _NER_SUPPORTED_EXTS:
                     return jsonify({
                         "error": (
@@ -818,14 +841,13 @@ def create_glossary_blueprint(store: Optional[GlossaryStore] = None):
                         )
                     }), 400
 
-                raw = upload.read(_NER_UPLOAD_MAX_BYTES + 1)
                 if len(raw) > _NER_UPLOAD_MAX_BYTES:
                     return jsonify({
                         "error": f"File too large (max {_NER_UPLOAD_MAX_BYTES // (1024 * 1024)} MB)"
                     }), 413
 
                 sampled, effective_sample_count, full_text_chars = _extract_sample_from_upload(
-                    raw, upload.filename, max_chars, sample_count
+                    raw, filename, max_chars, sample_count
                 )
                 if not sampled:
                     return jsonify({
@@ -833,7 +855,7 @@ def create_glossary_blueprint(store: Optional[GlossaryStore] = None):
                     }), 400
                 text = sampled.strip()
                 sample_source = 'uploaded_file'
-                sample_filename = upload.filename
+                sample_filename = filename
 
                 if sample_count > 1 and effective_sample_count < sample_count:
                     if effective_sample_count == 1 and full_text_chars <= max_chars:
@@ -863,27 +885,28 @@ def create_glossary_blueprint(store: Optional[GlossaryStore] = None):
             from src.core.llm.factory import create_llm_provider
             import src.config as _config
 
-            provider_type = (data.get('provider') or _config.LLM_PROVIDER or 'ollama').lower()
-            model = data.get('model') or _config.DEFAULT_MODEL
-            api_endpoint = data.get('api_endpoint') or _config.API_ENDPOINT
-
-            # The frontend sends the '__USE_ENV__' sentinel (or nothing) when the
-            # key field is empty but a key is configured in .env; resolve_api_key
-            # turns that back into the real, possibly multi-key, env value.
-            env_var = provider_env_var(provider_type)
-            api_key = resolve_api_key(
-                data.get('api_key'),
-                env_var,
-                getattr(_config, env_var, '') if env_var else '',
-            ) or None
+            if data.get("connection_id"):
+                from src.core.llm.connections import resolve_for_pipeline, ConnectionNotFound
+                try:
+                    connection = resolve_for_pipeline(data["connection_id"], data.get("model") or "", data.get("reasoning", "off"))
+                except ConnectionNotFound:
+                    return jsonify(error={"code": "connection_not_found", "message": "Connection not found"}), 404
+                except ValueError:
+                    return jsonify(error={"code": "validation_error", "message": "Invalid connection options"}), 400
+                provider_type, model = connection["llm_provider"], connection["model"]
+                provider_kwargs = {"connection": connection, "context_window": _NER_CONTEXT_WINDOW}
+            else:
+                provider_type = (data.get('provider') or _config.LLM_PROVIDER or 'ollama').lower()
+                model = data.get('model') or _config.DEFAULT_MODEL
+                api_endpoint = data.get('api_endpoint') or _config.API_ENDPOINT
+                env_var = provider_env_var(provider_type)
+                api_key = resolve_api_key(data.get('api_key'), env_var, getattr(_config, env_var, '') if env_var else '') or None
+                provider_kwargs = dict(model=model, api_endpoint=api_endpoint, api_key=api_key, context_window=_NER_CONTEXT_WINDOW)
 
             try:
                 provider = create_llm_provider(
                     provider_type=provider_type,
-                    model=model,
-                    api_endpoint=api_endpoint,
-                    api_key=api_key,
-                    context_window=_NER_CONTEXT_WINDOW,
+                    **provider_kwargs,
                 )
             except Exception as e:
                 return jsonify({"error": f"Could not initialize provider '{provider_type}': {e}"}), 400

@@ -1,9 +1,8 @@
 """
 Generic webhook notifier for end-of-translation events.
 
-Configured via environment variables read at startup from .env (see src/config.py
-for the NOTIFY_* block). Settings are not hot-reloaded — restart the app after
-editing .env.
+Reads saved notification preferences for each send, falling back to legacy
+environment configuration when preferences have not been created.
 
 A single HTTP request is sent when a translation reaches a terminal state.
 All request failures are caught and logged; the notifier never raises, so a
@@ -22,17 +21,23 @@ logger = logging.getLogger(__name__)
 EVENT_SUCCESS = "success"
 EVENT_FAILURE = "failure"
 EVENT_INTERRUPTION = "interruption"
+EVENT_SYSTEM_PAUSED = "system_paused"
+EVENT_QUEUE_FINISHED = "queue_finished"
 
 _EVENT_FLAGS: Dict[str, str] = {
     EVENT_SUCCESS: "NOTIFY_ON_SUCCESS",
     EVENT_FAILURE: "NOTIFY_ON_FAILURE",
     EVENT_INTERRUPTION: "NOTIFY_ON_INTERRUPTION",
+    EVENT_SYSTEM_PAUSED: "NOTIFY_ON_INTERRUPTION",
+    EVENT_QUEUE_FINISHED: "NOTIFY_ON_SUCCESS",
 }
 
 _EVENT_TITLES: Dict[str, str] = {
     EVENT_SUCCESS: "Translation completed",
     EVENT_FAILURE: "Translation failed",
     EVENT_INTERRUPTION: "Translation interrupted",
+    EVENT_SYSTEM_PAUSED: "Translation paused by the system",
+    EVENT_QUEUE_FINISHED: "Translation queue finished",
 }
 
 _DEFAULT_METHOD = "POST"
@@ -89,6 +94,7 @@ def _build_payload(
     event: str,
     payload_context: Dict[str, Any],
     format_context: Dict[str, Any],
+    settings=None,
 ) -> Any:
     """Build the JSON body to send.
 
@@ -104,7 +110,7 @@ def _build_payload(
     rendered through str.format(**format_context). Otherwise the default
     gotify-compatible payload is returned.
     """
-    template = getattr(config, "NOTIFY_WEBHOOK_PAYLOAD", "") or ""
+    template = (settings or {}).get("payload", getattr(config, "NOTIFY_WEBHOOK_PAYLOAD", "")) or ""
     if not template.strip():
         return _build_default_payload(event, payload_context)
     try:
@@ -117,9 +123,11 @@ def _build_payload(
     return _render_json(parsed, format_context)
 
 
-def _parse_headers(context: Dict[str, Any]) -> Dict[str, str]:
+def _parse_headers(context: Dict[str, Any], settings=None) -> Dict[str, str]:
     """Parse NOTIFY_WEBHOOK_HEADERS as JSON and render value templates."""
-    raw = getattr(config, "NOTIFY_WEBHOOK_HEADERS", "") or ""
+    raw = (settings or {}).get("headers", getattr(config, "NOTIFY_WEBHOOK_HEADERS", "")) or ""
+    if isinstance(raw, dict):
+        return {str(k): _safe_format(str(v), context) for k, v in raw.items()}
     if not raw.strip():
         return {}
     try:
@@ -156,6 +164,22 @@ def known_events() -> Iterable[str]:
     return tuple(_EVENT_FLAGS.keys())
 
 
+def get_notification_settings():
+    from src.utils.preferences import read_existing_preferences
+    preferences = read_existing_preferences()
+    if preferences is not None:
+        return preferences.get("notifications", {})
+    return {
+        "enabled": True,
+        "url": getattr(config, "NOTIFY_WEBHOOK_URL", "") or "",
+        "method": getattr(config, "NOTIFY_WEBHOOK_METHOD", _DEFAULT_METHOD),
+        "headers": getattr(config, "NOTIFY_WEBHOOK_HEADERS", ""),
+        "payload": getattr(config, "NOTIFY_WEBHOOK_PAYLOAD", ""),
+        "timeout_seconds": getattr(config, "NOTIFY_TIMEOUT_SECONDS", _DEFAULT_TIMEOUT_SECONDS),
+        "events": [event for event in known_events() if _is_event_enabled(event)],
+    }
+
+
 def notify(event: str, context: Optional[Dict[str, Any]] = None) -> bool:
     """Send a webhook notification for a terminal translation event.
 
@@ -174,23 +198,27 @@ def notify(event: str, context: Optional[Dict[str, Any]] = None) -> bool:
         logger.warning("notify() called with unknown event %r; ignoring", event)
         return False
 
-    url = getattr(config, "NOTIFY_WEBHOOK_URL", "") or ""
+    try:
+        settings = get_notification_settings()
+    except (OSError, ValueError):
+        logger.warning("Cannot read notification preferences; notification skipped")
+        return False
+    url = settings.get("url", "")
     if not url:
         return False
-    if not _is_event_enabled(event):
+    if not settings.get("enabled", False) or event not in settings.get("events", []):
         return False
 
     ctx = dict(context or {})
     ctx.setdefault("event", event)
     format_ctx = _sanitize_format_context(ctx)
 
-    method = (getattr(config, "NOTIFY_WEBHOOK_METHOD", _DEFAULT_METHOD) or _DEFAULT_METHOD).upper()
-    timeout = getattr(config, "NOTIFY_TIMEOUT_SECONDS", _DEFAULT_TIMEOUT_SECONDS)
-    headers = _parse_headers(format_ctx)
-    payload = _build_payload(event, ctx, format_ctx)
-    rendered_url = _safe_format(url, format_ctx)
-
     try:
+        method = ((settings or {}).get("method", getattr(config, "NOTIFY_WEBHOOK_METHOD", _DEFAULT_METHOD)) or _DEFAULT_METHOD).upper()
+        timeout = (settings or {}).get("timeout_seconds", getattr(config, "NOTIFY_TIMEOUT_SECONDS", _DEFAULT_TIMEOUT_SECONDS))
+        headers = _parse_headers(format_ctx, settings)
+        payload = _build_payload(event, ctx, format_ctx, settings)
+        rendered_url = _safe_format(url, format_ctx)
         if method == "GET":
             response = requests.get(rendered_url, headers=headers, timeout=timeout)
         else:
@@ -202,9 +230,9 @@ def notify(event: str, context: Optional[Dict[str, Any]] = None) -> bool:
                 timeout=timeout,
             )
         response.raise_for_status()
-    except requests.RequestException as exc:
-        logger.warning("Webhook notification failed (%s): %s", event, exc)
+    except (requests.RequestException, ValueError, TypeError):
+        logger.warning("Webhook notification failed (%s)", event)
         return False
 
-    logger.debug("Webhook notification sent (%s) to %s", event, rendered_url)
+    logger.debug("Webhook notification sent (%s)", event)
     return True
