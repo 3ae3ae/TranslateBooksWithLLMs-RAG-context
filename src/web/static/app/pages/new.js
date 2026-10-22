@@ -6,11 +6,10 @@ import { toast } from '../ui/overlays.js';
 import { ModelPicker, ReasoningControl } from '../ui/model-picker.js';
 import { StyleDialog } from '../ui/style-dialog.js';
 import { QueuePausedNotice } from '../ui/jobs.js';
-import { GlossaryExtractDialog } from '../ui/glossary-extract.js';
 import { ConnectionDialog } from '../ui/connection-dialog.js';
 import {
-  draft, preferences, connections, connectionsLoaded, defaultConnection, glossaries, stylesList, notesList,
-  loadGlossaries, loadStyles, loadNotes, loadConnections, upsertJob,
+  draft, preferences, connections, connectionsLoaded, defaultConnection, stylesList, notesList,
+  loadStyles, loadNotes, loadConnections, upsertJob,
 } from '../lib/stores.js';
 import { uploadsApi, jobsApi, estimateApi } from '../lib/api.js';
 import { LANGUAGES, findLanguage } from '../lib/languages.js';
@@ -20,7 +19,6 @@ import { formatBytes, formatCost, formatNumber, formatDuration } from '../lib/fo
 import { displayName } from '../lib/names.js';
 
 const ACCEPT = '.epub,.docx,.txt,.srt';
-const BOOKISH = ['epub', 'docx', 'txt'];
 let localId = 0;
 
 function initialDraft(prefs) {
@@ -37,18 +35,14 @@ function initialDraft(prefs) {
     reasoning: p.default_reasoning || 'off',
     notes: {
       mode: p.notes_mode || 'build',
-      touched: false,
       source: '',
-      keepUpdating: true,
       series: false,
       name: '',
-      interval: p.notes_update_interval || 1,
       promptMaxTokens: p.notes_prompt_max_tokens ?? 1800,
       sourceMemoryChars: p.notes_source_memory_chars ?? 6000,
       consolidationInterval: p.notes_consolidation_interval ?? 5,
       acceptGender: p.notes_accept_gender_corrections ?? true,
     },
-    glossaryId: p.glossary_id || null,
     style: p.style || '',
     simplify: !!p.simplify_formatting,
     bilingual: !!p.bilingual,
@@ -77,7 +71,14 @@ function previewName(pattern, file, d) {
     .replaceAll('{ext}', ext);
 }
 
+// Translations always build or continue story notes; a polish can only read existing ones.
+export function notesMode(d) {
+  if (d.notes.mode === 'copy') return 'copy';
+  return d.task === 'polish' ? 'off' : 'build';
+}
+
 export function buildJobRequest(d) {
+  const mode = notesMode(d);
   return {
     task: d.task,
     polish_after: d.task === 'translate' && d.polishAfter,
@@ -88,18 +89,15 @@ export function buildJobRequest(d) {
     model: d.model,
     reasoning: d.reasoning,
     notes: {
-      mode: d.notes.mode,
-      source: d.notes.mode === 'copy' ? d.notes.source : undefined,
-      keep_updating: d.task === 'polish' ? false : d.notes.keepUpdating,
+      mode,
+      source: mode === 'copy' ? d.notes.source : undefined,
       series: d.notes.series,
       name: d.notes.name || undefined,
-      update_interval: d.notes.interval,
       prompt_max_tokens: d.notes.promptMaxTokens,
       source_memory_chars: d.notes.sourceMemoryChars,
       consolidation_interval: d.notes.consolidationInterval,
       accept_gender_corrections: d.notes.acceptGender,
     },
-    glossary_id: d.glossaryId || undefined,
     style: d.style || undefined,
     ocr_cleanup: d.ocr,
     simplify_formatting: d.simplify,
@@ -205,7 +203,7 @@ function startBlocker(d) {
   if (d.files.some((f) => f.status === 'error')) return t('new.reason.upload_failed');
   if (!d.target.trim()) return d.task === 'polish' ? t('new.reason.no_language') : t('new.reason.no_target');
   if (!d.model) return t('new.reason.no_model');
-  if (d.notes.mode === 'copy' && !d.notes.source) return t('new.reason.no_notes_source');
+  if (notesMode(d) === 'copy' && !d.notes.source) return t('new.reason.no_notes_source');
   return null;
 }
 
@@ -221,7 +219,6 @@ export function NewTranslationPage() {
     if (!draft.value && prefs) draft.value = initialDraft(prefs);
   }, [prefs]);
   useEffect(() => {
-    if (glossaries.value === null) loadGlossaries().catch(() => {});
     if (stylesList.value === null) loadStyles().catch(() => {});
     if (notesList.value === null) loadNotes().catch(() => {});
   }, []);
@@ -230,7 +227,7 @@ export function NewTranslationPage() {
   const update = useCallback((patch) => {
     draft.value = { ...draft.value, ...(typeof patch === 'function' ? patch(draft.value) : patch) };
   }, []);
-  const updateNotes = (patch) => update((cur) => ({ notes: { ...cur.notes, ...patch, touched: true } }));
+  const updateNotes = (patch) => update((cur) => ({ notes: { ...cur.notes, ...patch } }));
   const setFile = (id, patch) => update((cur) => ({ files: cur.files.map((f) => (f.localId === id ? { ...f, ...patch } : f)) }));
 
   const addFiles = useCallback((list) => {
@@ -255,14 +252,6 @@ export function NewTranslationPage() {
 
   const pageDrop = usePageDrop(addFiles, !!d);
   const est = useEstimate(d, !startBlocker(d));
-
-  // Default story-notes mode follows the file types until the user picks one.
-  useEffect(() => {
-    if (!d || d.notes.touched || !d.files.length) return;
-    const bookish = d.files.some((f) => BOOKISH.includes(f.file_type));
-    const mode = bookish ? (prefs && prefs.notes_mode) || 'build' : 'off';
-    if (mode !== d.notes.mode) draft.value = { ...d, notes: { ...d.notes, mode } };
-  }, [d && d.files.map((f) => f.file_type).join(',')]);
 
   // Pick the default model once connections are known.
   useEffect(() => {
@@ -291,7 +280,8 @@ export function NewTranslationPage() {
   const hasLayout = types.has('epub') || types.has('docx');
   const hasSrt = types.has('srt');
   const multi = d.files.length > 1;
-  const notesOn = d.notes.mode !== 'off';
+  const mode = notesMode(d);
+  const notesOn = mode !== 'off';
   const conn = connections.value.find((c) => c.id === d.connectionId);
   const usable = connections.value.length > 0;
 
@@ -318,23 +308,13 @@ export function NewTranslationPage() {
 
   const onKey = (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') start(); };
 
-  const glossaryOptions = [{ value: '', label: t('common.none') }, ...((glossaries.value || []).map((g) => ({
-    value: String(g.id),
-    label: `${g.name} · ${t('glossary.term_count', { count: g.term_count ?? g.terms_count ?? 0, n: formatNumber(g.term_count ?? g.terms_count ?? 0) })}`,
-  })))];
-  const selectedGlossary = (glossaries.value || []).find((g) => String(g.id) === String(d.glossaryId));
-  const glossaryMismatch = selectedGlossary && d.target && selectedGlossary.target_lang
-    && selectedGlossary.target_lang.toLowerCase() !== d.target.toLowerCase();
   const styleOptions = [{ value: '', label: t('common.none') }, ...((stylesList.value || []).map((s) => ({ value: s.name, label: s.display_name || displayName(s.name) })))];
   const noteOptions = [{ value: '', label: t('new.notes.pick') }, ...((notesList.value || []).map((n) => ({ value: n.name, label: displayName(n.name) })))];
 
-  const interval = d.notes.interval || 1;
-  const notesCost = t('new.notes.cost');
 
   const chips = [];
   if (!polish && d.polishAfter) chips.push(t('new.chip.polish'));
-  if (notesOn) chips.push(d.notes.mode === 'build' ? t('new.chip.notes_build') : t('new.chip.notes_copy'));
-  if (selectedGlossary) chips.push(t('new.chip.glossary', { name: selectedGlossary.name }));
+  if (notesOn) chips.push(mode === 'build' ? t('new.chip.notes_build') : t('new.chip.notes_copy'));
   if (d.style) chips.push(t('new.chip.style', { name: displayName(d.style) }));
   if (hasLayout && d.simplify) chips.push(t('new.chip.simplify'));
   if (d.bilingual) chips.push(t('new.chip.bilingual'));
@@ -412,28 +392,14 @@ export function NewTranslationPage() {
             <div class="stack" style="--gap:10px">
               <h3>${t('new.notes.title')}</h3>
               <p class="small muted">${t('new.notes.explain')}</p>
-              <${ChoiceGroup} label=${t('new.notes.title')} value=${d.notes.mode} onChange=${(v) => updateNotes({ mode: v })} options=${[
-                { value: 'build', title: t('new.notes.build'), desc: t('new.notes.build_desc'), icon: 'notebook-pen', disabled: polish },
-                { value: 'copy', title: t('new.notes.copy'), desc: t('new.notes.copy_desc'), icon: 'copy' },
-                { value: 'off', title: t('new.notes.off'), desc: t('new.notes.off_desc'), icon: 'minus' },
-              ]} />
-              ${d.notes.mode === 'copy' && html`<div class="field-grid">
-                <${Field} label=${t('new.notes.source')} htmlFor="notes-source">
-                  <${Select} id="notes-source" value=${d.notes.source} options=${noteOptions} onChange=${(v) => updateNotes({ source: v })} />
-                <//>
-                ${!polish && html`<div class="stack" style="--gap:2px;align-self:end">
-                  <${Checkbox} checked=${d.notes.keepUpdating} onChange=${(v) => updateNotes({ keepUpdating: v })}
-                    label=${html`<span>${t('new.notes.keep_updating')}</span>`} />
-                  <span class="field__help">${t('new.notes.keep_updating_desc')}</span>
-                </div>`}
-              </div>`}
-              ${notesOn && !polish && (d.notes.mode === 'build' || d.notes.keepUpdating) && html`<div class="row row--wrap" style="--gap:12px">
-                <${Field} label=${t('new.notes.interval')} htmlFor="notes-interval">
-                  <${NumberInput} id="notes-interval" min=${1} max=${50} value=${interval} onCommit=${(v) => updateNotes({ interval: v || 1 })}
-                    suffix=${t('new.notes.interval_suffix')} />
-                <//>
-                <span class="small muted" style="align-self:end;padding-bottom:9px">${notesCost}</span>
-              </div>`}
+              <${ChoiceGroup} label=${t('new.notes.title')} value=${mode} cols=${2} onChange=${(v) => updateNotes({ mode: v })} options=${polish
+                ? [{ value: 'copy', title: t('new.notes.copy'), desc: t('new.notes.copy_polish_desc'), icon: 'copy' },
+                  { value: 'off', title: t('new.notes.off'), desc: t('new.notes.off_desc'), icon: 'minus' }]
+                : [{ value: 'build', title: t('new.notes.build'), desc: t('new.notes.build_desc'), icon: 'notebook-pen' },
+                  { value: 'copy', title: t('new.notes.copy'), desc: t('new.notes.copy_desc'), icon: 'copy' }]} />
+              ${mode === 'copy' && html`<${Field} label=${t('new.notes.source')} htmlFor="notes-source">
+                <${Select} id="notes-source" value=${d.notes.source} options=${noteOptions} onChange=${(v) => updateNotes({ source: v })} />
+              <//>`}
               ${notesOn && multi && html`<${Field} label=${t('new.notes.multi')}>
                 <${Segmented} label=${t('new.notes.multi')} value=${d.notes.series ? 'series' : 'separate'}
                   onChange=${(v) => updateNotes({ series: v === 'series' })} options=${[
@@ -445,15 +411,6 @@ export function NewTranslationPage() {
             </div>
 
             <div class="field-grid">
-              <${Field} label=${t('new.glossary.label')} htmlFor="glossary-select"
-                help=${glossaryMismatch ? null : t('new.glossary.help')}
-                error=${glossaryMismatch ? t('new.glossary.mismatch', { lang: selectedGlossary.target_lang }) : null}
-                labelExtra=${html`<${Button} variant="link" class="small" disabled=${!d.files.some((f) => f.status === 'ready')}
-                  title=${d.files.some((f) => f.status === 'ready') ? undefined : t('new.reason.no_files')}
-                  onClick=${() => setDialog({ kind: 'extract' })}>${t('new.glossary.extract')}<//>`}>
-                <${Select} id="glossary-select" value=${d.glossaryId ? String(d.glossaryId) : ''} options=${glossaryOptions}
-                  onChange=${(v) => update({ glossaryId: v ? Number(v) : null })} />
-              <//>
               <${Field} label=${t('new.style.label')} htmlFor="style-select" help=${t('new.style.help')}
                 labelExtra=${html`<span class="row" style="--gap:12px">
                   ${d.style && html`<${Button} variant="link" class="small" href=${`#/styles/${encodeURIComponent(d.style)}`}>${t('common.edit')}<//>`}
@@ -538,7 +495,7 @@ export function NewTranslationPage() {
             <div class="summary__title">${t('new.summary.estimate')}</div>
             <${EstimateBlock} est=${est} />
           </div>
-          ${notesOn && !polish && (d.notes.mode === 'build' || d.notes.keepUpdating) && html`<div class="summary__block">
+          ${notesOn && !polish && html`<div class="summary__block">
             <div class="row small muted" style="align-items:flex-start"><${Icon} name="info" size="sm" />${t('new.summary.notes_sequential')}</div>
           </div>`}
           <div class="summary__actions">
@@ -556,11 +513,6 @@ export function NewTranslationPage() {
 
     ${dialog && dialog.kind === 'style' && html`<${StyleDialog} onClose=${() => setDialog(null)}
       onSaved=${(name) => { loadStyles(); update({ style: name }); }} />`}
-    ${dialog && dialog.kind === 'extract' && html`<${GlossaryExtractDialog}
-      file=${d.files.find((f) => f.status === 'ready')}
-      sourceLanguage=${d.source} targetLanguage=${d.target}
-      onClose=${() => setDialog(null)}
-      onCreated=${(g) => { loadGlossaries(); update({ glossaryId: g.id }); }} />`}
     ${dialog && dialog.kind === 'connection' && html`<${ConnectionDialog} onClose=${() => setDialog(null)} onSaved=${() => loadConnections()} />`}
   </div>`;
 }

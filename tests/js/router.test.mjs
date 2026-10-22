@@ -14,8 +14,7 @@ test('default and all design routes match', () => {
     defineRoutes([
         { name: 'translations', pattern: '/translations' }, { name: 'new', pattern: '/new' },
         { name: 'job', pattern: '/job/:id' }, { name: 'job_tab', pattern: '/job/:id/:tab' },
-        { name: 'compare', pattern: '/compare' }, { name: 'glossaries', pattern: '/glossaries' },
-        { name: 'glossary', pattern: '/glossaries/:id' }, { name: 'notes', pattern: '/notes' },
+        { name: 'compare', pattern: '/compare' }, { name: 'notes', pattern: '/notes' },
         { name: 'note', pattern: '/notes/:name' }, { name: 'styles', pattern: '/styles' },
         { name: 'style', pattern: '/styles/:name' }, { name: 'settings', pattern: '/settings/:section' },
     ]);
@@ -23,9 +22,9 @@ test('default and all design routes match', () => {
     assert.equal(route.value.name, 'translations');
     const examples = [
         ['/translations', 'translations'], ['/new', 'new'], ['/job/42', 'job'], ['/job/42/log', 'job_tab'],
-        ['/compare', 'compare'], ['/glossaries', 'glossaries'], ['/glossaries/7', 'glossary'], ['/notes', 'notes'],
+        ['/compare', 'compare'], ['/notes', 'notes'],
         ['/notes/book', 'note'], ['/styles', 'styles'], ['/styles/book', 'style'],
-        ['/settings/notifications', 'settings'], ['/settings', 'settings'],
+        ['/settings/appearance', 'settings'], ['/settings', 'settings'],
     ];
     for (const [path, name] of examples) {
         navigate(path);

@@ -33,17 +33,17 @@ When something goes wrong, the translation's **Log** tab usually says why. The s
 
 ## During a translation
 
-**It keeps hitting rate limits.** Add more API keys from different accounts to the connection (one per line), lower **Requests at once**, or set **When the service limits requests** to *Wait and continue automatically*. On a daily quota, automatic waiting can last until the quota resets; pause it or use **Change model and resume…** instead. See [MODEL_CONNECTIONS.md](MODEL_CONNECTIONS.md#rate-limits).
+**It keeps hitting rate limits.** Add more API keys from different accounts to the connection (one per line), or set **When the service limits requests** to *Wait and continue automatically*. On a daily quota, automatic waiting can last until the quota resets; pause it or use **Change model and resume…** instead. See [MODEL_CONNECTIONS.md](MODEL_CONNECTIONS.md#rate-limits).
 
-**It's slow.** Local models translate one passage at a time. Story notes that update while translating also force one request at a time, and each update is an extra request; raise **Update every** to update less often. For cloud services without story-note updates, raise **Requests at once** in the connection.
+**It's slow.** Passages are translated one at a time, because each one needs the story notes as updated by the one before, and each notes update is an extra request. A faster model, or a larger **Passage size** under **Advanced** (fewer, longer requests), helps most.
 
 **Passages were left untranslated, or formatting is slightly off.** The translation finishes as *Done · some passages failed* and lists the passages. **Retry failed passages** redoes only those. If the same passages keep failing, they often have complex inline formatting: start again with **Simplify formatting**, a smaller **Passage size**, or a different model.
 
-**The local model runs out of context or repeats itself.** Each request holds the passage, the instructions, the relevant story notes and glossary entries, and room for the answer. Lower **Passage size** or **Notes sent per request** under **Advanced**, or use a model with a larger context. For Ollama, `OLLAMA_NUM_CTX` in `.env` sets the context size, and the app enlarges it when a request needs more.
+**The local model runs out of context or repeats itself.** Each request holds the passage, the instructions, the relevant story notes, and room for the answer. Lower **Passage size** or **Notes sent per request** under **Advanced**, or use a model with a larger context. For Ollama, `OLLAMA_NUM_CTX` in `.env` sets the context size, and the app enlarges it when a request needs more.
 
 **Reasoning "Off" seems ignored.** Some models always reason, and some services ignore the setting. The app sends the closest thing each service has; see [MODEL_CONNECTIONS.md](MODEL_CONNECTIONS.md#reasoning).
 
-**I changed a connection, glossary or style guide, but the translation didn't change.** A translation keeps the settings it started with. Only API keys are read fresh when it resumes. To use different settings, start a new translation, or use **Change model and resume…** for the model.
+**I changed a connection or style guide, but the translation didn't change.** A translation keeps the settings it started with. Only API keys are read fresh when it resumes. To use different settings, start a new translation, or use **Change model and resume…** for the model.
 
 **A translation shows "Paused (connection removed)".** Its connection was deleted. Pick another model with **Change model and resume…**.
 
@@ -58,7 +58,3 @@ When something goes wrong, the translation's **Log** tab usually says why. The s
 **Scanned PDFs or images.** The app doesn't read PDFs or images. Extract the text first; **Fix scan errors (OCR)** then fixes recognition errors and broken lines while translating.
 
 **Where is my translation?** In `translated_files/`, or the folder set with `OUTPUT_DIR`. **Open output folder** on the translation list opens it. An interrupted EPUB is saved with a `[partial]` prefix.
-
-## Notifications
-
-**The test notification doesn't arrive.** Save first: the test uses the saved settings. Make sure **Send notifications** is on and the address is right. The app logs only that a notification failed, not why; try the address with `curl` to see the service's answer. Placeholders must sit inside JSON strings; see [NOTIFICATIONS.md](NOTIFICATIONS.md#placeholders).

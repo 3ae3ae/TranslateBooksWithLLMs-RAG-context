@@ -1,6 +1,6 @@
 // App-wide state as signals. Pages read these; loaders refresh them from the API.
 import { signal, computed } from '../../vendor/signals-core.mjs';
-import { connectionsApi, preferencesApi, jobsApi, queueApi, glossariesApi, notesApi, stylesApi } from './api.js';
+import { connectionsApi, preferencesApi, jobsApi, queueApi, notesApi, stylesApi } from './api.js';
 
 // ---------------------------------------------------------------- theme
 const THEME_KEY = 'tbl.theme';
@@ -139,15 +139,9 @@ export const jobGroups = computed(() => {
 });
 
 // ----------------------------------------------------------- resources
-export const glossaries = signal(null);
 export const notesList = signal(null);
 export const stylesList = signal(null);
 
-export async function loadGlossaries() {
-  const r = await glossariesApi.list();
-  glossaries.value = r.glossaries || r || [];
-  return glossaries.value;
-}
 export async function loadNotes() {
   const r = await notesApi.list();
   notesList.value = r.notes || r || [];

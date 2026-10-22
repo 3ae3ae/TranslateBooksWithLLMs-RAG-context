@@ -2,7 +2,7 @@
 
 A web app that runs on your own computer and translates **EPUB, DOCX, TXT and SRT** files with a language model: a local one through Ollama or LM Studio, or a cloud service such as OpenAI, Gemini, OpenRouter, Ollama Cloud or Neuralwatt.
 
-It is built for long fiction. As it translates, it keeps **story notes** on characters, genders, nicknames, terms and how people address each other, and the model reads them before every passage, so chapter 40 still matches chapter 1. Glossaries pin down names that must never change, style guides add your own instructions, and a queue runs whole series overnight.
+It is built for long fiction. As it translates, it keeps **story notes** on characters, genders, nicknames, terms and how people address each other, and the model reads them before every passage, so chapter 40 still matches chapter 1. Style guides add your own instructions, and a queue runs whole series overnight.
 
 ## Quick start
 
@@ -36,12 +36,10 @@ The interface is in English and Korean; switch with the language button at the b
 | Translate, or polish | Translate a book, polish an existing translation, or translate and then polish in a second pass. |
 | Formatting | EPUB and DOCX keep their formatting, or you can simplify it so far fewer passages fail. SRT timings are kept. An optional bilingual output puts the original under each paragraph. |
 | [Story notes](docs/STORY_NOTES.md) | Notes the model builds and updates while translating. Start from an earlier volume's notes, view the notes as of any passage, and correct them mid-book. |
-| [Glossaries](docs/GLOSSARY.md) | Fixed translations for names and terms, enforced on every passage. Import, export, or extract candidates from a book with a model. |
 | Style guides | Your own instructions for translating and for polishing, such as keeping honorifics or how friends talk to each other. |
 | Compare models | Run several models on the same excerpts of your book and compare quality, speed and price before committing to one. |
 | Queue | Translations run one at a time in the order you choose. They survive restarts, can switch to another model halfway, and can translate the new chapters of an updated book without redoing the rest. |
 | Reasoning control | Set how much each model thinks before answering (off, low, medium, high, or the service default), mapped to each service's own parameter. |
-| [Notifications](docs/NOTIFICATIONS.md) | A message to your phone (ntfy, gotify), Discord, Slack or any web address when a translation finishes, fails or pauses. |
 
 ## Model services
 
@@ -68,11 +66,10 @@ If you used this project before and have API keys in a `.env` file, they are imp
 | Path | Contents |
 |---|---|
 | `TranslateBook_Data/connections.json` | Model connections, **including API keys in plain text** |
-| `TranslateBook_Data/settings.json` | New-translation defaults and notification settings, including the webhook address |
+| `TranslateBook_Data/settings.json` | New-translation defaults |
 | `TranslateBook_Data/Novel_Contexts/` | Story notes, one `.txt` file each |
 | `TranslateBook_Data/Custom_Instructions/` | Style guides, one `.yaml` file each |
 | `data/jobs.db`, `data/uploads/`, `data/logs/` | Translation jobs, their source copies and passages, and logs |
-| `data/glossaries.db` | Glossaries |
 | `translated_files/` | Finished translations (change with `OUTPUT_DIR` in `.env`) |
 
 All of these are git-ignored. Back up `TranslateBook_Data/` and `data/` together. The two JSON files hold secrets: they are written readable by your user only, and should not be shared.
@@ -83,8 +80,6 @@ All of these are git-ignored. Back up `TranslateBook_Data/` and `data/` together
 |---|---|
 | [docs/MODEL_CONNECTIONS.md](docs/MODEL_CONNECTIONS.md) | Services, addresses, multiple keys, reasoning, rate limits, costs |
 | [docs/STORY_NOTES.md](docs/STORY_NOTES.md) | How story notes work, the options, and fixing them mid-book |
-| [docs/GLOSSARY.md](docs/GLOSSARY.md) | Glossaries: matching rules, import and export, extracting terms from a book |
-| [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md) | Webhook notifications |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common problems and fixes |
 
 ## License

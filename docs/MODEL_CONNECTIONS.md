@@ -39,7 +39,6 @@ Click **Add a connection**, choose the service, and fill in:
 | API key | One per line. See [Several API keys](#several-api-keys). |
 | Runs on this computer | Set automatically for `localhost`, `127.0.0.1`, `::1` and `*.local` addresses. Turn it on for a model on another machine in your network if you want it treated as local. |
 | Default model | Preselected for new translations. |
-| Requests at once | Passages sent in parallel. Default 4, or 1 for local models. Passages translated at the same time can't see each other, and story notes that update during translation force one at a time anyway. |
 | Response timeout | How long to wait for one answer before retrying. Default 300 s, or 900 s for local models. |
 | Attempts per request | Including the first try. Default 2. |
 | When the service limits requests | *Wait and continue automatically* or *Pause until I resume*. See [Rate limits](#rate-limits). |
@@ -90,7 +89,7 @@ Before you start a translation, the summary counts the requests from the book's 
 
 ## How jobs use connections
 
-A translation stores its settings when it is created: model, reasoning, request settings, glossary, style guide and story-notes options. Editing a connection later doesn't change queued or running translations. Only the API keys are read fresh each time a translation starts or resumes, so a replaced key takes effect on the next resume.
+A translation stores its settings when it is created: model, reasoning, request settings, style guide and story-notes options. Editing a connection later doesn't change queued or running translations. Only the API keys are read fresh each time a translation starts or resumes, so a replaced key takes effect on the next resume.
 
 If you delete a connection that a translation uses, that translation pauses until you pick another model with **Change model and resume…**. Deleting the default connection makes Local Ollama the default.
 

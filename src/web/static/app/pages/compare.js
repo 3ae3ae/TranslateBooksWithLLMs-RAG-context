@@ -4,7 +4,7 @@ import { Field, NumberInput, Segmented, Select } from '../ui/forms.js';
 import { PageHeader, Section, Dropzone } from '../ui/layout.js';
 import { toast } from '../ui/overlays.js';
 import { ModelPicker, ReasoningControl } from '../ui/model-picker.js';
-import { draft, preferences, glossaries, stylesList, notesList, loadGlossaries, loadStyles, loadNotes, savePreferences } from '../lib/stores.js';
+import { draft, preferences, stylesList, notesList, loadStyles, loadNotes, savePreferences } from '../lib/stores.js';
 import { compareApi, uploadsApi } from '../lib/api.js';
 import { onSocket } from '../lib/socket.js';
 import { navigate } from '../lib/router.js';
@@ -26,7 +26,7 @@ function fromDraft() {
     source: d.source, target: d.target,
     mode: d.task === 'polish' ? 'refine' : d.polishAfter ? 'translate_refine' : 'translate',
     maxChars: Math.min(2000, Math.max(200, (d.passageTokens || 450) * 4)),
-    glossaryId: d.glossaryId, notes: d.notes.mode === 'copy' ? d.notes.source : '',
+    notes: d.notes.mode === 'copy' ? d.notes.source : '',
     columns: [newColumn({ connectionId: d.connectionId, model: d.model, reasoning: d.reasoning, style: d.style })],
   };
 }
@@ -58,7 +58,6 @@ function CompareForm({ query }) {
   const [mode, setMode] = useState(init ? init.mode : 'translate');
   const [n, setN] = useState(5);
   const [maxChars, setMaxChars] = useState(init ? init.maxChars : 1200);
-  const [glossaryId, setGlossaryId] = useState(init ? init.glossaryId : null);
   const [notes, setNotes] = useState(init ? init.notes : '');
   const [columns, setColumns] = useState(init ? init.columns : [newColumn({ connectionId: prefs.default_connection_id, model: prefs.default_model })]);
   const [items, setItems] = useState(null);
@@ -70,7 +69,6 @@ function CompareForm({ query }) {
   runRef.current = run;
 
   useEffect(() => {
-    if (glossaries.value === null) loadGlossaries().catch(() => {});
     if (stylesList.value === null) loadStyles().catch(() => {});
     if (notesList.value === null) loadNotes().catch(() => {});
   }, []);
@@ -124,7 +122,7 @@ function CompareForm({ query }) {
         file_path: file.file_path, file_type: file.file_type,
         source_language: mode === 'refine' ? target : source, target_language: target,
         mode, n_samples: n, max_chars: maxChars, items,
-        glossary_id: glossaryId || undefined, notes: notes || undefined,
+        notes: notes || undefined,
         columns: columns.map((c) => ({ connection_id: c.connectionId, model: c.model, reasoning: c.reasoning, style: c.style || undefined })),
       });
       if (r.items) setItems(r.items);
@@ -192,10 +190,6 @@ function CompareForm({ query }) {
           ]} />
         <//>
         <div class="field-grid">
-          <${Field} label=${t('new.glossary.label')} htmlFor="cmp-glossary">
-            <${Select} id="cmp-glossary" value=${glossaryId ? String(glossaryId) : ''} onChange=${(v) => setGlossaryId(v ? Number(v) : null)}
-              options=${[{ value: '', label: t('common.none') }, ...((glossaries.value || []).map((g) => ({ value: String(g.id), label: g.name })))]} />
-          <//>
           <${Field} label=${t('compare.notes')} htmlFor="cmp-notes" help=${t('compare.notes_help')}>
             <${Select} id="cmp-notes" value=${notes} onChange=${setNotes}
               options=${[{ value: '', label: t('common.none') }, ...((notesList.value || []).map((x) => ({ value: x.name, label: displayName(x.name) })))]} />

@@ -59,7 +59,6 @@ function PassagePair({ preview, job }) {
 
 function SettingsUsed({ config, job }) {
   if (!config) return null;
-  const notes = config.notes || {};
   const rows = [
     [t('job.used.source_file'), job.input_filename],
     [t('job.used.output_file'), config.output_path || job.output_filename],
@@ -68,14 +67,11 @@ function SettingsUsed({ config, job }) {
     [t('reasoning.label'), t(`reasoning.${job.reasoning || 'off'}`)],
     [t('job.used.task'), job.task === 'polish' ? t('new.task.polish') : job.polish_after ? t('job.used.translate_polish') : t('new.task.translate')],
     [t('new.notes.title'), job.notes_name ? html`<a href=${`#/notes/${encodeURIComponent(job.notes_name)}`}>${job.notes_name}</a>` : t('new.notes.off')],
-    notes.update_interval && [t('new.notes.interval'), formatNumber(notes.update_interval)],
-    [t('new.glossary.label'), config.glossary_name || (config.glossary_id ? `#${config.glossary_id}` : t('common.none'))],
     [t('new.style.label'), config.style || t('common.none')],
     [t('new.output.formatting'), config.simplify_formatting ? t('new.output.simplify') : t('new.output.keep')],
     [t('new.output.bilingual'), config.bilingual ? t('common.yes') : t('common.no')],
     [t('new.files.ocr'), config.ocr_cleanup ? t('common.yes') : t('common.no')],
     [t('new.advanced.passage'), formatNumber(config.passage_tokens || 0)],
-    [t('connection.field.parallel'), formatNumber(config.parallel_requests || 1)],
     [t('job.used.created'), job.created_at && formatDate(job.created_at, { dateStyle: 'medium', timeStyle: 'short' })],
     [t('job.used.id'), html`<span class="mono small">${job.id}</span>`],
   ].filter(Boolean);

@@ -69,7 +69,6 @@ export function ConnectionDialog({ connection, onClose, onSaved }) {
     local: !!connection.local,
     localTouched: true,
     default_model: connection.default_model || '',
-    parallel_requests: connection.parallel_requests,
     request_timeout: connection.request_timeout,
     max_attempts: connection.max_attempts,
     rate_limit_behavior: connection.rate_limit_behavior || 'retry',
@@ -96,7 +95,6 @@ export function ConnectionDialog({ connection, onClose, onSaved }) {
       local,
       localTouched: false,
       default_model: '',
-      parallel_requests: local ? 1 : 4,
       request_timeout: local ? 900 : 300,
       max_attempts: 2,
       rate_limit_behavior: 'retry',
@@ -121,7 +119,7 @@ export function ConnectionDialog({ connection, onClose, onSaved }) {
     const body = {
       name: form.name.trim(), type: type.type, base_url: form.base_url.trim() || undefined,
       default_model: form.default_model || undefined, local: form.local,
-      parallel_requests: form.parallel_requests, request_timeout: form.request_timeout,
+      request_timeout: form.request_timeout,
       max_attempts: form.max_attempts, rate_limit_behavior: form.rate_limit_behavior,
       rate_limit_retry_seconds: form.rate_limit_retry_seconds, temperature: form.temperature,
     };
@@ -239,9 +237,6 @@ export function ConnectionDialog({ connection, onClose, onSaved }) {
             <${TextInput} id="conn-url-adv" value=${form.base_url} onInput=${(v) => set({ base_url: v })} placeholder=${type.default_base_url} spellcheck="false" />
           <//>`}
           <div class="field-grid">
-            <${Field} label=${t('connection.field.parallel')} htmlFor="conn-par" help=${form.local ? t('connection.field.parallel_local') : t('connection.field.parallel_help')}>
-              <${NumberInput} id="conn-par" min=${1} max=${16} value=${form.parallel_requests} onCommit=${(v) => set({ parallel_requests: v || 1 })} />
-            <//>
             <${Field} label=${t('connection.field.timeout')} htmlFor="conn-timeout" help=${t('connection.field.timeout_help')}>
               <${NumberInput} id="conn-timeout" min=${10} max=${3600} value=${form.request_timeout} onCommit=${(v) => set({ request_timeout: v || 300 })} suffix=${t('common.seconds')} />
             <//>

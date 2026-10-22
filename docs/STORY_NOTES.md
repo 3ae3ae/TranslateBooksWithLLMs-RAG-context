@@ -15,17 +15,14 @@ A model translating passage 40 has never seen passages 1 to 39. Without help it 
 
 The first four are **book-wide**: they hold for the whole book. The last two **change as the story goes on**, so the app keeps a snapshot of the notes after every update. That's what lets you look at, and correct, the notes as they were at any passage.
 
-A [glossary](GLOSSARY.md) is different: its entries are fixed translations you set yourself, and they win over the notes.
-
 ## Choosing how to use notes
 
 In **New translation → Consistency → Story notes**:
 
 - **Build as I go** creates notes for this book and updates them while translating. The notes are saved in your library under the book's name.
-- **Start from existing notes** begins with notes from an earlier book or volume. The translation works on its own copy, so the original notes never change. With **Update the notes while translating** off, the notes are only read, which costs no extra requests.
-- **Don't use notes** translates each passage on its own. This is the default for subtitles.
+- **Start from existing notes** begins with notes from an earlier book or volume. The translation works on its own copy and keeps updating it, so the original notes never change.
 
-When polishing an existing translation, you can give it notes to read but not update them.
+Every translation uses story notes, subtitles included. When polishing an existing translation, you can give it existing notes to read (they aren't updated) or polish without notes.
 
 ### Several files
 
@@ -36,7 +33,7 @@ With more than one file, choose:
 
 ### Cost and speed
 
-Each notes update is one extra request, and while notes are being updated, passages are translated one at a time, because each passage needs the notes from the one before. **Update every** (default: every passage) trades consistency for fewer requests.
+The notes are updated after every passage. Each update is one extra request, and passages are translated one at a time, because each passage needs the notes from the one before.
 
 More options are under **Advanced → Story notes**:
 

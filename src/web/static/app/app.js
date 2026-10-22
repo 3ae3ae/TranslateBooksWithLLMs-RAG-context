@@ -8,7 +8,6 @@ import { TranslationsPage } from './pages/translations.js';
 import { NewTranslationPage } from './pages/new.js';
 import { JobPage } from './pages/job.js';
 import { ComparePage } from './pages/compare.js';
-import { GlossariesPage, GlossaryPage } from './pages/glossaries.js';
 import { NotesPage, NotePage } from './pages/notes.js';
 import { StylesPage, StylePage } from './pages/styles.js';
 import { SettingsPage } from './pages/settings.js';
@@ -19,8 +18,6 @@ export const ROUTES = [
   { name: 'job', pattern: '/job/:id' },
   { name: 'job_tab', pattern: '/job/:id/:tab' },
   { name: 'compare', pattern: '/compare' },
-  { name: 'glossaries', pattern: '/glossaries' },
-  { name: 'glossary', pattern: '/glossaries/:id' },
   { name: 'notes', pattern: '/notes' },
   { name: 'note', pattern: '/notes/:name' },
   { name: 'styles', pattern: '/styles' },
@@ -31,7 +28,6 @@ export const ROUTES = [
 const NAV = [
   { id: 'translations', href: '#/translations', icon: 'library', label: () => t('nav.translations'), match: ['translations', 'job', 'job_tab'] },
   { id: 'compare', href: '#/compare', icon: 'scale', label: () => t('nav.compare'), match: ['compare'] },
-  { id: 'glossaries', href: '#/glossaries', icon: 'book-a', label: () => t('nav.glossaries'), match: ['glossaries', 'glossary'] },
   { id: 'notes', href: '#/notes', icon: 'notebook-pen', label: () => t('nav.notes'), match: ['notes', 'note'] },
   { id: 'styles', href: '#/styles', icon: 'feather', label: () => t('nav.styles'), match: ['styles', 'style'] },
   { id: 'settings', href: '#/settings/connections', icon: 'settings', label: () => t('nav.settings'), match: ['settings'] },
@@ -125,8 +121,6 @@ function CurrentPage() {
     case 'job': return html`<${JobPage} id=${r.params.id} tab="progress" />`;
     case 'job_tab': return html`<${JobPage} id=${r.params.id} tab=${r.params.tab} />`;
     case 'compare': return html`<${ComparePage} query=${r.query} />`;
-    case 'glossaries': return html`<${GlossariesPage} />`;
-    case 'glossary': return html`<${GlossaryPage} id=${r.params.id} />`;
     case 'notes': return html`<${NotesPage} />`;
     case 'note': return html`<${NotePage} name=${r.params.name} />`;
     case 'styles': return html`<${StylesPage} />`;

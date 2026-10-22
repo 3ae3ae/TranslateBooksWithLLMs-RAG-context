@@ -88,28 +88,6 @@ export const stylesApi = {
   duplicate: (name, newName) => post(`/api/styles/${enc(name)}/duplicate`, { name: newName }),
 };
 
-// ---- glossaries (existing API)
-export const glossariesApi = {
-  list: () => get('/api/glossaries'),
-  get: (id) => get(`/api/glossaries/${enc(id)}`),
-  create: (body) => post('/api/glossaries', body),
-  update: (id, body) => put(`/api/glossaries/${enc(id)}`, body),
-  remove: (id) => del(`/api/glossaries/${enc(id)}`),
-  duplicate: (id) => post(`/api/glossaries/${enc(id)}/duplicate`, {}),
-  addTerm: (id, body) => post(`/api/glossaries/${enc(id)}/terms`, body),
-  updateTerm: (id, termId, body) => put(`/api/glossaries/${enc(id)}/terms/${enc(termId)}`, body),
-  removeTerm: (id, termId) => del(`/api/glossaries/${enc(id)}/terms/${enc(termId)}`),
-  bulk: (id, body) => post(`/api/glossaries/${enc(id)}/terms/bulk`, body),
-  importFile: (id, file, mode) => {
-    const form = new FormData();
-    form.append('file', file);
-    return request('POST', `/api/glossaries/${enc(id)}/import`, { form, query: { mode } });
-  },
-  exportPath: (id, format) => `/api/glossaries/${enc(id)}/export?format=${enc(format)}`,
-  previewBlock: (id, text) => post(`/api/glossaries/${enc(id)}/preview-block`, { text }),
-  suggestTerms: (id, form) => request('POST', `/api/glossaries/${enc(id)}/suggest-terms`, { form }),
-};
-
 // ---- compare (sample)
 export const compareApi = {
   initialize: (body) => post('/api/sample/initialize', body),
@@ -122,10 +100,6 @@ export const compareApi = {
 // ---- misc
 export const foldersApi = {
   open: (which) => post(`/api/folders/${enc(which)}/open`, {}),
-};
-
-export const notificationsApi = {
-  test: (event = 'success') => post('/api/notifications/test', { event }),
 };
 
 export const healthApi = {

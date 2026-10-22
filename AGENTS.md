@@ -13,7 +13,7 @@ Code, identifiers, comments, and docstrings are in English, matching the existin
 ## Secrets
 
 - Never put an API key, token, password, or secret-bearing URL in a source file, test, script, comment, doc, or commit message, not even temporarily.
-- The web app stores model API keys and webhook secrets in `TranslateBook_Data/connections.json` and `settings.json` (git-ignored, mode 0600) and never returns them from the API. If a value is missing, ask or fail with a clear message; never invent one.
+- The web app stores model API keys in `TranslateBook_Data/connections.json` (git-ignored, mode 0600) and never returns them from the API. If a value is missing, ask or fail with a clear message; never invent one.
 - Real API keys may be set in your shell. Run tests and the app with a clean environment, `env -i PATH="$PATH" HOME="$HOME" uv run …`, so nothing reaches a paid service by accident, and never print environment variables.
 - Docs and tests use inert placeholders such as `YOUR_API_KEY_HERE` or `sk-xxxxxxxx`.
 - Before proposing a commit, check the diff for key-like literals (long base64/hex, `sk-`, `Bearer`, `ghp_`, `AKIA`, a non-empty `api_key`/`token`/`secret`) and alert the user if any appear.
