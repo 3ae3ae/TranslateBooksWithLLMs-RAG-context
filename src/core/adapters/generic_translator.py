@@ -31,8 +31,8 @@ class GenericTranslator:
     """
     Generic orchestrator for translating files using format adapters.
 
-    This is the single translation engine for TXT and SRT, shared by both the
-    web API and the CLI (via src.core.adapters.translate_file). The legacy
+    This is the single translation engine for TXT and SRT, reached through
+    src.core.adapters.translate_file. The legacy
     per-format functions it replaced (translate_chunks, the *_with_callbacks
     dispatchers) have been removed.
 

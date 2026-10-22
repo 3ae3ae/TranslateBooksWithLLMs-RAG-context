@@ -154,7 +154,7 @@ async def translate_epub_file(
 
     # Resolve effective parallel workers (local providers are forced back to 1).
     # translate_file() already logged the effective count; this re-resolve is
-    # idempotent and covers the direct-call path (CLI EPUB goes through here).
+    # idempotent and covers direct calls.
     from src.config import resolve_parallel_workers
     parallel_workers = (1 if connection['local'] else max(1, int(parallel_workers))) if connection is not None else resolve_parallel_workers(llm_provider, parallel_workers)
 

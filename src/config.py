@@ -143,7 +143,7 @@ OLLAMA_NUM_CTX = int(os.getenv('OLLAMA_NUM_CTX', '4096'))
 # 1 regardless of this setting. See is_local_provider().
 
 # Upper bound for the parallel worker count, both as a sanity cap and to keep
-# the web UI slider/CLI within a reasonable range. Cloud rate limits make very
+# the request settings within a reasonable range. Cloud rate limits make very
 # high values counter-productive.
 MAX_PARALLEL_TRANSLATIONS = int(os.getenv('MAX_PARALLEL_TRANSLATIONS', '16'))
 

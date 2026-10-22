@@ -19,9 +19,8 @@ from src.core.llm.key_pool import KeyPool
 def normalize_api_keys(raw: Optional[Union[str, Iterable[str]]]) -> List[str]:
     """Split comma/newline-separated key strings into a clean list.
 
-    Accepts a single key, a "k1,k2,k3" string (the documented multi-key
-    format used by .env, the Web UI input, and the CLI), or an iterable of
-    keys. Whitespace and empty fragments are trimmed; order is preserved
+    Accepts a single key, a "k1,k2,k3" string (the multi-key format of
+    .env values imported into connections), or an iterable of keys. Whitespace and empty fragments are trimmed; order is preserved
     for round-robin rotation.
 
     Returns an empty list when no usable key is provided.

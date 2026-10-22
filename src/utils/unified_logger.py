@@ -1,6 +1,6 @@
 """
 Unified logging system for TranslateBookWithLLM
-Provides consistent logging across CLI, Web, and all file types
+Provides consistent logging for the web app across all file types
 """
 import sys
 import os
