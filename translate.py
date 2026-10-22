@@ -214,7 +214,7 @@ if __name__ == "__main__":
         translation_id = f"cli_{uuid.uuid4().hex[:8]}"
 
         if args.refine_only:
-            asyncio.run(refine_file(
+            success = asyncio.run(refine_file(
                 input_filepath=args.input,
                 output_filepath=args.output,
                 target_language=args.target_lang,
@@ -235,12 +235,14 @@ if __name__ == "__main__":
                 nim_api_key=args.nim_api_key,
                 prompt_options=prompt_options,
             ))
+            if not success:
+                raise RuntimeError("Refinement pipeline returned failure")
             logger.info("Refine-Only Completed Successfully", LogType.TRANSLATION_END, {
                 'output_file': args.output,
                 'mode': 'refine-only',
             })
         else:
-            asyncio.run(translate_file(
+            success = asyncio.run(translate_file(
                 input_filepath=args.input,
                 output_filepath=args.output,
                 source_language=args.source_lang,
@@ -263,6 +265,8 @@ if __name__ == "__main__":
                 prompt_options=prompt_options,
                 parallel_workers=args.parallel
             ))
+            if not success:
+                raise RuntimeError("Translation pipeline returned failure")
 
             logger.info("Translation Completed Successfully", LogType.TRANSLATION_END, {
                 'output_file': args.output
@@ -293,3 +297,4 @@ if __name__ == "__main__":
             'model': args.model,
             'error': str(e),
         })
+        raise SystemExit(1)

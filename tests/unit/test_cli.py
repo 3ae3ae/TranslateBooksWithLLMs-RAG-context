@@ -96,3 +96,35 @@ def test_cli_validates_languages_before_starting(cli, monkeypatch, capsys, refin
         cli.translate.assert_not_awaited()
         cli.refine.assert_not_awaited()
         config.warn_env_config_missing.assert_not_called()
+
+
+@pytest.mark.parametrize("refine_only", [False, True])
+@pytest.mark.parametrize("outcome", ["success", "false", "exception"])
+def test_cli_exit_status_matches_pipeline_result(cli, refine_only, outcome):
+    from src.utils.notifier import EVENT_FAILURE, EVENT_SUCCESS
+
+    pipeline = cli.refine if refine_only else cli.translate
+    if outcome == "exception":
+        pipeline.side_effect = RuntimeError("Provider failed")
+    else:
+        pipeline.return_value = outcome == "success"
+    args = ["--refine-only"] if refine_only else []
+
+    if outcome == "success":
+        cli.run(*args)
+    else:
+        with pytest.raises(SystemExit) as exc:
+            cli.run(*args)
+        assert exc.value.code == 1
+
+    pipeline.assert_awaited_once()
+    success_message = "Refine-Only Completed Successfully" if refine_only else "Translation Completed Successfully"
+    messages = [call.args[0] for call in cli.logger.info.call_args_list]
+    assert (success_message in messages) == (outcome == "success")
+    cli.notify.assert_called_once()
+    event, context = cli.notify.call_args.args
+    assert event == (EVENT_SUCCESS if outcome == "success" else EVENT_FAILURE)
+    assert context["file"] == "book.txt"
+    if outcome != "success":
+        cli.logger.error.assert_called_once()
+        assert context["error"]
